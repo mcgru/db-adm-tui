@@ -16,7 +16,8 @@ type Catalog interface {
 
 // SessionBundle is the capability set returned by one connection.
 type SessionBundle struct {
-	Session    Connection
-	Catalog    Catalog
-	DataReader DataReader
+	Session     Connection
+	Catalog     Catalog
+	DataReader  DataReader
+	StatsReader StatsReader
 }

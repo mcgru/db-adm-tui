@@ -117,8 +117,8 @@ func (m *Model) resetDataFor(ref domain.ObjectRef) {
 	m.data.has = true
 }
 
-// toggleJSONColumns expands or collapses only the selected MongoDB column.
-// Pressing the key again on the same column cycles it back.
+// toggleJSONColumns expands or collapses only the selected Data column when
+// its loaded cells hold JSON objects. Pressing the key again cycles it back.
 func (m *Model) toggleJSONColumns() {
 	d := &m.data
 	if !d.loaded || len(d.columns) == 0 || len(d.view) == 0 {
@@ -376,9 +376,6 @@ func jsonFieldUnion(rows []domain.Row, index int) []string {
 			continue
 		}
 		cell := row.Cells[index]
-		if cell.Kind != domain.CellJSON {
-			continue
-		}
 		for _, key := range jsonObjectKeys(cell.Text) {
 			if seen[key] {
 				continue
@@ -445,9 +442,6 @@ func cellForColumn(row domain.Row, column dataColumn) domain.Cell {
 	cell := row.Cells[column.index]
 	if len(column.path) == 0 {
 		return cell
-	}
-	if cell.Kind != domain.CellJSON {
-		return empty
 	}
 	return jsonPathCell(cell.Text, column.path)
 }

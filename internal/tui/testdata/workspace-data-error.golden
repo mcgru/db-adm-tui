@@ -1,6 +1,6 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
-│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Indexes · 4 Privileges   │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ error: relation unavailable                     │
 │     · invoices  rw       │ │ press m to retry                                │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
   SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
-relation unavailable                                            ↑↓ rows · m more
+relation unavailable                                   ↑↓ rows · m more · ` JSON

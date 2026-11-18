@@ -175,6 +175,42 @@ func (s *Session) Page(ctx context.Context, query domain.DataQuery) (domain.Data
 	return s.bundle.DataReader.Page(ctx, query)
 }
 
+// Structure returns the columns or sampled fields of one object.
+func (s *Session) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyStats(); err != nil {
+		return domain.Structure{}, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, ref.Database); err != nil {
+		return domain.Structure{}, err
+	}
+	if err := s.readyStats(); err != nil {
+		return domain.Structure{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, metadataTimeout)
+	defer cancel()
+	return s.bundle.StatsReader.Structure(ctx, ref)
+}
+
+// Indexes returns the object's index metadata.
+func (s *Session) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.Index, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyStats(); err != nil {
+		return nil, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, ref.Database); err != nil {
+		return nil, err
+	}
+	if err := s.readyStats(); err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, metadataTimeout)
+	defer cancel()
+	return s.bundle.StatsReader.Indexes(ctx, ref)
+}
+
 func (s *Session) ready() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.Catalog == nil {
 		return domain.NewError(domain.KindConfig, "session", "no active connection")
@@ -185,6 +221,13 @@ func (s *Session) ready() error {
 func (s *Session) readyData() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.DataReader == nil {
 		return domain.NewError(domain.KindConfig, "data", "data browsing is not available")
+	}
+	return nil
+}
+
+func (s *Session) readyStats() error {
+	if s.dead || s.bundle.Session == nil || s.bundle.StatsReader == nil {
+		return domain.NewError(domain.KindConfig, "stats", "object metadata is not available")
 	}
 	return nil
 }

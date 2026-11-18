@@ -3,6 +3,9 @@ package tui
 import (
 	"fmt"
 	"strconv"
+	"strings"
+
+	"charm.land/lipgloss/v2"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 )
@@ -13,6 +16,16 @@ type detailsState struct {
 	tabs   []string
 	tab    int
 	offset int
+
+	structure        domain.Structure
+	structureErr     string
+	structureLoaded  bool
+	structureLoading bool
+
+	indexes        []domain.Index
+	indexesErr     string
+	indexesLoaded  bool
+	indexesLoading bool
 }
 
 type detailLine struct {
@@ -20,6 +33,8 @@ type detailLine struct {
 	Value   string
 	Header  bool
 	Mutable bool
+	Error   bool
+	Rule    bool
 }
 
 func (d *detailsState) selectNode(node domain.Node) {
@@ -28,6 +43,14 @@ func (d *detailsState) selectNode(node domain.Node) {
 	d.tabs = tabsFor(node.Kind)
 	d.tab = defaultTab(node.Kind)
 	d.offset = 0
+	d.structure = domain.Structure{}
+	d.structureErr = ""
+	d.structureLoaded = false
+	d.structureLoading = false
+	d.indexes = nil
+	d.indexesErr = ""
+	d.indexesLoaded = false
+	d.indexesLoading = false
 }
 
 func (d *detailsState) clear() {
@@ -37,7 +60,7 @@ func (d *detailsState) clear() {
 func tabsFor(kind domain.ObjectKind) []string {
 	switch kind {
 	case domain.KindTable, domain.KindCollection:
-		return []string{"Data", "Details", "Privileges"}
+		return []string{"Data", "Details", "Indexes", "Privileges"}
 	case domain.KindView, domain.KindSequence:
 		return []string{"Details"}
 	case domain.KindDatabase, domain.KindSchema, domain.KindUser, domain.KindRole:
@@ -60,7 +83,8 @@ func (d *detailsState) currentTab() string {
 	return d.tabs[d.tab]
 }
 
-func detailLines(node domain.Node, currentDB string, childCount int) []detailLine {
+func detailLines(d *detailsState, currentDB string, childCount, width int) []detailLine {
+	node := d.node
 	switch node.Kind {
 	case domain.KindTable, domain.KindCollection:
 		name := node.Name
@@ -78,6 +102,8 @@ func detailLines(node domain.Node, currentDB string, childCount int) []detailLin
 			lines = append(lines, detailLine{Label: "access", Value: string(node.Access)})
 		}
 		lines = append(lines, detailLine{Value: "statistics are not available in this story", Mutable: true})
+		lines = append(lines, detailLine{}, detailLine{Header: true, Value: "Structure"})
+		lines = append(lines, structureDetailLines(d, width)...)
 		return lines
 	case domain.KindView, domain.KindSequence:
 		return []detailLine{{Value: "detail view not available in v1", Mutable: true}}
@@ -142,6 +168,189 @@ func detailLines(node domain.Node, currentDB string, childCount int) []detailLin
 	default:
 		return []detailLine{{Value: "nothing selected", Mutable: true}}
 	}
+}
+
+func structureDetailLines(d *detailsState, width int) []detailLine {
+	switch {
+	case d.structureLoading:
+		return []detailLine{{Value: "loading structure…", Mutable: true}}
+	case d.structureErr != "":
+		return []detailLine{{Value: "error: " + d.structureErr, Error: true}}
+	case len(d.structure.Fields) == 0:
+		return []detailLine{{Value: "structure unavailable", Mutable: true}}
+	}
+	if d.structure.Source == domain.StructureSample {
+		rows := make([][]string, 0, len(d.structure.Fields))
+		for _, field := range d.structure.Fields {
+			present := "—"
+			if field.Sampled > 0 {
+				present = fmt.Sprintf("%d/%d (%d%%)",
+					field.Present, field.Sampled, field.Present*100/field.Sampled)
+			}
+			rows = append(rows, []string{field.Name, field.Type, present})
+		}
+		lines := []detailLine{{
+			Value:   fmt.Sprintf("sampled from %d documents", d.structure.Sampled),
+			Mutable: true,
+		}}
+		lines = append(lines, tableDetailLines(
+			[]string{"field", "type", "present"}, rows, []int{30, 14, 18}, width)...)
+		return lines
+	}
+	rows := make([][]string, 0, len(d.structure.Fields))
+	for _, field := range d.structure.Fields {
+		nullable := "no"
+		if field.Nullable {
+			nullable = "yes"
+		}
+		defaultValue := field.Default
+		if defaultValue == "" {
+			defaultValue = "—"
+		}
+		rows = append(rows, []string{field.Name, field.Type, nullable, defaultValue})
+	}
+	return tableDetailLines(
+		[]string{"column", "type", "null", "default"}, rows, []int{28, 24, 6, 36}, width)
+}
+
+func indexLines(d *detailsState, width int) []detailLine {
+	switch {
+	case d.indexesLoading:
+		return []detailLine{{Value: "loading indexes…", Mutable: true}}
+	case d.indexesErr != "":
+		return []detailLine{{Value: "error: " + d.indexesErr, Error: true}}
+	case len(d.indexes) == 0:
+		return []detailLine{{Value: "no indexes", Mutable: true}}
+	}
+	details := make([][]string, 0, len(d.indexes))
+	statistics := make([][]string, 0, len(d.indexes))
+	structure := make([][]string, 0, len(d.indexes))
+	for _, index := range d.indexes {
+		unique := "no"
+		if index.Unique {
+			unique = "yes"
+		}
+		method := index.Method
+		if method == "" {
+			method = "—"
+		}
+		details = append(details, []string{index.Name, unique, method})
+		stats := index.Stats
+		if stats == "" {
+			stats = "—"
+		}
+		statistics = append(statistics, []string{index.Name, formatBytes(index.SizeBytes), stats})
+		columns := strings.Join(index.Columns, ", ")
+		if columns == "" {
+			columns = "—"
+		}
+		structure = append(structure, []string{index.Name, columns})
+	}
+	var lines []detailLine
+	lines = append(lines, detailLine{Header: true, Value: "Details"})
+	lines = append(lines, tableDetailLines(
+		[]string{"index", "unique", "method"}, details, []int{24, 6, 10}, width)...)
+	lines = append(lines, detailLine{})
+	lines = append(lines, detailLine{Header: true, Value: "Statistics"})
+	lines = append(lines, tableDetailLines(
+		[]string{"index", "size", "stats"}, statistics, []int{24, 10, 32}, width)...)
+	lines = append(lines, detailLine{})
+	lines = append(lines, detailLine{Header: true, Value: "Structure"})
+	lines = append(lines, tableDetailLines(
+		[]string{"index", "columns"}, structure, []int{24, 48}, width)...)
+	return lines
+}
+
+// tableDetailLines renders a small table with cell separators. Widths are
+// content-sized, clamped by maxWidths when supplied.
+func tableDetailLines(headers []string, rows [][]string, maxWidths []int, width int) []detailLine {
+	widths := make([]int, len(headers))
+	for i, header := range headers {
+		widths[i] = lipgloss.Width(oneLine(header))
+	}
+	for _, row := range rows {
+		for i := range headers {
+			if i >= len(row) {
+				continue
+			}
+			if width := lipgloss.Width(oneLine(row[i])); width > widths[i] {
+				widths[i] = width
+			}
+		}
+	}
+	for i := range widths {
+		if i < len(maxWidths) && maxWidths[i] > 0 && widths[i] > maxWidths[i] {
+			widths[i] = maxWidths[i]
+		}
+		if widths[i] < 3 {
+			widths[i] = 3
+		}
+	}
+	fitTableWidths(widths, width)
+	format := func(cells []string) string {
+		parts := make([]string, len(headers))
+		for i := range headers {
+			cell := ""
+			if i < len(cells) {
+				cell = oneLine(cells[i])
+			}
+			parts[i] = Pad(Truncate(cell, widths[i]), widths[i])
+		}
+		return strings.Join(parts, " │ ")
+	}
+	lines := []detailLine{{Header: true, Value: format(headers)}}
+	rules := make([]string, len(widths))
+	for i, width := range widths {
+		rules[i] = strings.Repeat("─", width)
+	}
+	lines = append(lines, detailLine{Rule: true, Value: strings.Join(rules, "─┼─")})
+	for _, row := range rows {
+		lines = append(lines, detailLine{Value: format(row)})
+	}
+	return lines
+}
+
+// fitTableWidths shrinks the widest columns until the table fits the pane.
+// Each column keeps at least three cells so headers remain visible.
+func fitTableWidths(widths []int, width int) {
+	if width < 1 || len(widths) == 0 {
+		return
+	}
+	separators := 3 * (len(widths) - 1)
+	total := separators
+	for _, column := range widths {
+		total += column
+	}
+	for total > width {
+		widest := -1
+		for i, column := range widths {
+			if column > 3 && (widest < 0 || column > widths[widest]) {
+				widest = i
+			}
+		}
+		if widest < 0 {
+			return
+		}
+		widths[widest]--
+		total--
+	}
+}
+
+func formatBytes(size int64) string {
+	if size < 0 {
+		return "unavailable"
+	}
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	units := []string{"KB", "MB", "GB", "TB", "PB", "EB"}
+	value := float64(size)
+	unit := -1
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+	return fmt.Sprintf("%.1f %s", value, units[unit])
 }
 
 func (d *detailsState) scroll(delta, height, total int) {

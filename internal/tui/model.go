@@ -124,6 +124,8 @@ type Model struct {
 	data          dataState
 	treeGen       uint64
 	dataGen       uint64
+	detailsGen    uint64
+	restore       *restoreState
 
 	connecting      bool
 	connectingKey   string
@@ -256,6 +258,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTreePrincipals(msg)
 	case dataPageMsg:
 		return m.handleDataPage(msg)
+	case structureMsg:
+		return m.handleStructure(msg)
+	case indexesMsg:
+		return m.handleIndexes(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -327,6 +333,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ForceQuit:
 		return m, tea.Quit
 	case keymap.Quit:
+		if m.screen == ScreenWorkspace {
+			m.savePlace()
+		}
 		return m, tea.Quit
 	case keymap.Confirm:
 		if m.screen == ScreenPicker {
@@ -503,6 +512,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		if m.screen == ScreenWorkspace {
 			return m, m.selectTab(2)
 		}
+	case keymap.Tab4:
+		if m.screen == ScreenWorkspace {
+			return m, m.selectTab(3)
+		}
 	case keymap.PrevTab:
 		if m.screen == ScreenWorkspace {
 			return m, m.cycleTab(-1)
@@ -544,10 +557,6 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.setMessage(levelInfo, "Ctrl+A fetches rows in the Data tab")
 	case keymap.ExpandJSON:
 		if m.dataFocused() {
-			if m.profileForStatus().Engine != domain.EngineMongoDB {
-				m.setMessage(levelInfo, "JSON expansion is MongoDB-only")
-				return m, nil
-			}
 			m.toggleJSONColumns()
 		}
 	case keymap.Execute:
@@ -714,6 +723,8 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.detailsGen++
+	m.restore = nil
 	m.resetData()
 	m.message = "connected"
 	m.messageLevel = levelSuccess
@@ -725,6 +736,7 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 }
 
 func (m *Model) disconnect() {
+	m.savePlace()
 	if m.sessionCancel != nil {
 		m.sessionCancel()
 		m.sessionCancel = nil
@@ -739,6 +751,8 @@ func (m *Model) disconnect() {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.detailsGen++
+	m.restore = nil
 	m.resetData()
 	m.reloadProfiles(context.Background(), key)
 	m.setMessage(levelInfo, "disconnected")

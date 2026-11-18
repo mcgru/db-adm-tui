@@ -534,6 +534,37 @@ func TestUpdateProfileReplacesKeyAndPreservesMetadata(t *testing.T) {
 	}
 }
 
+func TestSaveLastObjectPersistsSelection(t *testing.T) {
+	f := newFixture(t)
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	f.seed(t, p)
+	ref := domain.ObjectRef{
+		Engine: domain.EnginePostgreSQL, Kind: domain.KindTable,
+		Database: "orders", Schema: "public", Name: "customers",
+	}
+	if err := f.svc.SaveLastObject(context.Background(), p, &ref); err != nil {
+		t.Fatal(err)
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || views[0].Profile.LastObject == nil {
+		t.Fatalf("last object = %+v", views)
+	}
+	got := views[0].Profile.LastObject
+	if got.Database != "orders" || got.Schema != "public" || got.Name != "customers" {
+		t.Fatalf("last object = %+v", got)
+	}
+	unknown := domain.Profile{Label: "unsaved", Engine: domain.EngineMySQL, Host: "h", Port: 3306}
+	if err := f.svc.SaveLastObject(context.Background(), unknown, &ref); err != nil {
+		t.Fatalf("unsaved profile must be a no-op: %v", err)
+	}
+}
+
 func TestUpdateProfileRejectsKeyCollision(t *testing.T) {
 	f := newFixture(t)
 	one := domain.Profile{

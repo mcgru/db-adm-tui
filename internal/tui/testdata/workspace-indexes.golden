@@ -1,0 +1,24 @@
+prod-ro · PostgreSQL · orders · r/o                                       app_ro
+┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Indexes · 4 Privileges   │
+│   ▾ public               │ │                                                 │
+│     · customers  ro      │ │ Details                                         │
+│     · invoices  rw       │ │ index          │ unique │ method                │
+│     · audit_log  —       │ │ ───────────────┼────────┼───────                │
+│     · customer_view  ro  │ │ customers_pkey │ yes    │ btree                 │
+│     · orders_seq         │ │                                                 │
+│   ▸ schemas              │ │ Statistics                                      │
+│ ▸ billing                │ │ index          │ size   │ stats                 │
+│ ▸ Security               │ │ ───────────────┼────────┼──────                 │
+│                          │ │ customers_pkey │ 8.0 KB │ —                     │
+│                          │ │                                                 │
+│                          │ │ Structure                                       │
+│                          │ │ index          │ columns                        │
+│                          │ │ ───────────────┼────────                        │
+│                          │ │ customers_pkey │ id                             │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+└──────────────────────────┘ └─────────────────────────────────────────────────┘
+  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+connected · orders                                     Enter open · Right expand

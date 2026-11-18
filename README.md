@@ -37,13 +37,13 @@ The tool starts on the profile picker.
 | `Ctrl+Home` / `Ctrl+End` | Jump to the first/last row of the loaded Data range |
 | `m` | Append the next Data page (Data tab focused) |
 | `Ctrl+A` | Append a full-fetch batch and grow the loaded Data range cumulatively |
-| `` ` `` | MongoDB Data tab: expand/collapse the selected JSON column into dotted subcolumns |
+| `` ` `` | Data tab: expand/collapse the selected JSON object column into dotted subcolumns |
 | `n` | New connection (`new connection` modal) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
-| `1` / `2` / `3`, `[` / `]` | Select a context tab by position; tabs differ by object |
+| `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
 | `Esc` | Cancel a fetch, cancel an attempt, or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+Q` | Quit (also works in the workspace) |
@@ -86,6 +86,19 @@ Selecting a table or collection opens the context tabs and defaults to Data.
 Details currently shows basic identity; statistics and exact count are the next
 story. Privilege inspection lands in story 7.
 
+## Object details and indexes
+
+Tables and collections expose `Data`, `Details`, `Indexes`, and `Privileges`
+tabs. Details shows identity, the statistics placeholder, and a Structure
+table: PostgreSQL/MySQL list columns with type, nullability, and default;
+MongoDB samples the first 100 documents and lists field paths with presence
+counts and percentages. Table cells are separated with `│` and `┼` rules.
+
+The Indexes tab has three sections: Details (name, unique, method), Statistics
+(size and engine-specific extras such as cardinality, sparse, or TTL), and
+Structure (covered columns or fields). An object with no indexes says so; a
+failed metadata read shows an error without hiding the rest of the pane.
+
 ## Data browsing
 
 The Data tab opens for every table and collection. Moving the tree cursor only
@@ -103,13 +116,13 @@ headers, and a status line such as `loaded 100 of ~12,480` or
 - `Ctrl+Home` and `Ctrl+End` jump to the first and last row of the loaded range.
   If the front was evicted, `Ctrl+Home` fetches the whole missing prefix in one
   request and keeps the rows already in memory.
-- In a MongoDB collection, `` ` `` expands only the selected JSON object column
-  into dotted subcolumns: `profile` with `{email, name}` becomes
-  `profile.email` and `profile.name`, while other JSON columns stay collapsed.
-  Subcolumns are the ordered union of keys across the loaded rows; missing or
-  non-object values render empty, explicit nulls render `null`, and nested
-  objects or arrays stay compact JSON. Pressing `` ` `` again on that column
-  collapses it. Each column can be expanded independently; a non-JSON column
+- `` ` `` expands only the selected Data column when its loaded cells contain
+  JSON objects; this works in every engine, including a text column that holds
+  JSON. `profile` with `{email, name}` becomes `profile.email` and
+  `profile.name`, while other JSON columns stay collapsed. Subcolumns are the
+  ordered union of keys across the loaded rows; missing or non-object values
+  render empty, explicit nulls render `null`, and nested objects or arrays stay
+  compact JSON. Pressing `` ` `` again collapses that column. A non-JSON column
   reports `selected column has no JSON object fields`.
 - At the last loaded row, press `PgDown` twice or `Down` three times to fetch
   the next page. The first press explains the gesture.
@@ -146,9 +159,13 @@ and identifiers are quoted per engine. Views and sequences have no Data tab.
 Profiles live at `$XDG_CONFIG_HOME/db-adm-tui/profiles.json` (default
 `~/.config/db-adm-tui/profiles.json`). The directory is `0700` and the file is
 `0600`. Schema v1 stores only `label`, `engine`, `host`, `port`, `database`,
-`user`, an optional `allow_no_tls` flag, an optional source pointer, and
-`created_at` / `updated_at` / `last_used`. **No password is ever written to a
-profile.**
+`user`, an optional `allow_no_tls` flag, an optional source pointer,
+`created_at` / `updated_at` / `last_used`, and the optional `last_object`
+selection. **No password is ever written to a profile.**
+
+On quit or disconnect, the selected table or collection is saved as
+`last_object`; the next connect expands the tree back to it. Data-grid cursor,
+scroll, and filters are intentionally not saved.
 
 PostgreSQL connections require TLS by default (`sslmode=require`). A profile
 that targets a server without TLS can set `"allow_no_tls": true` (the

@@ -56,6 +56,7 @@ type Profile struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	LastUsed   *time.Time `json:"last_used,omitempty"`
+	LastObject *ObjectRef `json:"last_object,omitempty"`
 }
 
 // UnmarshalJSON accepts the canonical allow_no_tls key plus the allowNoTLS and

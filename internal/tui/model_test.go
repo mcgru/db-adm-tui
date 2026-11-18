@@ -30,7 +30,15 @@ func TestGolden(t *testing.T) {
 	m = workspaceFrom(t, m)
 	assertGolden(t, "workspace.golden", m.View().Content)
 
-	m, _ = press(t, m, "3")
+	m, cmd := press(t, m, "2")
+	m = settle(t, m, cmd)
+	assertGolden(t, "workspace-details.golden", m.View().Content)
+
+	m, cmd = press(t, m, "3")
+	m = settle(t, m, cmd)
+	assertGolden(t, "workspace-indexes.golden", m.View().Content)
+
+	m, _ = press(t, m, "4")
 	assertGolden(t, "workspace-privileges.golden", m.View().Content)
 
 	m, _ = press(t, m, "tab")
@@ -507,7 +515,7 @@ func TestTabSelection(t *testing.T) {
 		{"3", 2},
 		{"[", 1},
 		{"[", 0},
-		{"[", 2},
+		{"[", 3},
 		{"]", 0},
 		{"2", 1},
 		{"1", 0},
@@ -1380,6 +1388,26 @@ func TestTreeAccessMarkerIsDimmed(t *testing.T) {
 	}
 }
 
+func TestMongoDetailsStructureAndIndexes(t *testing.T) {
+	m, _ := dataWorkspaceWith(t, "analytics", nil)
+	m, cmd := press(t, m, "2")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"sampled from 2 documents", "profile.email", "1/2 (50%)"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("mongo structure %q missing:\n%s", want, view)
+		}
+	}
+	m, cmd = press(t, m, "3")
+	m = settle(t, m, cmd)
+	view = StripANSI(m.View().Content)
+	for _, want := range []string{"_id_", "btree", "8.0 KB", "Statistics", "Structure"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("mongo indexes %q missing:\n%s", want, view)
+		}
+	}
+}
+
 func TestSecurityLoadsPrincipals(t *testing.T) {
 	m := workspace(t)
 	m = selectKind(t, m, domain.KindSecurity)
@@ -1559,17 +1587,29 @@ func TestEmptyDatabaseState(t *testing.T) {
 func TestContextTabsAndPlaceholders(t *testing.T) {
 	m := workspace(t)
 	view := StripANSI(m.View().Content)
-	if !strings.Contains(view, "1 Data · 2 Details · 3 Privileges") {
+	if !strings.Contains(view, "1 Data · 2 Details · 3 Indexes · 4 Privileges") {
 		t.Fatalf("table tabs missing:\n%s", view)
 	}
 	if !strings.Contains(view, "row-001") {
 		t.Fatalf("data grid missing rows:\n%s", view)
 	}
-	m, _ = press(t, m, "2")
-	if !strings.Contains(StripANSI(m.View().Content), "public.customers") {
-		t.Fatal("details identity missing")
+	m, cmd := press(t, m, "2")
+	m = settle(t, m, cmd)
+	view = StripANSI(m.View().Content)
+	for _, want := range []string{"public.customers", "Structure", "column", "bigint"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("details %q missing:\n%s", want, view)
+		}
 	}
-	m, _ = press(t, m, "3")
+	m, cmd = press(t, m, "3")
+	m = settle(t, m, cmd)
+	view = StripANSI(m.View().Content)
+	for _, want := range []string{"customers_pkey", "Statistics", "Structure", "btree"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("indexes %q missing:\n%s", want, view)
+		}
+	}
+	m, _ = press(t, m, "4")
 	if !strings.Contains(StripANSI(m.View().Content), "privilege inspection lands in story 7") {
 		t.Fatal("privileges placeholder missing")
 	}
@@ -1742,7 +1782,87 @@ func TestDetailsScrollAndPosition(t *testing.T) {
 	}
 }
 
-func TestReconnectResetsTableTabAndSelection(t *testing.T) {
+func TestProfileRestoresLastObject(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = workspaceFrom(t, m)
+	m, _ = press(t, m, "ctrl+d")
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved *domain.ObjectRef
+	for _, p := range loaded {
+		if p.Label == "prod-ro" {
+			saved = p.LastObject
+		}
+	}
+	if saved == nil || saved.Kind != domain.KindTable || saved.Name != "customers" {
+		t.Fatalf("last object = %+v", saved)
+	}
+	m = connectSelected(t, m)
+	node, ok := m.tree.selectedNode()
+	if !ok || node.Kind != domain.KindTable || node.Name != "customers" {
+		t.Fatalf("restored selection = %+v, %v", node, ok)
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "customers  ro") {
+		t.Fatalf("restored tree missing customers:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestRestoreFindsObjectUnderSchemasGroup(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	profiles, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := domain.ObjectRef{
+		Engine: domain.EnginePostgreSQL, Kind: domain.KindTable,
+		Database: "orders", Schema: "reporting", Name: "customers",
+	}
+	for i := range profiles {
+		if profiles[i].Label == "prod-ro" {
+			profiles[i].LastObject = &ref
+		}
+	}
+	if err := e.store.Save(context.Background(), profiles); err != nil {
+		t.Fatal(err)
+	}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	node, ok := m.tree.selectedNode()
+	if !ok || node.Name != "customers" || node.Ref.Schema != "reporting" {
+		t.Fatalf("restored selection = %+v, %v", node, ok)
+	}
+}
+
+func TestQuitSavesLastObject(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = workspaceFrom(t, m)
+	if _, cmd := press(t, m, "ctrl+q"); cmd == nil {
+		t.Fatal("Ctrl+Q must quit")
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loaded {
+		if p.Label != "prod-ro" {
+			continue
+		}
+		if p.LastObject == nil || p.LastObject.Name != "customers" {
+			t.Fatalf("last object = %+v", p.LastObject)
+		}
+		return
+	}
+	t.Fatal("prod-ro not found")
+}
+
+func TestReconnectResetsTabAndRestoresLastObject(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
 	m := selectLabel(t, e.model(t), "prod-ro")
@@ -1751,7 +1871,8 @@ func TestReconnectResetsTableTabAndSelection(t *testing.T) {
 	m, _ = press(t, m, "down")
 	m, _ = press(t, m, "ctrl+d")
 	m = connectSelected(t, m)
-	if m.details.tab != 0 || m.tree.selected != 0 || m.screen != ScreenWorkspace {
-		t.Fatalf("workspace not reset: tab=%d tree=%d screen=%v", m.details.tab, m.tree.selected, m.screen)
+	node, ok := m.tree.selectedNode()
+	if m.details.tab != 0 || !ok || node.Name != "invoices" || m.screen != ScreenWorkspace {
+		t.Fatalf("workspace not restored: tab=%d node=%+v ok=%v screen=%v", m.details.tab, node, ok, m.screen)
 	}
 }

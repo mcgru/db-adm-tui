@@ -56,6 +56,62 @@ type fakeConnector struct {
 	conns    []*fakeConn
 	catalog  *fakeCatalog
 	data     *fakeDataReader
+	stats    *fakeStatsReader
+}
+
+type fakeStatsReader struct {
+	structure    domain.Structure
+	indexes      []domain.Index
+	structureErr error
+	indexesErr   error
+}
+
+func (f *fakeStatsReader) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
+	if f.structureErr != nil {
+		return domain.Structure{}, f.structureErr
+	}
+	return f.structure, nil
+}
+
+func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.Index, error) {
+	if f.indexesErr != nil {
+		return nil, f.indexesErr
+	}
+	return f.indexes, nil
+}
+
+func defaultFakeStats(engine domain.Engine) *fakeStatsReader {
+	if engine == domain.EngineMongoDB {
+		return &fakeStatsReader{
+			structure: domain.Structure{
+				Source:  domain.StructureSample,
+				Sampled: 2,
+				Fields: []domain.StructureField{
+					{Name: "_id", Type: "objectId", Present: 2, Sampled: 2},
+					{Name: "name", Type: "string", Present: 2, Sampled: 2},
+					{Name: "profile", Type: "object", Present: 1, Sampled: 2},
+					{Name: "profile.email", Type: "string", Present: 1, Sampled: 2},
+				},
+			},
+			indexes: []domain.Index{{
+				Name: "_id_", Columns: []string{"_id"}, Unique: true, Method: "btree", SizeBytes: 8192,
+			}},
+		}
+	}
+	return &fakeStatsReader{
+		structure: domain.Structure{
+			Source: domain.StructureCatalog,
+			Fields: []domain.StructureField{
+				{Name: "id", Type: "bigint", Nullable: false},
+				{Name: "name", Type: "text", Nullable: true},
+				{Name: "status", Type: "text", Nullable: true},
+			},
+		},
+		indexes: []domain.Index{{
+			Name: "customers_pkey", Columns: []string{"id"}, Unique: true,
+			Method: "btree", SizeBytes: 8192, Definition: "CREATE UNIQUE INDEX customers_pkey ON public.customers USING btree (id)",
+		}},
+	}
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
@@ -73,7 +129,11 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if data == nil {
 		data = &fakeDataReader{total: 5}
 	}
-	return ports.SessionBundle{Session: conn, Catalog: catalog, DataReader: data}, nil
+	stats := f.stats
+	if stats == nil {
+		stats = defaultFakeStats(p.Engine)
+	}
+	return ports.SessionBundle{Session: conn, Catalog: catalog, DataReader: data, StatsReader: stats}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
 

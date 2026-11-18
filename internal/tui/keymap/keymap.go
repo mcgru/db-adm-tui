@@ -26,6 +26,7 @@ const (
 	Tab1            Action = "tab-1"
 	Tab2            Action = "tab-2"
 	Tab3            Action = "tab-3"
+	Tab4            Action = "tab-4"
 	PrevTab         Action = "prev-tab"
 	NextTab         Action = "next-tab"
 	Disconnect      Action = "disconnect"
@@ -81,6 +82,7 @@ var single = map[string]Action{
 	"1": Tab1,
 	"2": Tab2,
 	"3": Tab3,
+	"4": Tab4,
 	"[": PrevTab, "х": PrevTab,
 	"]": NextTab, "ъ": NextTab,
 

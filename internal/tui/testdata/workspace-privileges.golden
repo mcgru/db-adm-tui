@@ -1,6 +1,6 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
-│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Indexes · 4 Privileges   │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ privilege inspection lands in story 7           │
 │     · invoices  rw       │ │                                                 │

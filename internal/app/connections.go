@@ -245,6 +245,7 @@ func (s *Service) Import(ctx context.Context, selected []ImportEntry) (ImportSum
 		if old, ok := byKey[p.Key()]; ok {
 			p.CreatedAt = old.CreatedAt
 			p.LastUsed = old.LastUsed
+			p.LastObject = old.LastObject
 			p.AllowNoTLS = p.AllowNoTLS || old.AllowNoTLS
 			if old.Label != "" {
 				p.Label = old.Label
@@ -302,6 +303,9 @@ func (s *Service) SaveProfile(ctx context.Context, p domain.Profile) error {
 		}
 		if p.LastUsed == nil {
 			p.LastUsed = old.LastUsed
+		}
+		if p.LastObject == nil {
+			p.LastObject = old.LastObject
 		}
 	}
 	if p.CreatedAt.IsZero() {
@@ -361,6 +365,9 @@ func (s *Service) UpdateProfile(ctx context.Context, originalKey string, p domai
 	if p.LastUsed == nil {
 		p.LastUsed = old.LastUsed
 	}
+	if p.LastObject == nil {
+		p.LastObject = old.LastObject
+	}
 	p.UpdatedAt = s.clock()
 	list := make([]domain.Profile, 0, len(existing))
 	for _, stored := range existing {
@@ -377,6 +384,32 @@ func (s *Service) UpdateProfile(ctx context.Context, originalKey string, p domai
 		return list[i].Key() < list[j].Key()
 	})
 	return s.store.Save(ctx, list)
+}
+
+// SaveLastObject records where the user left off in the workspace. It is
+// best-effort on shutdown paths; callers may ignore the error. An unsaved
+// profile is a successful no-op.
+func (s *Service) SaveLastObject(ctx context.Context, p domain.Profile, ref *domain.ObjectRef) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list, err := s.store.Load(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range list {
+		if list[i].Key() != p.Key() {
+			continue
+		}
+		if ref == nil {
+			list[i].LastObject = nil
+		} else {
+			saved := *ref
+			list[i].LastObject = &saved
+		}
+		list[i].UpdatedAt = s.clock()
+		return s.store.Save(ctx, list)
+	}
+	return nil
 }
 
 // PrepareNewConnection parses a no-password URI and attaches a matching source

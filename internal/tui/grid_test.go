@@ -507,13 +507,51 @@ func viewNames(view []dataColumn) []string {
 	return names
 }
 
-func TestDataBacktickIsMongoOnly(t *testing.T) {
+func TestDataBacktickExpandsSQLJSONColumns(t *testing.T) {
+	for _, tc := range []struct {
+		label string
+		kind  domain.CellKind
+	}{
+		{"prod-ro", domain.CellJSON},
+		{"billing", domain.CellText},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			reader := &fakeDataReader{pageFn: func(query domain.DataQuery) (domain.DataPage, error) {
+				return domain.DataPage{
+					Grid: domain.Grid{
+						Columns: []domain.Column{{Name: "id"}, {Name: "payload"}},
+						Rows: []domain.Row{{
+							Cells: []domain.Cell{
+								{Text: "1", Kind: domain.CellNumber},
+								{Text: `{"a":1,"b":"x"}`, Kind: tc.kind},
+							},
+						}},
+					},
+					OrderKey:      "id",
+					OrderKeyKnown: true,
+				}, nil
+			}}
+			m, _ := dataWorkspaceWith(t, tc.label, func(e *testEnv) { e.connector.data = reader })
+			m.data.cursorCol = 1
+			m, _ = press(t, m, "`")
+			if got := strings.Join(viewNames(m.data.view), ","); got != "id,payload.a,payload.b" {
+				t.Fatalf("expanded columns = %q", got)
+			}
+			view := StripANSI(m.View().Content)
+			if !strings.Contains(view, "payload.a") || !strings.Contains(view, "payload.b") {
+				t.Fatalf("expanded SQL JSON missing:\n%s", view)
+			}
+		})
+	}
+}
+
+func TestDataBacktickWithoutJSONFields(t *testing.T) {
 	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 5})
 	m, _ = press(t, m, "`")
 	if len(m.data.expandedJSON) != 0 {
-		t.Fatal("postgres data must not expand JSON")
+		t.Fatal("plain text must not expand")
 	}
-	if m.message != "JSON expansion is MongoDB-only" {
+	if m.message != "selected column has no JSON object fields" {
 		t.Fatalf("message = %q", m.message)
 	}
 }

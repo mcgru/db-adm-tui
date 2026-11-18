@@ -20,6 +20,62 @@ func (f *fakeDataReader) Page(ctx context.Context, query domain.DataQuery) (doma
 	return f.page, nil
 }
 
+type fakeStatsReader struct {
+	structure domain.Structure
+	indexes   []domain.Index
+	ref       domain.ObjectRef
+	seen      bool
+}
+
+func (f *fakeStatsReader) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
+	f.ref = ref
+	f.seen = true
+	return f.structure, nil
+}
+
+func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.Index, error) {
+	f.ref = ref
+	f.seen = true
+	return f.indexes, nil
+}
+
+func TestSessionMetadataRequiresAStatsReader(t *testing.T) {
+	f := newFixture(t)
+	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}
+	session := newSession(ports.SessionBundle{Session: &fakeConn{}, Catalog: fakeCatalog{}}, profile, Credential{}, f.connector, f.resolver)
+	ref := domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"}
+	if _, err := session.Structure(context.Background(), ref); err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("structure err = %v", err)
+	}
+	if _, err := session.Indexes(context.Background(), ref); err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("indexes err = %v", err)
+	}
+}
+
+func TestSessionMetadataReturnsReaderValues(t *testing.T) {
+	f := newFixture(t)
+	reader := &fakeStatsReader{
+		structure: domain.Structure{Source: domain.StructureCatalog, Fields: []domain.StructureField{{Name: "id", Type: "bigint"}}},
+		indexes:   []domain.Index{{Name: "invoices_pkey", Columns: []string{"id"}, Unique: true}},
+	}
+	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, StatsReader: reader,
+	}, profile, Credential{}, f.connector, f.resolver)
+	ref := domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"}
+	structure, err := session.Structure(context.Background(), ref)
+	if err != nil || len(structure.Fields) != 1 || structure.Fields[0].Name != "id" {
+		t.Fatalf("structure = %+v, %v", structure, err)
+	}
+	indexes, err := session.Indexes(context.Background(), ref)
+	if err != nil || len(indexes) != 1 || indexes[0].Name != "invoices_pkey" {
+		t.Fatalf("indexes = %+v, %v", indexes, err)
+	}
+	if !reader.seen || reader.ref != ref {
+		t.Fatalf("reader ref = %+v", reader.ref)
+	}
+}
+
 func TestSessionPageRequiresADataReader(t *testing.T) {
 	f := newFixture(t)
 	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}

@@ -1,6 +1,6 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
-│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Indexes · 4 Privileges   │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │      id   name    status                        │
 │     · invoices  rw       │ │ ─────────────────────────────────────────────── │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
   SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
-loaded 5 of ~5                                                  ↑↓ rows · m more
+loaded 5 of ~5                                         ↑↓ rows · m more · ` JSON

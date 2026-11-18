@@ -67,6 +67,7 @@ func TestSingleActions(t *testing.T) {
 		"1":          Tab1,
 		"2":          Tab2,
 		"3":          Tab3,
+		"4":          Tab4,
 		"N":          NextMatch,
 		"Т":          NextMatch,
 		"f1":         Help,

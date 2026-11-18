@@ -27,6 +27,7 @@ func (m *Model) syncDetails() tea.Cmd {
 	node, ok := m.tree.selectedNode()
 	if !ok {
 		m.details.clear()
+		m.detailsGen++
 		m.resetData()
 		return nil
 	}
@@ -35,6 +36,7 @@ func (m *Model) syncDetails() tea.Cmd {
 		return nil
 	}
 	m.details.selectNode(node)
+	m.detailsGen++
 	if node.Kind == domain.KindTable || node.Kind == domain.KindCollection {
 		m.resetDataFor(node.Ref)
 	} else {
@@ -54,7 +56,7 @@ func (m *Model) selectTab(index int) tea.Cmd {
 	}
 	m.details.tab = index
 	m.details.offset = 0
-	return m.ensureData()
+	return tea.Batch(m.ensureData(), m.ensureTabInfo())
 }
 
 func (m *Model) cycleTab(delta int) tea.Cmd {
@@ -64,14 +66,23 @@ func (m *Model) cycleTab(delta int) tea.Cmd {
 	}
 	m.details.tab = (m.details.tab + delta + len(m.details.tabs)) % len(m.details.tabs)
 	m.details.offset = 0
-	return m.ensureData()
+	return tea.Batch(m.ensureData(), m.ensureTabInfo())
 }
 
 func (m *Model) scrollDetails(delta int) {
-	if !m.details.has || m.details.currentTab() != "Details" {
+	if !m.details.has {
 		return
 	}
-	lines := detailLines(m.details.node, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()))
+	var lines []detailLine
+	width := m.dataInnerWidth()
+	switch m.details.currentTab() {
+	case "Details":
+		lines = detailLines(&m.details, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()), width)
+	case "Indexes":
+		lines = indexLines(&m.details, width)
+	default:
+		return
+	}
 	height := m.detailsPage()
 	m.details.scroll(delta, height, len(lines))
 }
@@ -154,6 +165,7 @@ func (m Model) loadRoot() (tea.Model, tea.Cmd) {
 	m.tree.reset()
 	m.tree.loadingRoot = true
 	m.details.clear()
+	m.detailsGen++
 	session := m.session
 	ctx := m.sessionCtx
 	if ctx == nil {
@@ -211,7 +223,12 @@ func (m Model) handleTreeRoot(msg treeRootMsg) (tea.Model, tea.Cmd) {
 	if m.messageLevel != levelError && m.messageLevel != levelWarning {
 		m.setMessage(levelSuccess, "connected · "+databaseCount(len(nodes)))
 	}
-	return m, m.syncDetails()
+	restoreCmd := m.startRestore()
+	syncCmd := m.syncDetails()
+	if restoreCmd != nil {
+		return m, tea.Batch(syncCmd, restoreCmd)
+	}
+	return m, syncCmd
 }
 
 func (m Model) handleTreeChildren(msg treeChildrenMsg) (tea.Model, tea.Cmd) {
@@ -230,7 +247,12 @@ func (m Model) handleTreeChildren(msg treeChildrenMsg) (tea.Model, tea.Cmd) {
 	if node, ok := m.tree.node(msg.key); ok && node.Node.Kind == domain.KindDatabase {
 		m.setMessage(levelInfo, "database "+node.Node.Ref.Database)
 	}
-	return m, m.syncDetails()
+	restoreCmd := m.advanceRestore()
+	syncCmd := m.syncDetails()
+	if restoreCmd != nil {
+		return m, tea.Batch(syncCmd, restoreCmd)
+	}
+	return m, syncCmd
 }
 
 func (m Model) handleTreePrincipals(msg treePrincipalsMsg) (tea.Model, tea.Cmd) {
@@ -307,6 +329,7 @@ func (m Model) profileForStatus() domain.Profile {
 }
 
 func (m Model) leaveWorkspace(err error) (tea.Model, tea.Cmd) {
+	m.savePlace()
 	if m.sessionCancel != nil {
 		m.sessionCancel()
 		m.sessionCancel = nil
@@ -321,6 +344,8 @@ func (m Model) leaveWorkspace(err error) (tea.Model, tea.Cmd) {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.detailsGen++
+	m.restore = nil
 	m.resetData()
 	m.reloadProfiles(context.Background(), key)
 	m.rowErrors[key] = oneLine(err.Error())

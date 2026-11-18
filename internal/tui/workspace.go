@@ -107,45 +107,57 @@ func (m Model) viewMain(height, width int) string {
 	switch m.details.currentTab() {
 	case "Data":
 		lines = append(lines, m.viewData(width-4, bodyHeight)...)
+	case "Indexes":
+		lines = append(lines, m.renderDetailPane(indexLines(&m.details, width-4), bodyHeight)...)
 	case "Privileges":
 		lines = append(lines, m.styles.Muted.Render("privilege inspection lands in story 7"))
 	default:
-		detail := detailLines(m.details.node, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()))
-		offset := m.details.offset
-		if offset > len(detail)-bodyHeight {
-			offset = len(detail) - bodyHeight
-		}
-		if offset < 0 {
-			offset = 0
-		}
-		end := offset + bodyHeight
-		if end > len(detail) {
-			end = len(detail)
-		}
-		hasPosition := len(detail) > bodyHeight
-		renderHeight := bodyHeight
-		if hasPosition {
-			renderHeight--
-			if renderHeight < 1 {
-				renderHeight = 1
-			}
-			end = offset + renderHeight
-			if end > len(detail) {
-				end = len(detail)
-			}
-		}
-		for _, line := range detail[offset:end] {
-			lines = append(lines, m.renderDetailLine(line))
-		}
-		if hasPosition {
-			lines = append(lines, m.styles.Muted.Render(detailPosition(offset, end-offset, len(detail))))
-		}
+		detail := detailLines(&m.details, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()), width-4)
+		lines = append(lines, m.renderDetailPane(detail, bodyHeight)...)
 	}
 	return Box("", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusMain)
 }
 
+func (m Model) renderDetailPane(detail []detailLine, bodyHeight int) []string {
+	offset := m.details.offset
+	if offset > len(detail)-bodyHeight {
+		offset = len(detail) - bodyHeight
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	end := offset + bodyHeight
+	if end > len(detail) {
+		end = len(detail)
+	}
+	hasPosition := len(detail) > bodyHeight
+	renderHeight := bodyHeight
+	if hasPosition {
+		renderHeight--
+		if renderHeight < 1 {
+			renderHeight = 1
+		}
+		end = offset + renderHeight
+		if end > len(detail) {
+			end = len(detail)
+		}
+	}
+	out := make([]string, 0, end-offset+1)
+	for _, line := range detail[offset:end] {
+		out = append(out, m.renderDetailLine(line))
+	}
+	if hasPosition {
+		out = append(out, m.styles.Muted.Render(detailPosition(offset, end-offset, len(detail))))
+	}
+	return out
+}
+
 func (m Model) renderDetailLine(line detailLine) string {
 	switch {
+	case line.Rule:
+		return m.styles.Border.Render(line.Value)
+	case line.Error:
+		return m.styles.Error.Render(oneLine(line.Value))
 	case line.Header:
 		return m.styles.Header.Render(line.Value)
 	case line.Label == "":
@@ -217,10 +229,7 @@ func (m Model) viewBottom(width int) string {
 		}
 		switch m.focus {
 		case FocusMain:
-			right = "↑↓ rows · m more"
-			if m.profileForStatus().Engine == domain.EngineMongoDB {
-				right += " · ` JSON"
-			}
+			right = "↑↓ rows · m more · ` JSON"
 		case FocusQuery:
 			right = "query bar · Ctrl+X chord"
 		default:
