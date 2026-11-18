@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>db-adm-tui · key-overlays</title>
+<style>
+/* Spine: DESIGN.md Elevation & Depth, Components/confirm-modal, results-view; EXPERIENCE.md F5, F4 error, State Patterns. */
+:root{
+  --bg:#04060A; --surface:#0A0F15; --raised:#121A23; --border:#26333F;
+  --focus:#3EE0D0; --modal:#F5B85C; --text:#F0F6FA; --muted:#94A6B8;
+  --accent:#3EE0D0; --accent2:#B49BFF; --success:#58E6A0; --warning:#F5C65F;
+  --error:#FF6B7D; --info:#6DB5FF; --match:#FFD166; --selection:#0F3A44;
+  --ro:#7CC4FF; --rw:#FF9D4D;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:28px;background:#020304;color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-size:13px;line-height:1.45}
+h1{font-size:11px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.frame{width:82ch;max-width:100%;background:var(--bg);border:1px solid var(--border);padding:10px 12px;position:relative;margin-bottom:26px}
+.top{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;white-space:nowrap;overflow:hidden;color:var(--muted)}
+.top b{color:var(--text)}
+.badge-ro{color:var(--ro);font-weight:700}
+.badge-rw{color:var(--rw);font-weight:700}
+.ghost{display:flex;gap:1ch;opacity:.35;height:15.5em;overflow:hidden}
+.ghost .tree{width:28ch;border:1px solid var(--border);background:var(--surface);padding:6px;color:var(--muted);white-space:pre}
+.ghost .main{flex:1;border:1px solid var(--border);background:var(--surface);padding:6px;color:var(--muted)}
+.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,6,10,.72)}
+.modal{width:52ch;background:var(--raised);border:1px solid var(--modal);padding:12px 14px;box-shadow:0 0 0 1px #000 inset}
+.modal .title{color:var(--rw);font-weight:700;margin-bottom:6px}
+.modal .body{color:var(--muted);margin-bottom:12px}
+.modal .body b{color:var(--text)}
+.modal .actions{display:flex;justify-content:flex-end;gap:2ch;white-space:nowrap}
+.modal .cancel{color:var(--muted)}
+.modal .ok{color:var(--rw);font-weight:700}
+.tabs{display:flex;gap:1ch;border-bottom:1px solid var(--border);padding:4px 2px;color:var(--muted);font-size:10px;letter-spacing:.07em;text-transform:uppercase;margin-bottom:8px}
+.tabs .active{color:var(--accent);border-bottom:1px solid var(--accent);padding-bottom:2px}
+.err-h{color:var(--error);font-weight:700;margin-bottom:6px}
+.stmt{color:var(--text);background:var(--raised);border:1px solid var(--border);padding:6px 8px;margin-bottom:8px;white-space:pre-wrap}
+.msg{color:var(--error);white-space:pre-wrap;margin-bottom:12px}
+.hint{color:var(--muted);border-top:1px solid var(--border);padding-top:8px}
+.key{color:var(--accent)}
+.caption{color:var(--muted);font-size:11px;margin:-14px 0 24px}
+</style>
+</head>
+<body>
+<h1>key-overlays · Nightshift · 80×24 · confirm + query error</h1>
+
+<section class="frame" aria-label="Read-write confirmation modal over the workspace">
+  <div class="top"><div><b>prod-ro</b> · PostgreSQL · orders · <span class="badge-ro">r/o</span></div><div>app_ro</div></div>
+  <div class="ghost">
+    <div class="tree">objects      12
+▾ orders
+  ▾ public
+    · customers  ro
+    · invoices   rw
+    · audit_log  —
+▸ billing
+▾ Security
+  · users
+  · roles</div>
+    <div class="main">1 Data   2 Details   3 Privileges
+id    email                 status
+1041  anna@example.com      active
+1042  ali@example.com       active
+1043  mark@example.com      blocked
+
+SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;</div>
+  </div>
+  <div class="overlay">
+    <div class="modal" role="dialog" aria-label="Enable read-write mode">
+      <div class="title">Enable read-write mode?</div>
+      <div class="body">Writes will run on <b>prod-ro</b>. The read-only guard will be off for this session.</div>
+      <div class="actions"><span class="cancel">Esc cancel</span><span class="ok">Enter enable</span></div>
+    </div>
+  </div>
+</section>
+<div class="caption">Blocking confirmation: amber modal border, one modal, workspace dimmed and inert. Enter confirms; Esc cancels. Spines win on conflict.</div>
+
+<section class="frame" aria-label="Query error state in the Results tab">
+  <div class="top"><div><b>prod-ro</b> · PostgreSQL · orders · <span class="badge-rw">r/w</span></div><div>app_ro</div></div>
+  <div class="tabs"><span class="active">1 Results</span></div>
+  <div class="err-h">error</div>
+  <div class="stmt">SELECT * FROM public.invoies WHERE status = 'open';</div>
+  <div class="msg">ERROR: relation "public.invoies" does not exist
+LINE 1: SELECT * FROM public.invoies WHERE status = 'open';
+                      ^</div>
+  <div class="hint"><span class="key">Esc</span> returns to invoices. <span class="key">Ctrl+X Ctrl+E</span> edit the statement.</div>
+</section>
+<div class="caption">Query error lives in the same Results tab as rows; the statement is preserved and the engine message is the body. Spines win on conflict.</div>
+</body>
+</html>

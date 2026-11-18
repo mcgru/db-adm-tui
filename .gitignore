@@ -1,0 +1,16 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Go build output (added when implementation starts)
+/bin/
+/dist/
+*.test
+*.out
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>db-adm-tui · key-picker</title>
+<style>
+/* Spine: DESIGN.md Brand & Style, Colors, Components/profile-picker; EXPERIENCE.md IA, F1. */
+:root{
+  --bg:#04060A; --surface:#0A0F15; --raised:#121A23; --border:#26333F;
+  --focus:#3EE0D0; --modal:#F5B85C; --text:#F0F6FA; --muted:#94A6B8;
+  --accent:#3EE0D0; --accent2:#B49BFF; --success:#58E6A0; --warning:#F5C65F;
+  --error:#FF6B7D; --info:#6DB5FF; --match:#FFD166; --selection:#0F3A44;
+  --ro:#7CC4FF; --rw:#FF9D4D;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:28px;background:#020304;color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-size:13px;line-height:1.45}
+h1{font-size:11px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.frame{width:82ch;max-width:100%;background:var(--bg);border:1px solid var(--border);padding:12px 14px;margin-bottom:26px}
+.top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--border);padding-bottom:7px;margin-bottom:12px}
+.brand{color:var(--text);font-weight:700}
+.sub{color:var(--muted)}
+.rows{margin-top:6px}
+.row{display:grid;grid-template-columns:15ch 12ch 20ch 12ch 15ch 7ch;gap:0;padding:3px 0;white-space:nowrap;overflow:hidden}
+.row.head{color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:3px}
+.row.sel{background:var(--selection);color:var(--text)}
+.engine{color:var(--accent2)}
+.meta{color:var(--muted)}
+.ro{color:var(--ro)}
+.footer{border-top:1px solid var(--border);margin-top:12px;padding-top:8px;display:flex;gap:18px;flex-wrap:wrap;color:var(--muted)}
+.key{color:var(--accent)}
+.empty{border:1px dashed var(--border);padding:26px 18px;text-align:center;color:var(--muted);margin-top:8px}
+.empty strong{color:var(--text)}
+.caption{color:var(--muted);font-size:11px;margin:-14px 0 24px}
+.tiny{color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<h1>key-picker · Nightshift · 80×24</h1>
+
+<section class="frame" aria-label="Profile picker with saved profiles">
+  <div class="top"><div><span class="brand">db-adm-tui</span> <span class="sub">· choose a connection</span></div><div class="tiny">saved profiles · 3</div></div>
+  <div class="rows">
+    <div class="row head"><span>label</span><span>engine</span><span>host</span><span>user</span><span>source</span><span>last used</span></div>
+    <div class="row sel"><span>prod-ro</span><span class="engine">PostgreSQL</span><span>db1.internal</span><span>app_ro</span><span class="meta">~/.pgpass</span><span class="meta">2m ago</span></div>
+    <div class="row"><span>analytics</span><span class="engine">MongoDB</span><span>mongo1:27017</span><span>analyst</span><span class="meta">~/.mongo.analyst</span><span class="meta">yesterday</span></div>
+    <div class="row"><span>billing</span><span class="engine">MySQL</span><span>mysql1:3306</span><span>billing_ro</span><span class="meta">~/.pgpass</span><span class="meta">3d ago</span></div>
+  </div>
+  <div class="footer"><span><span class="key">Enter</span> connect</span><span><span class="key">n</span> new</span><span><span class="key">i</span> import</span><span><span class="key">F1</span> help</span><span><span class="key">q</span> quit</span></div>
+</section>
+<div class="caption">Profiles at rest. The selected row uses the selection fill; engine names use the native-name accent; no password or full URI is shown.</div>
+
+<section class="frame" aria-label="Profile picker empty state">
+  <div class="top"><div><span class="brand">db-adm-tui</span> <span class="sub">· choose a connection</span></div><div class="tiny">saved profiles · 0</div></div>
+  <div class="empty"><strong>No profiles yet.</strong><br>Press <span class="key">n</span> to create one, or <span class="key">i</span> to import from <span class="meta">~/.pgpass</span> or <span class="meta">~/.mongo.*</span>.</div>
+  <div class="footer"><span><span class="key">n</span> new</span><span><span class="key">i</span> import</span><span><span class="key">F1</span> help</span><span><span class="key">q</span> quit</span></div>
+</section>
+<div class="caption">Empty state. It points at the two real paths; no spinner and no illustration. Spines win on conflict.</div>
+</body>
+</html>

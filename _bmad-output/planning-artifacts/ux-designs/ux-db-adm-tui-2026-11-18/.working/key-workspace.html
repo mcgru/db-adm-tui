@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>db-adm-tui · key-workspace</title>
+<style>
+/* Spine: DESIGN.md Layout & Spacing, Components/tree, object-tabs, data-grid, query-bar, status lines; EXPERIENCE.md IA, Component Patterns, F1. */
+:root{
+  --bg:#04060A; --surface:#0A0F15; --raised:#121A23; --border:#26333F;
+  --focus:#3EE0D0; --modal:#F5B85C; --text:#F0F6FA; --muted:#94A6B8;
+  --accent:#3EE0D0; --accent2:#B49BFF; --success:#58E6A0; --warning:#F5C65F;
+  --error:#FF6B7D; --info:#6DB5FF; --match:#FFD166; --selection:#0F3A44;
+  --ro:#7CC4FF; --rw:#FF9D4D;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:28px;background:#020304;color:var(--text);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-size:13px;line-height:1.45}
+h1{font-size:11px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.frame{width:82ch;max-width:100%;background:var(--bg);border:1px solid var(--border);padding:10px 12px}
+.top{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;white-space:nowrap;overflow:hidden}
+.top .left{color:var(--text)}
+.top .sep{color:var(--muted)}
+.badge{font-weight:700;color:var(--ro)}
+.user{color:var(--muted)}
+.main{display:flex;gap:1ch;height:19.4em}
+.tree{width:28ch;flex:0 0 28ch;border:1px solid var(--border);background:var(--surface);padding:4px 7px;overflow:hidden;color:var(--muted)}
+.tree .head{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:4px}
+.tree .line{white-space:pre;overflow:hidden;text-overflow:ellipsis}
+.tree .sel{background:var(--selection);color:var(--text);display:block}
+.tree .chev{color:var(--accent)}
+.tree .sec{color:var(--info)}
+.tree .marker{color:var(--muted)}
+.tree .ind1{padding-left:2ch}
+.tree .ind2{padding-left:4ch}
+.mainpane{flex:1 1 auto;border:1px solid var(--focus);background:var(--surface);overflow:hidden;display:flex;flex-direction:column}
+.tabs{display:flex;gap:1ch;border-bottom:1px solid var(--border);padding:4px 8px;color:var(--muted);font-size:10px;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+.tabs .active{color:var(--accent);border-bottom:1px solid var(--accent);padding-bottom:2px}
+.grid{padding:0 8px;flex:1;overflow:hidden}
+.grid .hdr{display:grid;grid-template-columns:6ch 1fr 11ch;color:var(--muted);font-size:10px;letter-spacing:.07em;text-transform:uppercase;border-bottom:1px solid var(--border);padding:4px 0;margin-bottom:2px}
+.row{display:grid;grid-template-columns:6ch 1fr 11ch;white-space:nowrap;overflow:hidden;padding:1px 0}
+.row.sel{background:var(--selection);color:var(--text)}
+.num{color:var(--muted)}
+.match{background:var(--match);color:var(--bg)}
+.query{border-top:1px solid var(--border);padding:6px 8px;display:flex;gap:8px;white-space:nowrap;overflow:hidden}
+.prompt{color:var(--ro);font-weight:700}
+.kw{color:var(--accent)}
+.id{color:var(--accent2)}
+.str{color:var(--accent2)}
+.bottom{display:flex;justify-content:space-between;gap:12px;border-top:1px solid var(--border);padding-top:6px;margin-top:6px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.key{color:var(--accent)}
+.caption{color:var(--muted);font-size:11px;margin:10px 0 24px}
+</style>
+</head>
+<body>
+<h1>key-workspace · Nightshift · 80×24 · Data tab</h1>
+<section class="frame" aria-label="Workspace with tree, data grid, query bar, and status lines">
+  <div class="top">
+    <div class="left">prod-ro <span class="sep">·</span> PostgreSQL <span class="sep">·</span> orders <span class="sep">·</span> <span class="badge">r/o</span></div>
+    <div class="user">app_ro</div>
+  </div>
+
+  <div class="main">
+    <div class="tree">
+      <div class="head"><span>objects</span><span>12</span></div>
+      <div class="line"><span class="chev">▾</span> orders</div>
+      <div class="line ind1"><span class="chev">▾</span> public</div>
+      <div class="line ind2 sel">· customers <span class="marker">ro</span></div>
+      <div class="line ind2">· invoices <span class="marker">rw</span></div>
+      <div class="line ind2">· audit_log <span class="marker">—</span></div>
+      <div class="line"><span class="chev">▸</span> billing</div>
+      <div class="line sec"><span class="chev">▾</span> Security</div>
+      <div class="line ind1 sec">· users</div>
+      <div class="line ind1 sec">· roles</div>
+    </div>
+
+    <div class="mainpane">
+      <div class="tabs"><span class="active">1 Data</span><span>2 Details</span><span>3 Privileges</span></div>
+      <div class="grid">
+        <div class="hdr"><span>id</span><span>email</span><span>status</span></div>
+        <div class="row"><span class="num">1041</span><span>anna@example.com</span><span>active</span></div>
+        <div class="row sel"><span class="num">1042</span><span><span class="match">ali</span>@example.com</span><span>active</span></div>
+        <div class="row"><span class="num">1043</span><span>mark@example.com</span><span>blocked</span></div>
+        <div class="row"><span class="num">1044</span><span>nina@example.com</span><span>active</span></div>
+        <div class="row"><span class="num">1045</span><span>omar@example.com</span><span>active</span></div>
+        <div class="row"><span class="num">1046</span><span>sara@example.com</span><span>blocked</span></div>
+      </div>
+      <div class="query"><span class="prompt">SQL ›</span><span><span class="kw">SELECT</span> * <span class="kw">FROM</span> <span class="id">public</span>.<span class="id">customers</span> <span class="kw">WHERE</span> status = <span class="str">'active'</span> <span class="kw">LIMIT</span> 100;</span></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div>loaded 100 of ~12,480 <span class="sep">·</span> case: sensitive <span class="sep">·</span> / search <span class="sep">·</span> ? help</div>
+    <div><span class="key">Ctrl+X</span> chord</div>
+  </div>
+</section>
+<div class="caption">Workspace at rest: tree 28 cells, main 51, one-line query bar. Focus is the teal frame; the selected tree row and data row use the selection fill; access markers are `ro`/`rw`/`—` in full secondary text. Spines win on conflict.</div>
+</body>
+</html>
