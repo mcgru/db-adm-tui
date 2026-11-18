@@ -134,63 +134,79 @@ func TestDataEndGesture(t *testing.T) {
 	}
 }
 
-func TestDataWindowCapSlidesAndRefetches(t *testing.T) {
-	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 15000})
-	m, cmd := press(t, m, "ctrl+a")
-	m = settle(t, m, cmd)
-	if len(m.data.rows) != dataMaxWindowRows {
-		t.Fatalf("capped rows = %d", len(m.data.rows))
+func TestDataCtrlAAccumulatesWindow(t *testing.T) {
+	reader := &fakeDataReader{total: 15000}
+	m, _ := dataWorkspaceWithReader(t, reader)
+	for i := 0; i < 10; i++ {
+		next, cmd := press(t, m, "ctrl+a")
+		m = settle(t, next, cmd)
+		if m.data.windowStart != 0 {
+			t.Fatalf("Ctrl+A %d slid the window to %d", i+1, m.data.windowStart)
+		}
 	}
-	if m.data.windowStart != 0 {
-		t.Fatalf("window start = %d, want 0", m.data.windowStart)
-	}
-	if !m.data.hasMore {
-		t.Fatal("window must still report more data")
+	wantRows := 100 + 10*dataFetchAllSize
+	if len(m.data.rows) != wantRows {
+		t.Fatalf("accumulated rows = %d, want %d", len(m.data.rows), wantRows)
 	}
 	summary := m.dataSummary()
-	for _, want := range []string{"loaded 10,000 of ~15,000", "more available"} {
+	for _, want := range []string{"loaded 10,100 of ~15,000", "more available"} {
 		if !strings.Contains(summary, want) {
 			t.Fatalf("summary = %q, want %q", summary, want)
 		}
 	}
 
+	m, cmd := press(t, m, "ctrl+a")
+	m = settle(t, m, cmd)
+	wantRows += dataFetchAllSize
+	if len(m.data.rows) != wantRows || m.data.windowStart != 0 {
+		t.Fatalf("grown window start=%d rows=%d, want 0/%d", m.data.windowStart, len(m.data.rows), wantRows)
+	}
+
 	m, cmd = press(t, m, "m")
 	m = settle(t, m, cmd)
-	if m.data.windowStart != 5000 || len(m.data.rows) != dataMaxWindowRows {
-		t.Fatalf("slid window start=%d rows=%d", m.data.windowStart, len(m.data.rows))
+	if m.data.windowStart != dataFetchAllSize || len(m.data.rows) != wantRows {
+		t.Fatalf("m after growth start=%d rows=%d", m.data.windowStart, len(m.data.rows))
 	}
-	if m.data.hasMore {
-		t.Fatal("final window must not report more data")
-	}
-	m, cmd = press(t, m, "up")
+
+	m, cmd = press(t, m, "ctrl+home")
 	m = settle(t, m, cmd)
-	if m.data.windowStart != 0 || len(m.data.rows) != dataMaxWindowRows {
-		t.Fatalf("previous page start=%d rows=%d", m.data.windowStart, len(m.data.rows))
+	if m.data.windowStart != 0 || m.data.cursorRow != 0 {
+		t.Fatalf("ctrl+home start=%d cursor=%d, want 0/0", m.data.windowStart, m.data.cursorRow)
 	}
-	if m.data.cursorRow != 4999 {
-		t.Fatalf("cursor after previous page = %d, want 4999", m.data.cursorRow)
-	}
-	if !m.data.hasMore {
-		t.Fatal("previous page must keep more available")
+	last := reader.calls[len(reader.calls)-1]
+	if last.Offset != 0 || last.Limit != dataFetchAllSize {
+		t.Fatalf("prefix fetch = %+v, want offset 0 limit %d", last, dataFetchAllSize)
 	}
 }
 
-func TestDataRowCapKeepsAbsoluteCursor(t *testing.T) {
+func TestDataCtrlHomeAndEndNavigateLoadedRange(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
+	m, _ = press(t, m, "ctrl+end")
+	if m.data.cursorRow != 99 {
+		t.Fatalf("ctrl+end cursor = %d, want 99", m.data.cursorRow)
+	}
+	m, _ = press(t, m, "ctrl+home")
+	if m.data.cursorRow != 0 {
+		t.Fatalf("ctrl+home cursor = %d, want 0", m.data.cursorRow)
+	}
+}
+
+func TestDataRowCapKeepsAbsoluteCursorOnPaging(t *testing.T) {
 	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
 	m.data.maxRows = 3
-	m, cmd := press(t, m, "ctrl+a")
+	m, cmd := press(t, m, "m")
 	m = settle(t, m, cmd)
 	if len(m.data.rows) != 3 {
 		t.Fatalf("rows = %d, want 3", len(m.data.rows))
 	}
-	if m.data.windowStart != 247 || m.data.cursorRow != 247 {
-		t.Fatalf("start=%d cursor=%d, want 247/247", m.data.windowStart, m.data.cursorRow)
+	if m.data.windowStart != 197 || m.data.cursorRow != 197 {
+		t.Fatalf("start=%d cursor=%d, want 197/197", m.data.windowStart, m.data.cursorRow)
 	}
-	if !strings.Contains(m.dataSummary(), "rows 248–250 of ~250") {
+	if !strings.Contains(m.dataSummary(), "rows 198–200 of ~250") {
 		t.Fatalf("summary = %q", m.dataSummary())
 	}
 	gridView := StripANSI(strings.Join(m.renderGrid(m.dataInnerWidth(), 4), "\n"))
-	if !strings.Contains(gridView, "248") || !strings.Contains(gridView, "row-248") {
+	if !strings.Contains(gridView, "198") || !strings.Contains(gridView, "row-198") {
 		t.Fatalf("absolute row gutter lost after slide:\n%s", gridView)
 	}
 }
@@ -393,6 +409,112 @@ func TestDataMongoUnionAcrossPages(t *testing.T) {
 	}
 	if m.data.rows[2].Cells[1].Text != "Carol" || m.data.rows[2].Cells[2].Text != "30" {
 		t.Fatalf("remapped row = %+v", m.data.rows[2].Cells)
+	}
+}
+
+func TestDataBacktickExpandsOnlySelectedMongoJSONColumn(t *testing.T) {
+	reader := &fakeDataReader{pageFn: func(query domain.DataQuery) (domain.DataPage, error) {
+		return domain.DataPage{
+			Grid: domain.Grid{
+				Columns: []domain.Column{{Name: "_id"}, {Name: "profile"}, {Name: "settings"}},
+				Rows: []domain.Row{
+					{Cells: []domain.Cell{
+						{Text: "1", Kind: domain.CellNumber},
+						{Text: `{"email":"alice@example.test","name":"Alice"}`, Kind: domain.CellJSON},
+						{Text: `{"theme":"dark","alerts":true}`, Kind: domain.CellJSON},
+					}},
+					{Cells: []domain.Cell{
+						{Text: "2", Kind: domain.CellNumber},
+						{Text: `{"name":"Bob","email":null}`, Kind: domain.CellJSON},
+						{Text: `{"theme":"light"}`, Kind: domain.CellJSON},
+					}},
+					{Cells: []domain.Cell{
+						{Text: "3", Kind: domain.CellNumber},
+						{Text: `"not-an-object"`, Kind: domain.CellJSON},
+						domain.NullCell(),
+					}},
+				},
+			},
+			OrderKey:      "_id",
+			OrderKeyKnown: true,
+		}, nil
+	}}
+	m, _ := dataWorkspaceWith(t, "analytics", func(e *testEnv) { e.connector.data = reader })
+	if len(m.data.view) != 3 {
+		t.Fatalf("initial view = %d columns", len(m.data.view))
+	}
+
+	m.data.cursorCol = 1
+	m, _ = press(t, m, "`")
+	names := viewNames(m.data.view)
+	if got := strings.Join(names, ","); got != "_id,profile.email,profile.name,settings" {
+		t.Fatalf("profile expansion = %v", got)
+	}
+	if m.data.cursorCol != 1 {
+		t.Fatalf("cursor column = %d, want profile.email", m.data.cursorCol)
+	}
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"profile.email", "profile.name", "alice@example.test", "Alice", "Bob"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("expanded view missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "settings.theme") {
+		t.Fatalf("unselected JSON column expanded:\n%s", view)
+	}
+	if cell := cellForColumn(m.data.rows[1], m.data.view[1]); !cell.Null {
+		t.Fatalf("null subfield = %+v", cell)
+	}
+	if cell := cellForColumn(m.data.rows[2], m.data.view[1]); cell.Null || cell.Text != "" {
+		t.Fatalf("non-object subfield = %+v", cell)
+	}
+
+	m.data.cursorCol = 3
+	m, _ = press(t, m, "`")
+	names = viewNames(m.data.view)
+	if got := strings.Join(names, ","); got != "_id,profile.email,profile.name,settings.theme,settings.alerts" {
+		t.Fatalf("settings expansion = %v", got)
+	}
+	if m.data.cursorCol != 3 {
+		t.Fatalf("settings cursor = %d, want settings.theme", m.data.cursorCol)
+	}
+
+	m, _ = press(t, m, "`")
+	names = viewNames(m.data.view)
+	if got := strings.Join(names, ","); got != "_id,profile.email,profile.name,settings" {
+		t.Fatalf("settings collapse = %v", got)
+	}
+	if m.data.cursorCol != 3 {
+		t.Fatalf("settings cursor after collapse = %d, want 3", m.data.cursorCol)
+	}
+
+	m.data.cursorCol = 1
+	m, _ = press(t, m, "`")
+	names = viewNames(m.data.view)
+	if got := strings.Join(names, ","); got != "_id,profile,settings" {
+		t.Fatalf("profile collapse = %v", got)
+	}
+	if m.data.cursorCol != 1 {
+		t.Fatalf("profile cursor after collapse = %d, want 1", m.data.cursorCol)
+	}
+}
+
+func viewNames(view []dataColumn) []string {
+	names := make([]string, len(view))
+	for i, column := range view {
+		names[i] = column.name
+	}
+	return names
+}
+
+func TestDataBacktickIsMongoOnly(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 5})
+	m, _ = press(t, m, "`")
+	if len(m.data.expandedJSON) != 0 {
+		t.Fatal("postgres data must not expand JSON")
+	}
+	if m.message != "JSON expansion is MongoDB-only" {
+		t.Fatalf("message = %q", m.message)
 	}
 }
 

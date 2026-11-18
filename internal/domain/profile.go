@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -42,16 +43,49 @@ type Source struct {
 
 // Profile is one saved connection. It never contains a password.
 type Profile struct {
-	Label     string     `json:"label"`
-	Engine    Engine     `json:"engine"`
-	Host      string     `json:"host"`
-	Port      int        `json:"port"`
-	Database  string     `json:"database"`
-	User      string     `json:"user"`
-	Source    *Source    `json:"source,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	LastUsed  *time.Time `json:"last_used,omitempty"`
+	Label    string `json:"label"`
+	Engine   Engine `json:"engine"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Database string `json:"database"`
+	User     string `json:"user"`
+	// AllowNoTLS permits a PostgreSQL connection to fall back to a plaintext
+	// attempt after the TLS attempt fails. TLS is always tried first.
+	AllowNoTLS bool       `json:"allow_no_tls,omitempty"`
+	Source     *Source    `json:"source,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	LastUsed   *time.Time `json:"last_used,omitempty"`
+}
+
+// UnmarshalJSON accepts the canonical allow_no_tls key plus the allowNoTLS and
+// notls aliases used in hand-edited profile files.
+func (p *Profile) UnmarshalJSON(data []byte) error {
+	type profileAlias Profile
+	var decoded profileAlias
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	*p = Profile(decoded)
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"allow_no_tls", "allowNoTLS", "notls"} {
+		raw, ok := fields[key]
+		if !ok {
+			continue
+		}
+		var enabled bool
+		if err := json.Unmarshal(raw, &enabled); err != nil {
+			return err
+		}
+		if enabled {
+			p.AllowNoTLS = true
+		}
+	}
+	return nil
 }
 
 // Key is the deterministic identity of a profile. MongoDB profiles are keyed

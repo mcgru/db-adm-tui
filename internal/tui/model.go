@@ -43,6 +43,7 @@ const (
 	modalNew
 	modalPassword
 	modalSave
+	modalEdit
 )
 
 type messageLevel int
@@ -154,6 +155,17 @@ type Model struct {
 
 	saveProfile domain.Profile
 	saveSession *app.Session
+
+	editProfile     domain.Profile
+	editOriginalKey string
+	editLabel       textinput.Model
+	editHost        textinput.Model
+	editPort        textinput.Model
+	editDatabase    textinput.Model
+	editUser        textinput.Model
+	editAllowNoTLS  bool
+	editFocus       editField
+	editErr         string
 }
 
 // New builds the root model around the application service and loads stored
@@ -176,6 +188,11 @@ func New(svc *app.Service) Model {
 	m.newLabel = newInput("", false)
 	m.newPassword = newInput("", true)
 	m.passwordInput = newInput("", true)
+	m.editLabel = newInput("label", false)
+	m.editHost = newInput("host", false)
+	m.editPort = newInput("5432", false)
+	m.editDatabase = newInput("database", false)
+	m.editUser = newInput("user", false)
 	m.resizeInputs()
 	m.reloadProfiles(context.Background(), "")
 	return m
@@ -255,12 +272,8 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		switch action {
-		case keymap.ForceQuit:
+		case keymap.ForceQuit, keymap.Quit:
 			return m, tea.Quit
-		case keymap.Quit:
-			if m.screen == ScreenPicker {
-				return m, tea.Quit
-			}
 		}
 		return m, nil
 	}
@@ -279,6 +292,8 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleImportKey(msg)
 	case modalSave:
 		return m.handleSaveKey(msg)
+	case modalEdit:
+		return m.handleEditKey(msg)
 	}
 	if m.pendingChord {
 		m.pendingChord = false
@@ -312,10 +327,7 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ForceQuit:
 		return m, tea.Quit
 	case keymap.Quit:
-		if m.screen == ScreenPicker {
-			return m, tea.Quit
-		}
-		m.setMessage(levelWarning, "q quits only at the picker")
+		return m, tea.Quit
 	case keymap.Confirm:
 		if m.screen == ScreenPicker {
 			return m.enterPicker()
@@ -330,6 +342,16 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.Import:
 		if m.screen == ScreenPicker && !m.connecting {
 			m.openImportModal()
+		}
+	case keymap.EditProfile:
+		if m.screen == ScreenPicker && !m.connecting {
+			if len(m.profiles) == 0 {
+				m.setMessage(levelInfo, "No profiles yet. Press n to create one, or i to import.")
+				return m, nil
+			}
+			if p, ok := m.currentPickerProfile(); ok {
+				m.openEditModal(p)
+			}
 		}
 	case keymap.Help:
 		m.setMessage(levelInfo, "help — story 9")
@@ -423,6 +445,30 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case keymap.RangeStart:
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				m.tree.selectFirst()
+				return m, m.syncDetails()
+			case FocusMain:
+				if m.dataTabActive() {
+					return m, m.dataRangeStart()
+				}
+			}
+		}
+	case keymap.RangeEnd:
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				m.tree.selectLast()
+				return m, m.syncDetails()
+			case FocusMain:
+				if m.dataTabActive() {
+					return m, m.dataRangeEnd()
+				}
+			}
+		}
 	case keymap.Left:
 		if m.screen == ScreenWorkspace {
 			switch m.focus {
@@ -496,6 +542,14 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m, m.fetchAllData()
 		}
 		m.setMessage(levelInfo, "Ctrl+A fetches rows in the Data tab")
+	case keymap.ExpandJSON:
+		if m.dataFocused() {
+			if m.profileForStatus().Engine != domain.EngineMongoDB {
+				m.setMessage(levelInfo, "JSON expansion is MongoDB-only")
+				return m, nil
+			}
+			m.toggleJSONColumns()
+		}
 	case keymap.Execute:
 		m.setMessage(levelInfo, "execute — story 5")
 	case keymap.Space:
@@ -819,6 +873,11 @@ func (m *Model) resizeInputs() {
 	m.newLabel.SetWidth(newWidth)
 	m.newPassword.SetWidth(newWidth)
 	m.passwordInput.SetWidth(passwordWidth)
+	m.editLabel.SetWidth(newWidth)
+	m.editHost.SetWidth(newWidth)
+	m.editPort.SetWidth(newWidth)
+	m.editDatabase.SetWidth(newWidth)
+	m.editUser.SetWidth(newWidth)
 }
 
 func (m Model) View() tea.View {
@@ -859,6 +918,8 @@ func (m Model) viewModal() string {
 		return m.viewPassword()
 	case modalSave:
 		return m.viewSave()
+	case modalEdit:
+		return m.viewEdit()
 	}
 	return ""
 }
@@ -876,6 +937,8 @@ func (m *Model) dismissModal() {
 		m.closePasswordModal()
 	case modalImport:
 		m.modal = modalNone
+	case modalEdit:
+		m.closeEditModal()
 	}
 }
 

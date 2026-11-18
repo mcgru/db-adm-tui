@@ -155,12 +155,16 @@ func (m Model) viewQuery(width int) string {
 	case domain.EngineMySQL:
 		statement = "SELECT * FROM customers WHERE status = 'active' LIMIT 100;"
 	}
+	marker := "  "
 	promptStyle := m.styles.ModeRO
+	statementStyle := m.styles.Text
 	if m.focus == FocusQuery {
+		marker = m.styles.Focused.Render("▸ ")
 		promptStyle = m.styles.Focused
+		statementStyle = m.styles.Focused
 	}
 	prompt := promptStyle.Render(label) + " " + m.styles.Accent.Render("›")
-	return Pad(prompt+" "+m.styles.Text.Render(statement), width)
+	return Pad(marker+prompt+" "+statementStyle.Render(statement), width)
 }
 
 func (m Model) viewBottom(width int) string {
@@ -185,7 +189,7 @@ func (m Model) viewBottom(width int) string {
 	case FocusMain:
 		right = "1/2/3 tab · Up/Down scroll"
 	case FocusQuery:
-		right = "Tab focus · Ctrl+X chord"
+		right = "query bar · Ctrl+X chord"
 	}
 	if m.screen == ScreenWorkspace && m.dataTabActive() {
 		if m.message == "" {
@@ -200,8 +204,11 @@ func (m Model) viewBottom(width int) string {
 		switch m.focus {
 		case FocusMain:
 			right = "↑↓ rows · m more"
+			if m.profileForStatus().Engine == domain.EngineMongoDB {
+				right += " · ` JSON"
+			}
 		case FocusQuery:
-			right = "Ctrl+X chord"
+			right = "query bar · Ctrl+X chord"
 		default:
 			right = "Enter open"
 		}

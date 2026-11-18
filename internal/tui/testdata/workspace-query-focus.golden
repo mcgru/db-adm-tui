@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
-connected · orders                                      Tab focus · Ctrl+X chord
+▸ SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+connected · orders                                      query bar · Ctrl+X chord

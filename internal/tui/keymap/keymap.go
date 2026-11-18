@@ -9,6 +9,7 @@ const (
 	Confirm         Action = "confirm"
 	New             Action = "new"
 	Import          Action = "import"
+	EditProfile     Action = "edit-profile"
 	Help            Action = "help"
 	Up              Action = "up"
 	Down            Action = "down"
@@ -16,6 +17,8 @@ const (
 	Right           Action = "right"
 	Home            Action = "home"
 	End             Action = "end"
+	RangeStart      Action = "range-start"
+	RangeEnd        Action = "range-end"
 	PageUp          Action = "page-up"
 	PageDown        Action = "page-down"
 	Tab             Action = "tab"
@@ -37,6 +40,7 @@ const (
 	ContextHelp     Action = "context-help"
 	ServerFilter    Action = "server-filter"
 	FetchAll        Action = "fetch-all"
+	ExpandJSON      Action = "expand-json"
 	Space           Action = "space"
 	NextMatch       Action = "next-match"
 	ResizeTreeLeft  Action = "resize-tree-left"
@@ -52,7 +56,7 @@ var single = map[string]Action{
 	"n": New, "т": New,
 	"N": NextMatch, "Т": NextMatch,
 	"i": Import, "ш": Import,
-	"q": Quit, "й": Quit,
+	"e": EditProfile, "у": EditProfile,
 	"m": More, "ь": More,
 	"?": Help, ",": Help,
 	"f1": Help,
@@ -67,6 +71,8 @@ var single = map[string]Action{
 	"right":     Right,
 	"home":      Home,
 	"end":       End,
+	"ctrl+home": RangeStart,
+	"ctrl+end":  RangeEnd,
 	"pgup":      PageUp,
 	"pgdown":    PageDown,
 	"space":     Space,
@@ -79,6 +85,7 @@ var single = map[string]Action{
 	"]": NextTab, "ъ": NextTab,
 
 	"/": Search, ".": Search,
+	"`": ExpandJSON, "ё": ExpandJSON,
 
 	"ctrl+a":     FetchAll,
 	"ctrl+f":     ServerFilter,
@@ -89,6 +96,7 @@ var single = map[string]Action{
 
 	"ctrl+d": Disconnect, "ctrl+в": Disconnect,
 	"ctrl+x": ChordX, "ctrl+ч": ChordX,
+	"ctrl+q": Quit, "ctrl+й": Quit,
 	"ctrl+c": ForceQuit, "ctrl+с": ForceQuit,
 }
 

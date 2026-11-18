@@ -184,8 +184,9 @@ func (m Model) viewPicker(regions layout.Regions) string {
 		m.styles.Accent.Render("Enter") + " connect",
 		m.styles.Accent.Render("n") + " new",
 		m.styles.Accent.Render("i") + " import",
+		m.styles.Accent.Render("e") + " edit",
 		m.styles.Accent.Render("?") + " help",
-		m.styles.Accent.Render("q") + " quit",
+		m.styles.Accent.Render("Ctrl+Q") + " quit",
 	}, " · ")
 	lines = append(lines, footer)
 	return strings.Join(FitLines(lines, width, height), "\n")

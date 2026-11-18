@@ -221,7 +221,7 @@ func (s *Session) switchDatabaseLocked(ctx context.Context, db string) error {
 	s.dead = false
 	s.alive.Store(false)
 
-	ctx, cancel := context.WithTimeout(ctx, ConnectTimeout)
+	ctx, cancel := context.WithTimeout(ctx, connectBudget)
 	defer cancel()
 	bundle, err := s.connector.Connect(ctx, next, secret)
 	if err != nil {

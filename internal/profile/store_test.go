@@ -57,6 +57,47 @@ func TestStoreRoundTripAndPermissions(t *testing.T) {
 	}
 }
 
+func TestStoreRoundTripsAllowNoTLS(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+	p := sampleProfile()
+	p.AllowNoTLS = true
+	if err := store.Save(context.Background(), []domain.Profile{p}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || !loaded[0].AllowNoTLS {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+	data, err := os.ReadFile(store.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"allow_no_tls": true`) {
+		t.Fatalf("profiles.json missing allow_no_tls:\n%s", data)
+	}
+}
+
+func TestStoreLoadsHandEditedAllowNoTLSAlias(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+	data := `{"version":1,"profiles":[{"label":"legacy","engine":"postgresql",` +
+		`"host":"db1","port":5432,"database":"orders","user":"app","notls":true}]}`
+	if err := os.WriteFile(store.Path(), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || !loaded[0].AllowNoTLS {
+		t.Fatalf("loaded = %+v", loaded)
+	}
+}
+
 func TestStoreNeverWritesSecretFields(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)

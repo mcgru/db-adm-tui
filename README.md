@@ -34,24 +34,27 @@ The tool starts on the profile picker.
 | `PgUp` / `PgDn` | Scroll the picker/import list, tree, or details; page the Data grid |
 | `Left` / `Right` | Collapse / expand the selected tree node; move the Data cell cursor |
 | `Home` / `End` | Jump to the first/last tree or import row; first/last Data column |
+| `Ctrl+Home` / `Ctrl+End` | Jump to the first/last row of the loaded Data range |
 | `m` | Append the next Data page (Data tab focused) |
-| `Ctrl+A` | Load up to the 10,000-row window, then use 10,000-row batches |
+| `Ctrl+A` | Append a full-fetch batch and grow the loaded Data range cumulatively |
+| `` ` `` | MongoDB Data tab: expand/collapse the selected JSON column into dotted subcolumns |
 | `n` | New connection (`new connection` modal) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
+| `e` | Edit the selected profile at the picker |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3`, `[` / `]` | Select a context tab by position; tabs differ by object |
 | `Esc` | Cancel a fetch, cancel an attempt, or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
+| `Ctrl+Q` | Quit (also works in the workspace) |
 | `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
 | `Ctrl+X` then `s` / `Ctrl+E` / `Ctrl+W` / `i` | Chord stubs for count, edit, mode, case |
 | `/` or `.` / `Ctrl+F` | Data-tab placeholder; search lands in the next story |
 | `?` / `F1` | Help stub |
-| `q` | Quit, but only at the picker |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
 
 Latin and Cyrillic physical key positions resolve to the same actions
-(`n`/`т`, `i`/`ш`, `q`/`й`, `m`/`ь`, and the chord finals).
+(`n`/`т`, `i`/`ш`, `Ctrl+Q`/`Ctrl+й`, `m`/`ь`, and the chord finals).
 
 ## Tree and Security
 
@@ -90,16 +93,30 @@ It shows up to 100 rows or documents with a pinned row-number gutter, column
 headers, and a status line such as `loaded 100 of ~12,480` or
 `loaded 100 · total unavailable`.
 
-- With Data focused, `m` appends the next batch: 100 rows normally, or 10,000
-  after `Ctrl+A`. `Ctrl+A` first fills the window up to 10,000 rows; later
-  batches use 10,000 rows.
+- With Data focused, `m` appends the next batch: 100 rows normally, or the
+  full-fetch batch after `Ctrl+A`. Each `Ctrl+A` also grows the retained window
+  by the same amount, so repeated presses accumulate rows instead of sliding
+  the start forward. The window starts at 10,000 rows and grows with each
+  `Ctrl+A`; the 64 MB byte cap still applies. (The batch is currently 1,000
+  rows for scroll debugging; the intended value is 10,000.)
+- `Ctrl+Home` and `Ctrl+End` jump to the first and last row of the loaded range.
+  If the front was evicted, `Ctrl+Home` fetches the whole missing prefix in one
+  request and keeps the rows already in memory.
+- In a MongoDB collection, `` ` `` expands only the selected JSON object column
+  into dotted subcolumns: `profile` with `{email, name}` becomes
+  `profile.email` and `profile.name`, while other JSON columns stay collapsed.
+  Subcolumns are the ordered union of keys across the loaded rows; missing or
+  non-object values render empty, explicit nulls render `null`, and nested
+  objects or arrays stay compact JSON. Pressing `` ` `` again on that column
+  collapses it. Each column can be expanded independently; a non-JSON column
+  reports `selected column has no JSON object fields`.
 - At the last loaded row, press `PgDown` twice or `Down` three times to fetch
   the next page. The first press explains the gesture.
-- The loaded window holds at most 10,000 rows or 64 MB. A forward fetch that
-  would exceed the cap drops the oldest rows and advances the window start;
-  scrolling above the start prepends the previous batch and drops rows from the
-  tail. The status shows a range such as `rows 5,001–15,000 of ~15,000`; `m`
-  after a full window slides forward.
+- A forward fetch that would exceed the retained-window cap drops the oldest
+  rows and advances the window start; scrolling above the start prepends the
+  previous batch and drops rows from the tail. The status shows a range such as
+  `rows 5,001–15,000 of ~15,000`; `m` after a full window slides forward until
+  the next `Ctrl+A` grows the cap.
 - The stable order comes from the primary key (PostgreSQL/MySQL) or `_id`
   (MongoDB). Without one, the pane warns
   `no stable order; rows may repeat or skip` and browsing still works.
@@ -128,8 +145,21 @@ and identifiers are quoted per engine. Views and sequences have no Data tab.
 Profiles live at `$XDG_CONFIG_HOME/db-adm-tui/profiles.json` (default
 `~/.config/db-adm-tui/profiles.json`). The directory is `0700` and the file is
 `0600`. Schema v1 stores only `label`, `engine`, `host`, `port`, `database`,
-`user`, an optional source pointer, and `created_at` / `updated_at` /
-`last_used`. **No password is ever written to a profile.**
+`user`, an optional `allow_no_tls` flag, an optional source pointer, and
+`created_at` / `updated_at` / `last_used`. **No password is ever written to a
+profile.**
+
+PostgreSQL connections require TLS by default (`sslmode=require`). A profile
+that targets a server without TLS can set `"allow_no_tls": true` (the
+hand-edited aliases `allowNoTLS` and `notls` are also accepted). The connector
+always tries TLS first; only a connection-level failure falls back to a
+plaintext retry. Auth, permission, and configuration errors are not retried.
+
+Press `e` at the picker to edit the selected profile. Label, host, port,
+database, and user are editable; the engine and credential source stay fixed.
+For PostgreSQL the form also toggles `allow_no_tls`. Changing a connection field
+changes the profile key, but the old entry is replaced instead of orphaned, and
+`created_at` / `last_used` survive the edit.
 
 If `profiles.json` is corrupt or unreadable, the picker shows
 `Profile storage is unreadable. Showing no profiles.` and stays usable; `n` and

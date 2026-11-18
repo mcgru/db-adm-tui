@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -37,6 +38,27 @@ func TestEngineMetadata(t *testing.T) {
 	}
 	if e, ok := ParseScheme("postgresql"); !ok || e != EnginePostgreSQL {
 		t.Fatalf("postgresql scheme = %v, %v", e, ok)
+	}
+}
+
+func TestProfileAllowNoTLSAliases(t *testing.T) {
+	for _, key := range []string{"allow_no_tls", "allowNoTLS", "notls"} {
+		data := []byte(`{"label":"x","engine":"postgresql","host":"h","port":5432,` +
+			`"database":"d","user":"u","` + key + `":true}`)
+		var p Profile
+		if err := json.Unmarshal(data, &p); err != nil {
+			t.Fatal(err)
+		}
+		if !p.AllowNoTLS {
+			t.Fatalf("%s did not enable AllowNoTLS", key)
+		}
+	}
+	var p Profile
+	if err := json.Unmarshal([]byte(`{"allow_no_tls":false,"notls":true}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if !p.AllowNoTLS {
+		t.Fatal("an enabled alias must win over a false canonical key")
 	}
 }
 

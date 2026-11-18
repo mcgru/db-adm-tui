@@ -48,6 +48,10 @@ func TestGoldenModalsAndTooSmall(t *testing.T) {
 	seedStandard(t, e)
 	m := e.model(t)
 
+	edit := selectLabel(t, m, "prod-ro")
+	edit, _ = press(t, edit, "e")
+	assertGolden(t, "edit-profile.golden", edit.View().Content)
+
 	m, _ = press(t, m, "n")
 	m = typeString(t, m, "postgres://app_ro@db1.internal:5432/orders")
 	m, _ = press(t, m, "tab")
@@ -163,8 +167,12 @@ func TestTooSmallKeyGuard(t *testing.T) {
 		t.Fatalf("picker selection moved while too small: %d", m.pickerSel)
 	}
 	_, cmd = press(t, m, "q")
+	if cmd != nil {
+		t.Fatal("plain q must not quit")
+	}
+	_, cmd = press(t, m, "ctrl+q")
 	if cmd == nil {
-		t.Fatal("q must still quit while too small")
+		t.Fatal("Ctrl+Q must still quit while too small")
 	}
 }
 
@@ -349,23 +357,144 @@ func TestTabsFocusDisconnect(t *testing.T) {
 	if m.screen != ScreenPicker {
 		t.Fatalf("screen = %v, want picker", m.screen)
 	}
-	_, cmd := press(t, m, "q")
+	_, cmd := press(t, m, "ctrl+q")
 	if cmd == nil {
-		t.Fatal("q at picker should quit")
+		t.Fatal("Ctrl+Q at picker should quit")
 	}
 }
 
-func TestWorkspaceQuitDoesNotExit(t *testing.T) {
+func TestEditProfileModalSaves(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	original := m.profiles[m.pickerSel].Profile
+	m, _ = press(t, m, "e")
+	if m.modal != modalEdit || m.editOriginalKey != original.Key() {
+		t.Fatalf("edit modal = %v key=%q", m.modal, m.editOriginalKey)
+	}
+	if m.editHost.Value() != "db1.internal" || m.editPort.Value() != "5432" {
+		t.Fatalf("form not prefilled: host=%q port=%q", m.editHost.Value(), m.editPort.Value())
+	}
+	m.editLabel.SetValue("prod-ro-2")
+	m.editHost.SetValue("db2.internal")
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone {
+		t.Fatalf("modal stayed open: %v err=%q", m.modal, m.editErr)
+	}
+	if !strings.Contains(m.message, "saved prod-ro-2") {
+		t.Fatalf("message = %q", m.message)
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 3 {
+		t.Fatalf("profiles = %d, want 3", len(loaded))
+	}
+	var got *domain.Profile
+	for i := range loaded {
+		if loaded[i].Label == "prod-ro-2" {
+			got = &loaded[i]
+		}
+	}
+	if got == nil || got.Host != "db2.internal" || got.Port != 5432 {
+		t.Fatalf("updated profile = %+v", got)
+	}
+	if got.Source == nil || got.Source.Kind != domain.SourcePgpass {
+		t.Fatalf("source lost: %+v", got.Source)
+	}
+	if p, ok := m.currentPickerProfile(); !ok || p.Label != "prod-ro-2" {
+		t.Fatalf("selection did not follow the profile: %+v", p)
+	}
+}
+
+func TestEditProfileCancelKeepsProfile(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m, _ = press(t, m, "e")
+	m.editHost.SetValue("changed.internal")
+	m, _ = press(t, m, "esc")
+	if m.modal != modalNone {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loaded {
+		if p.Label == "prod-ro" && p.Host != "db1.internal" {
+			t.Fatalf("cancelled edit changed the profile: %+v", p)
+		}
+	}
+}
+
+func TestEditProfileRejectsInvalidPort(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m, _ = press(t, m, "e")
+	m.editPort.SetValue("abc")
+	m, _ = press(t, m, "enter")
+	if m.modal != modalEdit || m.editErr != "port must be a number" {
+		t.Fatalf("modal=%v err=%q", m.modal, m.editErr)
+	}
+	if m.editFocus != editPort {
+		t.Fatalf("focus = %v, want port", m.editFocus)
+	}
+}
+
+func TestEditProfileTogglesAllowNoTLS(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m, _ = press(t, m, "e")
+	for i := 0; i < 5; i++ {
+		m, _ = press(t, m, "tab")
+	}
+	if m.editFocus != editTLS {
+		t.Fatalf("focus = %v, want TLS", m.editFocus)
+	}
+	m, _ = press(t, m, "space")
+	if !m.editAllowNoTLS {
+		t.Fatal("space did not enable the no-TLS fallback")
+	}
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone {
+		t.Fatalf("modal stayed open: %v err=%q", m.modal, m.editErr)
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loaded {
+		if p.Label == "prod-ro" {
+			if !p.AllowNoTLS {
+				t.Fatalf("allow_no_tls not saved: %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatal("prod-ro not found")
+}
+
+func TestEditProfileKeyOnlyAtPicker(t *testing.T) {
+	m := workspace(t)
+	m, _ = press(t, m, "e")
+	if m.modal != modalNone {
+		t.Fatalf("edit modal opened in the workspace: %v", m.modal)
+	}
+}
+
+func TestWorkspaceCtrlQQuits(t *testing.T) {
 	m := workspace(t)
 	m, cmd := press(t, m, "q")
 	if cmd != nil {
-		t.Fatal("q in the workspace must not quit")
+		t.Fatal("plain q in the workspace must not quit")
 	}
-	if m.screen != ScreenWorkspace {
-		t.Fatalf("screen = %v, want workspace", m.screen)
-	}
-	if m.message != "q quits only at the picker" {
-		t.Fatalf("message = %q", m.message)
+	_, cmd = press(t, m, "ctrl+q")
+	if cmd == nil {
+		t.Fatal("Ctrl+Q in the workspace should quit")
 	}
 }
 
@@ -408,8 +537,12 @@ func TestFocusCycle(t *testing.T) {
 	}
 	m, _ = press(t, m, "tab")
 	m, _ = press(t, m, "tab")
-	if !strings.Contains(StripANSI(m.View().Content), "Ctrl+X chord") {
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "query bar · Ctrl+X chord") {
 		t.Fatal("query focus must be visible in the bottom line")
+	}
+	if !strings.Contains(view, "▸ SQL") {
+		t.Fatalf("query bar focus marker missing:\n%s", view)
 	}
 }
 
@@ -1092,7 +1225,7 @@ func TestPickerShowsSourceHealth(t *testing.T) {
 	}
 }
 
-func TestTooSmallKeepsPickerQuitRuleAndCyrillicForceQuit(t *testing.T) {
+func TestTooSmallKeepsCtrlQAndCyrillicForceQuit(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
 	m := selectLabel(t, e.model(t), "prod-ro")
@@ -1105,6 +1238,10 @@ func TestTooSmallKeepsPickerQuitRuleAndCyrillicForceQuit(t *testing.T) {
 	}
 	if m.screen != ScreenWorkspace {
 		t.Fatalf("screen = %v", m.screen)
+	}
+	_, cmd = press(t, m, "ctrl+q")
+	if cmd == nil {
+		t.Fatal("Ctrl+Q must quit while too small")
 	}
 	_, cmd = press(t, m, "ctrl+с")
 	if cmd == nil {
@@ -1130,7 +1267,7 @@ func TestPickerFooterSurvivesErrorsAndScroll(t *testing.T) {
 	if lines := strings.Split(view, "\n"); len(lines) != 24 {
 		t.Fatalf("view height = %d, want 24", len(lines))
 	}
-	if !strings.Contains(StripANSI(view), "q quit") {
+	if !strings.Contains(StripANSI(view), "Ctrl+Q quit") {
 		t.Fatalf("footer was clipped:\n%s", view)
 	}
 }

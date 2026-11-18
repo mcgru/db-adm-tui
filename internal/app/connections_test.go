@@ -321,6 +321,34 @@ func TestImportPreservesExistingLabel(t *testing.T) {
 	}
 }
 
+func TestImportPreservesAllowNoTLS(t *testing.T) {
+	f := newFixture(t)
+	existing := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro", AllowNoTLS: true,
+		Source: &domain.Source{Kind: domain.SourcePgpass, Path: "~/.pgpass"},
+	}
+	f.seed(t, existing)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
+	d := f.svc.Discover()
+	var selected []ImportEntry
+	for _, entry := range d.Entries {
+		if entry.Selectable {
+			selected = append(selected, entry)
+		}
+	}
+	if _, err := f.svc.Import(context.Background(), selected); err != nil {
+		t.Fatal(err)
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || !views[0].Profile.AllowNoTLS {
+		t.Fatalf("allow_no_tls not preserved: %+v", views)
+	}
+}
+
 func TestConnectPromptRequiredAndNeverStoresSecret(t *testing.T) {
 	f := newFixture(t)
 	p := domain.Profile{
@@ -467,6 +495,91 @@ func TestSaveProfileNeverStoresSecret(t *testing.T) {
 	views, _ := f.svc.Profiles(context.Background())
 	if len(views) != 1 || views[0].Profile.Label != "prod-ro" {
 		t.Fatalf("views = %+v", views)
+	}
+}
+
+func TestUpdateProfileReplacesKeyAndPreservesMetadata(t *testing.T) {
+	f := newFixture(t)
+	created := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
+	last := time.Date(2026, 2, 3, 10, 0, 0, 0, time.UTC)
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro", AllowNoTLS: true,
+		Source:    &domain.Source{Kind: domain.SourcePgpass, Path: "~/.pgpass"},
+		CreatedAt: created, LastUsed: &last,
+	}
+	f.seed(t, p)
+	updated := p
+	updated.Host = "db2"
+	updated.Label = "prod-ro-2"
+	if err := f.svc.UpdateProfile(context.Background(), p.Key(), updated); err != nil {
+		t.Fatal(err)
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 {
+		t.Fatalf("profiles = %+v", views)
+	}
+	got := views[0].Profile
+	if got.Host != "db2" || got.Label != "prod-ro-2" || got.Key() == p.Key() {
+		t.Fatalf("updated profile = %+v", got)
+	}
+	if !got.CreatedAt.Equal(created) || got.LastUsed == nil || !got.LastUsed.Equal(last) {
+		t.Fatalf("metadata lost: %+v", got)
+	}
+	if !got.AllowNoTLS || got.Source == nil || got.Source.Path != "~/.pgpass" {
+		t.Fatalf("flags lost: %+v", got)
+	}
+}
+
+func TestUpdateProfileRejectsKeyCollision(t *testing.T) {
+	f := newFixture(t)
+	one := domain.Profile{
+		Label: "one", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	two := one
+	two.Label = "two"
+	two.Host = "db2"
+	f.seed(t, one, two)
+	updated := one
+	updated.Host = "db2"
+	err := f.svc.UpdateProfile(context.Background(), one.Key(), updated)
+	if err == nil || !strings.Contains(err.Error(), "another profile") {
+		t.Fatalf("err = %v", err)
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 2 {
+		t.Fatalf("collision changed the store: %+v", views)
+	}
+}
+
+func TestUpdateProfileMissingAndInvalid(t *testing.T) {
+	f := newFixture(t)
+	p := domain.Profile{
+		Label: "one", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	f.seed(t, p)
+	if err := f.svc.UpdateProfile(context.Background(), "missing", p); err == nil {
+		t.Fatal("missing profile must fail")
+	}
+	invalid := p
+	invalid.Port = 0
+	if err := f.svc.UpdateProfile(context.Background(), p.Key(), invalid); err == nil {
+		t.Fatal("invalid profile must fail")
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || views[0].Profile.Port != 5432 {
+		t.Fatalf("invalid update changed the store: %+v", views)
 	}
 }
 

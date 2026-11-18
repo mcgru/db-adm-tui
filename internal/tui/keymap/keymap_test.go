@@ -9,8 +9,10 @@ func TestLatinCyrillicAliases(t *testing.T) {
 	}{
 		{"n", "т", New},
 		{"i", "ш", Import},
-		{"q", "й", Quit},
+		{"e", "у", EditProfile},
+		{"ctrl+q", "ctrl+й", Quit},
 		{"m", "ь", More},
+		{"`", "ё", ExpandJSON},
 		{"?", ",", Help},
 		{"[", "х", PrevTab},
 		{"]", "ъ", NextTab},
@@ -34,6 +36,14 @@ func TestLatinCyrillicAliases(t *testing.T) {
 	}
 }
 
+func TestPlainQIsNotBound(t *testing.T) {
+	for _, key := range []string{"q", "й"} {
+		if action, ok := Lookup(key); ok {
+			t.Fatalf("Lookup(%q) = %q, want unbound", key, action)
+		}
+	}
+}
+
 func TestSingleActions(t *testing.T) {
 	cases := map[string]Action{
 		"enter":      Confirm,
@@ -46,10 +56,14 @@ func TestSingleActions(t *testing.T) {
 		"right":      Right,
 		"home":       Home,
 		"end":        End,
+		"ctrl+home":  RangeStart,
+		"ctrl+end":   RangeEnd,
 		"pgup":       PageUp,
 		"pgdown":     PageDown,
 		"space":      Space,
 		" ":          Space,
+		"e":          EditProfile,
+		"у":          EditProfile,
 		"1":          Tab1,
 		"2":          Tab2,
 		"3":          Tab3,
@@ -58,6 +72,8 @@ func TestSingleActions(t *testing.T) {
 		"f1":         Help,
 		"ctrl+a":     FetchAll,
 		"ctrl+f":     ServerFilter,
+		"`":          ExpandJSON,
+		"ё":          ExpandJSON,
 		"ctrl+space": Completion,
 		"ctrl+@":     Completion,
 		"ctrl+f1":    ContextHelp,
@@ -65,6 +81,7 @@ func TestSingleActions(t *testing.T) {
 		"ctrl+right": ResizeTreeRight,
 		"ctrl+up":    ResizeQueryUp,
 		"ctrl+down":  ResizeQueryDown,
+		"ctrl+q":     Quit,
 		"ctrl+c":     ForceQuit,
 	}
 	for key, want := range cases {

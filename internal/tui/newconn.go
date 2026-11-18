@@ -230,6 +230,32 @@ func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 		updated, cmd := m.passwordInput.Update(msg)
 		m.passwordInput = updated
 		return m, cmd
+	case modalEdit:
+		if m.editFocus == editTLS {
+			return m, nil
+		}
+		switch m.editFocus {
+		case editHost:
+			updated, cmd := m.editHost.Update(msg)
+			m.editHost = updated
+			return m, cmd
+		case editPort:
+			updated, cmd := m.editPort.Update(msg)
+			m.editPort = updated
+			return m, cmd
+		case editDatabase:
+			updated, cmd := m.editDatabase.Update(msg)
+			m.editDatabase = updated
+			return m, cmd
+		case editUser:
+			updated, cmd := m.editUser.Update(msg)
+			m.editUser = updated
+			return m, cmd
+		default:
+			updated, cmd := m.editLabel.Update(msg)
+			m.editLabel = updated
+			return m, cmd
+		}
 	}
 	return m, nil
 }

@@ -19,8 +19,8 @@ func TestBuildDSN(t *testing.T) {
 		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
 		Database: "orders", User: "app_ro",
 	}
-	dsn := buildDSN(p, "p@ss word/with:chars")
-	for _, want := range []string{"postgres://", "app_ro", "db1:5432", "/orders", "sslmode=prefer", "passfile="} {
+	dsn := buildDSN(p, "p@ss word/with:chars", sslRequire)
+	for _, want := range []string{"postgres://", "app_ro", "db1:5432", "/orders", "sslmode=require", "passfile="} {
 		if !strings.Contains(dsn, want) {
 			t.Fatalf("dsn missing %q: %s", want, dsn)
 		}
@@ -30,12 +30,51 @@ func TestBuildDSN(t *testing.T) {
 	}
 }
 
+func TestBuildDSNDisableTLS(t *testing.T) {
+	p := domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	u, err := url.Parse(buildDSN(p, "", sslDisable))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := u.Query().Get("sslmode"); got != sslDisable {
+		t.Fatalf("sslmode = %q, want %q", got, sslDisable)
+	}
+}
+
+func TestConnectionModesFollowAllowNoTLS(t *testing.T) {
+	modes := connectionModes(domain.Profile{})
+	if len(modes) != 1 || modes[0] != sslRequire {
+		t.Fatalf("default modes = %v", modes)
+	}
+	modes = connectionModes(domain.Profile{AllowNoTLS: true})
+	if len(modes) != 2 || modes[0] != sslRequire || modes[1] != sslDisable {
+		t.Fatalf("allow-no-tls modes = %v", modes)
+	}
+}
+
+func TestRetryWithoutTLSOnlyForEngineFailures(t *testing.T) {
+	if !retryWithoutTLS(safeError("connect", "", errors.New("tls handshake failed"))) {
+		t.Fatal("connection-level errors must retry without TLS")
+	}
+	for _, kind := range []domain.ErrorKind{
+		domain.KindAuth, domain.KindPermission, domain.KindConfig,
+		domain.KindTimeout, domain.KindCancelled, domain.KindGuard,
+	} {
+		if retryWithoutTLS(domain.NewError(kind, "connect", "no")) {
+			t.Fatalf("%s error must not retry without TLS", kind)
+		}
+	}
+}
+
 func TestBuildDSNPreservesPasswordWithEmptyUser(t *testing.T) {
 	p := domain.Profile{
 		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
 		Database: "orders",
 	}
-	dsn := buildDSN(p, "secret")
+	dsn := buildDSN(p, "secret", sslRequire)
 	u, err := url.Parse(dsn)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +92,7 @@ func TestBuildDSNParsesWithoutReadingPassfile(t *testing.T) {
 		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
 		Database: "orders", User: "app_ro",
 	}
-	cfg, err := pgx.ParseConfig(buildDSN(p, "secret"))
+	cfg, err := pgx.ParseConfig(buildDSN(p, "secret", sslRequire))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +115,7 @@ func TestBuildDSNSuppressesPassfileFallback(t *testing.T) {
 		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
 		Database: "orders", User: "app_ro",
 	}
-	cfg, err := pgx.ParseConfig(buildDSN(p, ""))
+	cfg, err := pgx.ParseConfig(buildDSN(p, "", sslRequire))
 	if err != nil {
 		t.Fatal(err)
 	}

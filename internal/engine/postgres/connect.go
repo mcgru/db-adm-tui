@@ -18,7 +18,11 @@ import (
 	"github.com/mcgru/db-adm-tui/internal/ports"
 )
 
-const pingTimeout = 10 * time.Second
+const (
+	pingTimeout = 10 * time.Second
+	sslRequire  = "require"
+	sslDisable  = "disable"
+)
 
 type connector struct{}
 
@@ -30,9 +34,42 @@ func NewConnector() ports.Connector { return connector{} }
 func (connector) Close() error { return nil }
 
 // Connect opens one database/sql connection, pings it with a 10 second budget,
-// and closes it on failure. The password is never placed in an error.
+// and closes it on failure. TLS is required by default. A profile with
+// AllowNoTLS retries the same connection without TLS after a TLS-level failure.
+// The password is never placed in an error.
 func (connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
-	db, err := sql.Open("pgx", buildDSN(p, password))
+	modes := connectionModes(p)
+	var lastErr error
+	for i, sslmode := range modes {
+		bundle, err := connectOnce(ctx, p, password, sslmode)
+		if err == nil {
+			return bundle, nil
+		}
+		lastErr = err
+		if i+1 < len(modes) && !retryWithoutTLS(err) {
+			return ports.SessionBundle{}, err
+		}
+	}
+	return ports.SessionBundle{}, lastErr
+}
+
+func connectionModes(p domain.Profile) []string {
+	modes := []string{sslRequire}
+	if p.AllowNoTLS {
+		modes = append(modes, sslDisable)
+	}
+	return modes
+}
+
+// retryWithoutTLS only falls back for connection-level failures. Auth,
+// permission, and configuration errors would fail the same way without TLS and
+// must not double the login attempts.
+func retryWithoutTLS(err error) bool {
+	return domain.KindOf(err) == domain.KindEngine
+}
+
+func connectOnce(ctx context.Context, p domain.Profile, password, sslmode string) (ports.SessionBundle, error) {
+	db, err := sql.Open("pgx", buildDSN(p, password, sslmode))
 	if err != nil {
 		return ports.SessionBundle{}, safeError("connect", password, err)
 	}
@@ -78,7 +115,7 @@ func (c *connection) Close() error {
 	return err
 }
 
-func buildDSN(p domain.Profile, password string) string {
+func buildDSN(p domain.Profile, password, sslmode string) string {
 	u := url.URL{
 		Scheme: "postgres",
 		Host:   net.JoinHostPort(p.Host, strconv.Itoa(p.Port)),
@@ -93,7 +130,7 @@ func buildDSN(p domain.Profile, password string) string {
 		u.User = url.User(p.User)
 	}
 	q := url.Values{}
-	q.Set("sslmode", "prefer")
+	q.Set("sslmode", sslmode)
 	// Resolution belongs to the profile adapter. An empty passfile stops pgx
 	// from reading PGPASSFILE/~/.pgpass a second time behind our back.
 	q.Set("passfile", "")

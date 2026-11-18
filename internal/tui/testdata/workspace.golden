@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
+  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
 loaded 5 of ~5                                                        Enter open

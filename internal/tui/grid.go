@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -16,8 +17,9 @@ import (
 )
 
 const (
-	dataPageSize       = 100
-	dataFetchAllSize   = 10000
+	dataPageSize = 100
+	// TODO(review): restore dataFetchAllSize to 10000 after scroll debugging.
+	dataFetchAllSize   = 1000
 	dataMaxWindowRows  = 10000
 	dataMaxWindowBytes = 64 << 20
 	dataMaxColumnWidth = 32
@@ -30,10 +32,20 @@ const (
 	dataNext
 	dataPrevious
 	dataAll
+	dataStart
 )
 
 type visibleColumn struct {
 	index int
+	width int
+}
+
+// dataColumn is one column of the rendered grid. A column may be a whole
+// engine column or one field of a JSON object, addressed by path.
+type dataColumn struct {
+	name  string
+	index int
+	path  []string
 	width int
 }
 
@@ -57,7 +69,8 @@ type dataState struct {
 	cancel         context.CancelFunc
 	columns        []domain.Column
 	rows           []domain.Row
-	widths         []int
+	view           []dataColumn
+	expandedJSON   map[int]bool
 	gutter         int
 	windowStart    int
 	rowOffset      int
@@ -81,10 +94,11 @@ type dataState struct {
 
 func newDataState() dataState {
 	return dataState{
-		batch:     dataPageSize,
-		estimated: -1,
-		maxRows:   dataMaxWindowRows,
-		maxBytes:  dataMaxWindowBytes,
+		batch:        dataPageSize,
+		estimated:    -1,
+		maxRows:      dataMaxWindowRows,
+		maxBytes:     dataMaxWindowBytes,
+		expandedJSON: map[int]bool{},
 	}
 }
 
@@ -103,10 +117,56 @@ func (m *Model) resetDataFor(ref domain.ObjectRef) {
 	m.data.has = true
 }
 
+// toggleJSONColumns expands or collapses only the selected MongoDB column.
+// Pressing the key again on the same column cycles it back.
+func (m *Model) toggleJSONColumns() {
+	d := &m.data
+	if !d.loaded || len(d.columns) == 0 || len(d.view) == 0 {
+		return
+	}
+	if d.cursorCol < 0 || d.cursorCol >= len(d.view) {
+		return
+	}
+	index := d.view[d.cursorCol].index
+	if d.expandedJSON[index] {
+		delete(d.expandedJSON, index)
+		d.recount()
+		m.focusDataColumn(index)
+		m.setMessage(levelInfo, "JSON field collapsed")
+		return
+	}
+	if len(jsonFieldUnion(d.rows, index)) == 0 {
+		m.setMessage(levelInfo, "selected column has no JSON object fields")
+		return
+	}
+	if d.expandedJSON == nil {
+		d.expandedJSON = map[int]bool{}
+	}
+	d.expandedJSON[index] = true
+	d.recount()
+	m.focusDataColumn(index)
+	m.setMessage(levelInfo, "JSON field expanded")
+}
+
+// focusDataColumn puts the cursor on the first rendered column for one engine
+// column: the parent when collapsed, the first subfield when expanded.
+func (m *Model) focusDataColumn(index int) {
+	d := &m.data
+	for i, column := range d.view {
+		if column.index == index {
+			d.cursorCol = i
+			break
+		}
+	}
+	d.clampCursor()
+	m.ensureDataColumn()
+	m.ensureDataViewport()
+}
+
 func (d *dataState) recount() {
 	grid := domain.Grid{Columns: d.columns, Rows: d.rows}
 	d.bytes = grid.ApproxBytes()
-	d.widths = gridColumnWidths(d.columns, d.rows)
+	d.view = buildDataView(d.columns, d.rows, d.expandedJSON)
 	d.gutter = gridGutter(d.windowStart + len(d.rows))
 	d.clampCursor()
 }
@@ -126,15 +186,15 @@ func (d *dataState) clampCursor() {
 	if d.cursorRow > last {
 		d.cursorRow = last
 	}
-	if len(d.columns) == 0 {
+	if len(d.view) == 0 {
 		d.cursorCol = 0
 		d.colOffset = 0
 	} else {
 		if d.cursorCol < 0 {
 			d.cursorCol = 0
 		}
-		if d.cursorCol >= len(d.columns) {
-			d.cursorCol = len(d.columns) - 1
+		if d.cursorCol >= len(d.view) {
+			d.cursorCol = len(d.view) - 1
 		}
 		if d.colOffset < 0 {
 			d.colOffset = 0
@@ -142,8 +202,8 @@ func (d *dataState) clampCursor() {
 		if d.colOffset > d.cursorCol {
 			d.colOffset = d.cursorCol
 		}
-		if d.colOffset >= len(d.columns) {
-			d.colOffset = len(d.columns) - 1
+		if d.colOffset >= len(d.view) {
+			d.colOffset = len(d.view) - 1
 		}
 	}
 	if d.rowOffset < d.windowStart {
@@ -273,6 +333,171 @@ func gridColumnWidths(columns []domain.Column, rows []domain.Row) []int {
 	return widths
 }
 
+// buildDataView projects engine columns into rendered columns. Only the
+// engine columns selected in expanded are replaced by dotted subcolumns in
+// first-seen field order.
+func buildDataView(columns []domain.Column, rows []domain.Row, expanded map[int]bool) []dataColumn {
+	if len(expanded) == 0 {
+		widths := gridColumnWidths(columns, rows)
+		view := make([]dataColumn, len(columns))
+		for i, column := range columns {
+			view[i] = dataColumn{name: column.Name, index: i, width: widths[i]}
+		}
+		return view
+	}
+	view := make([]dataColumn, 0, len(columns))
+	for i, column := range columns {
+		fields := jsonFieldUnion(rows, i)
+		if !expanded[i] || len(fields) == 0 {
+			view = append(view, dataColumn{name: column.Name, index: i})
+			continue
+		}
+		for _, field := range fields {
+			view = append(view, dataColumn{
+				name:  column.Name + "." + field,
+				index: i,
+				path:  []string{field},
+			})
+		}
+	}
+	for i := range view {
+		view[i].width = dataColumnWidth(rows, view[i])
+	}
+	return view
+}
+
+// jsonFieldUnion returns the ordered union of keys in the JSON objects held by
+// one engine column. Non-object values contribute nothing.
+func jsonFieldUnion(rows []domain.Row, index int) []string {
+	seen := map[string]bool{}
+	var fields []string
+	for _, row := range rows {
+		if index < 0 || index >= len(row.Cells) {
+			continue
+		}
+		cell := row.Cells[index]
+		if cell.Kind != domain.CellJSON {
+			continue
+		}
+		for _, key := range jsonObjectKeys(cell.Text) {
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			fields = append(fields, key)
+		}
+	}
+	return fields
+}
+
+// jsonObjectKeys returns the keys of a JSON object in document order.
+func jsonObjectKeys(text string) []string {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	token, err := decoder.Token()
+	if err != nil || token != json.Delim('{') {
+		return nil
+	}
+	var keys []string
+	for decoder.More() {
+		token, err := decoder.Token()
+		if err != nil {
+			return nil
+		}
+		key, ok := token.(string)
+		if !ok {
+			return nil
+		}
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return nil
+		}
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func dataColumnWidth(rows []domain.Row, column dataColumn) int {
+	width := lipgloss.Width(oneLine(column.name))
+	for _, row := range rows {
+		display := cellForColumn(row, column).Display()
+		if len(display) > dataMaxColumnWidth*8 {
+			width = dataMaxColumnWidth
+			break
+		}
+		if cellWidth := lipgloss.Width(oneLine(display)); cellWidth > width {
+			width = cellWidth
+		}
+	}
+	if width < 4 {
+		width = 4
+	}
+	if width > dataMaxColumnWidth {
+		width = dataMaxColumnWidth
+	}
+	return width
+}
+
+func cellForColumn(row domain.Row, column dataColumn) domain.Cell {
+	empty := domain.Cell{Text: "", Kind: domain.CellText}
+	if column.index < 0 || column.index >= len(row.Cells) {
+		return empty
+	}
+	cell := row.Cells[column.index]
+	if len(column.path) == 0 {
+		return cell
+	}
+	if cell.Kind != domain.CellJSON {
+		return empty
+	}
+	return jsonPathCell(cell.Text, column.path)
+}
+
+func jsonPathCell(text string, path []string) domain.Cell {
+	raw, ok := jsonPathValue(text, path)
+	if !ok {
+		return domain.Cell{Text: "", Kind: domain.CellText}
+	}
+	return cellFromJSON(raw)
+}
+
+func jsonPathValue(text string, path []string) (json.RawMessage, bool) {
+	current := json.RawMessage(text)
+	for _, key := range path {
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal(current, &object); err != nil {
+			return nil, false
+		}
+		next, ok := object[key]
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+// cellFromJSON maps one decoded JSON value to a cell. Null stays distinct from
+// an empty string; objects and arrays stay compact JSON.
+func cellFromJSON(raw json.RawMessage) domain.Cell {
+	text := strings.TrimSpace(string(raw))
+	switch {
+	case text == "" || text == "null":
+		return domain.NullCell()
+	case text == "true" || text == "false":
+		return domain.Cell{Text: text, Kind: domain.CellBool}
+	case strings.HasPrefix(text, `"`):
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return domain.Cell{Text: text, Kind: domain.CellText}
+		}
+		return domain.TextCell(value)
+	case strings.HasPrefix(text, "{") || strings.HasPrefix(text, "["):
+		return domain.Cell{Text: domain.CompactJSONText(text), Kind: domain.CellJSON}
+	default:
+		return domain.Cell{Text: text, Kind: domain.CellNumber}
+	}
+}
+
 func gridGutter(lastAbsolute int) int {
 	width := len(strconv.Itoa(lastAbsolute + 1))
 	if width < 3 {
@@ -353,7 +578,9 @@ func (m *Model) nextDataPage() tea.Cmd {
 	return m.beginDataFetch(d.windowStart+len(d.rows), d.batch, dataNext)
 }
 
-// fetchAllData loads up to 10,000 rows per request and keeps that batch size.
+// fetchAllData appends one full-fetch batch and grows the retained window by
+// the same amount, so repeated Ctrl+A presses accumulate rows instead of
+// sliding the window forward. The byte cap still applies.
 func (m *Model) fetchAllData() tea.Cmd {
 	if !m.dataTabActive() {
 		m.setMessage(levelInfo, "select a table or collection to browse")
@@ -371,11 +598,12 @@ func (m *Model) fetchAllData() tea.Cmd {
 		m.setMessage(levelInfo, "end of data")
 		return nil
 	}
-	limit := dataFetchAllSize
-	if remaining := d.maxRows - len(d.rows); remaining > 0 && remaining < limit {
-		limit = remaining
+	end := d.windowStart + len(d.rows)
+	target := end + dataFetchAllSize
+	if target > d.maxRows {
+		d.maxRows = target
 	}
-	return m.beginDataFetch(d.windowStart+len(d.rows), limit, dataAll)
+	return m.beginDataFetch(end, dataFetchAllSize, dataAll)
 }
 
 func (m *Model) previousDataPage() tea.Cmd {
@@ -392,6 +620,50 @@ func (m *Model) previousDataPage() tea.Cmd {
 		return nil
 	}
 	return m.beginDataFetch(offset, limit, dataPrevious)
+}
+
+// dataRangeStart jumps to the first loaded row. If the front of the window was
+// evicted, it fetches the whole missing prefix in one request so the range
+// becomes contiguous again instead of re-reading rows already in memory.
+func (m *Model) dataRangeStart() tea.Cmd {
+	if !m.dataFocused() {
+		return nil
+	}
+	d := &m.data
+	d.endDown = 0
+	d.endPg = 0
+	if !d.loaded {
+		return m.ensureData()
+	}
+	if len(d.rows) == 0 {
+		return nil
+	}
+	if d.windowStart > 0 {
+		return m.beginDataFetch(0, d.windowStart, dataStart)
+	}
+	d.cursorRow = d.windowStart
+	d.rowOffset = d.windowStart
+	m.ensureDataViewport()
+	return nil
+}
+
+// dataRangeEnd jumps to the last loaded row without fetching more pages.
+func (m *Model) dataRangeEnd() tea.Cmd {
+	if !m.dataFocused() {
+		return nil
+	}
+	d := &m.data
+	d.endDown = 0
+	d.endPg = 0
+	if !d.loaded {
+		return m.ensureData()
+	}
+	if len(d.rows) == 0 {
+		return nil
+	}
+	d.cursorRow = d.windowStart + len(d.rows) - 1
+	m.ensureDataViewport()
+	return nil
 }
 
 // beginDataFetch starts one serialized page request. A generation identifies
@@ -485,6 +757,16 @@ func (m Model) handleDataPage(msg dataPageMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.data.cursorRow = oldStart - 1
 		}
+		m.data.capWindow(false)
+	case dataStart:
+		m.data.mergePage(msg.page.Grid, true)
+		if msg.page.Offset >= 0 {
+			m.data.windowStart = msg.page.Offset
+		} else {
+			m.data.windowStart -= len(msg.page.Grid.Rows)
+		}
+		m.data.cursorRow = m.data.windowStart
+		m.data.rowOffset = m.data.windowStart
 		m.data.capWindow(false)
 	case dataNext, dataAll:
 		m.data.mergePage(msg.page.Grid, false)
@@ -643,7 +925,7 @@ func (m *Model) dataPgDownGesture() tea.Cmd {
 }
 
 func (m *Model) moveDataColumn(delta int) {
-	if !m.dataFocused() || len(m.data.columns) == 0 {
+	if !m.dataFocused() || len(m.data.view) == 0 {
 		return
 	}
 	d := &m.data
@@ -651,18 +933,18 @@ func (m *Model) moveDataColumn(delta int) {
 	if d.cursorCol < 0 {
 		d.cursorCol = 0
 	}
-	if d.cursorCol >= len(d.columns) {
-		d.cursorCol = len(d.columns) - 1
+	if d.cursorCol >= len(d.view) {
+		d.cursorCol = len(d.view) - 1
 	}
 	m.ensureDataColumn()
 }
 
 func (m *Model) moveDataColumnEdge(last bool) {
-	if !m.dataFocused() || len(m.data.columns) == 0 {
+	if !m.dataFocused() || len(m.data.view) == 0 {
 		return
 	}
 	if last {
-		m.data.cursorCol = len(m.data.columns) - 1
+		m.data.cursorCol = len(m.data.view) - 1
 	} else {
 		m.data.cursorCol = 0
 	}
@@ -671,14 +953,18 @@ func (m *Model) moveDataColumnEdge(last bool) {
 
 func (m *Model) ensureDataColumn() {
 	d := &m.data
-	if len(d.widths) == 0 {
+	if len(d.view) == 0 {
 		return
+	}
+	widths := make([]int, len(d.view))
+	for i := range d.view {
+		widths[i] = d.view[i].width
 	}
 	available := m.dataInnerWidth() - d.gutter - 2
 	if available < 1 {
 		available = 1
 	}
-	d.colOffset = visibleColumnStart(d.widths, d.colOffset, d.cursorCol, available)
+	d.colOffset = visibleColumnStart(widths, d.colOffset, d.cursorCol, available)
 }
 
 func (m *Model) ensureDataViewport() {
@@ -867,9 +1153,13 @@ func (m Model) renderGrid(width, height int) []string {
 		}
 		return nil
 	}
-	widths := append([]int(nil), d.widths...)
-	if len(widths) != len(d.columns) {
-		widths = gridColumnWidths(d.columns, d.rows)
+	view := d.view
+	if len(view) == 0 {
+		view = buildDataView(d.columns, d.rows, d.expandedJSON)
+	}
+	widths := make([]int, len(view))
+	for i := range view {
+		widths[i] = view[i].width
 	}
 	gutter := d.gutter
 	if gutter < 1 {
@@ -908,7 +1198,7 @@ func (m Model) renderGrid(width, height int) []string {
 		if j > 0 {
 			sep = " "
 		}
-		name := Truncate(oneLine(d.columns[column.index].Name), column.width)
+		name := Truncate(oneLine(view[column.index].name), column.width)
 		text := sep + Pad(name, column.width)
 		headerUsed += lipgloss.Width(text)
 		if column.index == d.cursorCol {
@@ -959,12 +1249,12 @@ func (m Model) renderGrid(width, height int) []string {
 	}
 	for absolute := startRow; absolute < end; absolute++ {
 		row := d.rows[absolute-d.windowStart]
-		lines = append(lines, m.renderGridRow(row, visible, gutter, absolute, width))
+		lines = append(lines, m.renderGridRow(row, view, visible, gutter, absolute, width))
 	}
 	return lines
 }
 
-func (m Model) renderGridRow(row domain.Row, visible []visibleColumn, gutter, absolute, width int) string {
+func (m Model) renderGridRow(row domain.Row, view []dataColumn, visible []visibleColumn, gutter, absolute, width int) string {
 	d := m.data
 	if absolute == d.cursorRow {
 		var b strings.Builder
@@ -975,7 +1265,7 @@ func (m Model) renderGridRow(row domain.Row, visible []visibleColumn, gutter, ab
 			if j > 0 {
 				sep = " "
 			}
-			text := cellText(row, column.index)
+			text := cellForColumn(row, view[column.index]).Display()
 			cell := sep + Pad(Truncate(oneLine(text), column.width), column.width)
 			used += lipgloss.Width(cell)
 			if column.index == d.cursorCol {
@@ -996,10 +1286,7 @@ func (m Model) renderGridRow(row domain.Row, visible []visibleColumn, gutter, ab
 		if j > 0 {
 			b.WriteString(" ")
 		}
-		cell := domain.Cell{Text: "", Kind: domain.CellText}
-		if column.index < len(row.Cells) {
-			cell = row.Cells[column.index]
-		}
+		cell := cellForColumn(row, view[column.index])
 		style := m.styles.Text
 		if cell.Null {
 			style = m.styles.Muted
@@ -1008,11 +1295,4 @@ func (m Model) renderGridRow(row domain.Row, visible []visibleColumn, gutter, ab
 		b.WriteString(style.Render(Pad(text, column.width)))
 	}
 	return b.String()
-}
-
-func cellText(row domain.Row, index int) string {
-	if index < 0 || index >= len(row.Cells) {
-		return ""
-	}
-	return row.Cells[index].Display()
 }

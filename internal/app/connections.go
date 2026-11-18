@@ -18,6 +18,10 @@ import (
 // ConnectTimeout bounds one open-and-ping attempt.
 const ConnectTimeout = 10 * time.Second
 
+// connectBudget leaves room for the optional plaintext retry after a failed
+// TLS attempt.
+const connectBudget = 2 * ConnectTimeout
+
 // ErrPasswordRequired tells the UI to ask for a one-time password.
 var ErrPasswordRequired = errors.New("password required")
 
@@ -241,6 +245,7 @@ func (s *Service) Import(ctx context.Context, selected []ImportEntry) (ImportSum
 		if old, ok := byKey[p.Key()]; ok {
 			p.CreatedAt = old.CreatedAt
 			p.LastUsed = old.LastUsed
+			p.AllowNoTLS = p.AllowNoTLS || old.AllowNoTLS
 			if old.Label != "" {
 				p.Label = old.Label
 			}
@@ -317,6 +322,63 @@ func (s *Service) SaveProfile(ctx context.Context, p domain.Profile) error {
 	return s.store.Save(ctx, list)
 }
 
+// UpdateProfile replaces the profile stored under originalKey. Editing a
+// connection field changes the key, so the old entry is removed instead of
+// leaving an orphan. CreatedAt and LastUsed survive the edit.
+func (s *Service) UpdateProfile(ctx context.Context, originalKey string, p domain.Profile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p = p.Normalize()
+	if err := p.Validate(); err != nil {
+		return domain.NewError(domain.KindConfig, "update-profile", err.Error())
+	}
+	existing, err := s.store.Load(ctx)
+	if err != nil {
+		return err
+	}
+	var old domain.Profile
+	found := false
+	for _, stored := range existing {
+		if stored.Key() == originalKey {
+			old = stored
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.NewError(domain.KindConfig, "update-profile", "the profile no longer exists")
+	}
+	if p.Key() != originalKey {
+		for _, stored := range existing {
+			if stored.Key() == p.Key() {
+				return domain.NewError(domain.KindConfig, "update-profile", "another profile already uses this connection")
+			}
+		}
+	}
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = old.CreatedAt
+	}
+	if p.LastUsed == nil {
+		p.LastUsed = old.LastUsed
+	}
+	p.UpdatedAt = s.clock()
+	list := make([]domain.Profile, 0, len(existing))
+	for _, stored := range existing {
+		if stored.Key() == originalKey {
+			continue
+		}
+		list = append(list, stored)
+	}
+	list = append(list, p)
+	sort.SliceStable(list, func(i, j int) bool {
+		if list[i].Label != list[j].Label {
+			return list[i].Label < list[j].Label
+		}
+		return list[i].Key() < list[j].Key()
+	})
+	return s.store.Save(ctx, list)
+}
+
 // PrepareNewConnection parses a no-password URI and attaches a matching source
 // file when one exists. It does not connect.
 func (s *Service) PrepareNewConnection(ctx context.Context, raw, label string) (domain.Profile, error) {
@@ -365,7 +427,7 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 		}
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, ConnectTimeout)
+	timeoutCtx, cancel := context.WithTimeout(ctx, connectBudget)
 	defer cancel()
 	bundle, err := s.connector.Connect(timeoutCtx, p, secret)
 	if err != nil {
@@ -376,7 +438,7 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 		}
 		if timeoutCtx.Err() == context.DeadlineExceeded {
 			return ConnectResult{Profile: p}, connectionError(p, &domain.Error{
-				Kind: domain.KindTimeout, Op: "connect", Message: "connection timed out after 10s",
+				Kind: domain.KindTimeout, Op: "connect", Message: fmt.Sprintf("connection timed out after %s", connectBudget),
 			}, secret)
 		}
 		return ConnectResult{Profile: p}, connectionError(p, err, secret)
