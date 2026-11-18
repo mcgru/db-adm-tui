@@ -1,0 +1,24 @@
+prod-ro · PostgreSQL · orders · r/o                                       app_ro
+┌ objects 3 ───────────────┐ ┌─────────────────────────────────────────────────┐
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
+│   ▾ public               │ │                                                 │
+│     · customers  ro      │ │ grants                                          │
+│     · invoices  rw       │ │   CONNECT   orders                              │
+│     · audit_log  —       │ │   USAGE     public                              │
+│ ▸ billing                │ │   SELECT    customers                           │
+│ ▾ Security               │ │ memberships                                     │
+│   · users                │ │   reporting (via role)                          │
+│   · roles                │ │ effective                                       │
+│                          │ │   native terms only                             │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+└──────────────────────────┘ └─────────────────────────────────────────────────┘
+SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
+loaded 100 of ~12,480 · case: sensitive · / search · ? help            Tab focus

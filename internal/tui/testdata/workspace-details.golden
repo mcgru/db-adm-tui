@@ -1,0 +1,24 @@
+prod-ro · PostgreSQL · orders · r/o                                       app_ro
+┌ objects 3 ───────────────┐ ┌─────────────────────────────────────────────────┐
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
+│   ▾ public               │ │                                                 │
+│     · customers  ro      │ │ estimated   12,480 rows                         │
+│     · invoices  rw       │ │ size        2.1 GB                              │
+│     · audit_log  —       │ │ indexes                                         │
+│ ▸ billing                │ │   customers_pkey                                │
+│ ▾ Security               │ │ structure                                       │
+│   · users                │ │   id          bigint                            │
+│   · roles                │ │   email       text                              │
+│                          │ │   status      text                              │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+└──────────────────────────┘ └─────────────────────────────────────────────────┘
+SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
+loaded 100 of ~12,480 · case: sensitive · / search · ? help            Tab focus

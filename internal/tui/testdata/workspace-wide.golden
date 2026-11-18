@@ -1,0 +1,30 @@
+prod-ro · PostgreSQL · orders · r/o                                                           app_ro
+┌ objects 3 ───────────────┐ ┌─────────────────────────────────────────────────────────────────────┐
+│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges                                   │
+│   ▾ public               │ │                                                                     │
+│     · customers  ro      │ │ id    email                    status                               │
+│     · invoices  rw       │ │ 1041  anna@example.com         active                               │
+│     · audit_log  —       │ │ 1042  ali@example.com          active                               │
+│ ▸ billing                │ │ 1043  mark@example.com         blocked                              │
+│ ▾ Security               │ │ 1044  nina@example.com         active                               │
+│   · users                │ │ 1045  omar@example.com         active                               │
+│   · roles                │ │ 1046  sara@example.com         blocked                              │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+│                          │ │                                                                     │
+└──────────────────────────┘ └─────────────────────────────────────────────────────────────────────┘
+SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;                             
+connected (fake)                                                                           Tab focus

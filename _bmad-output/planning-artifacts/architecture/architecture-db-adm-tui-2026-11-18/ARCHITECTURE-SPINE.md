@@ -156,10 +156,10 @@ flowchart LR
 
 | Name | Version |
 |---|---|
-| Go | 1.27.4 |
-| Bubble Tea | `github.com/charmbracelet/bubbletea/v2` v2.1.2 |
-| Lip Gloss | `github.com/charmbracelet/lipgloss/v2` v2.1.1 |
-| Bubbles | `github.com/charmbracelet/bubbles/v2` v2.2.1 |
+| Go | 1.26.0+ (module `go 1.26.0`; Bubble Tea v2 requires 1.26+) |
+| Bubble Tea | `charm.land/bubbletea/v2` v2.1.2 |
+| Lip Gloss | `charm.land/lipgloss/v2` v2.1.1 |
+| Bubbles | `charm.land/bubbles/v2` v2.2.1 |
 | pgx (stdlib) | `github.com/jackc/pgx/v5` v5.11.0 |
 | MySQL driver | `github.com/go-sql-driver/mysql` v1.10.2 |
 | MongoDB driver | `go.mongodb.org/mongo-driver/v2` v2.10.0 |
