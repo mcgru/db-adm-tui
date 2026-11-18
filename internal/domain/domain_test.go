@@ -152,3 +152,34 @@ func TestLastUsedTimestampIsNotPersistedAsSecret(t *testing.T) {
 		t.Fatal("last used lost")
 	}
 }
+
+func TestCatalogAccessAndIdentity(t *testing.T) {
+	if AccessFrom(false, true) != AccessWrite {
+		t.Fatal("write must map to rw")
+	}
+	if AccessFrom(true, false) != AccessRead {
+		t.Fatal("read must map to ro")
+	}
+	if AccessFrom(false, false) != AccessNone {
+		t.Fatal("no access must map to —")
+	}
+	for _, kind := range []ObjectKind{KindTable, KindCollection, KindView} {
+		if !kind.AccessMarker() {
+			t.Fatalf("%s must carry a marker", kind)
+		}
+	}
+	for _, kind := range []ObjectKind{KindSequence, KindDatabase, KindSchema} {
+		if kind.AccessMarker() {
+			t.Fatalf("%s must not carry a marker", kind)
+		}
+	}
+	a := ObjectRef{Engine: EnginePostgreSQL, Kind: KindTable, Database: "orders", Schema: "public", Name: "customers"}
+	b := a
+	if a.Key() != b.Key() {
+		t.Fatal("key must be deterministic")
+	}
+	b.Database = "billing"
+	if a.Key() == b.Key() {
+		t.Fatal("database must change identity")
+	}
+}

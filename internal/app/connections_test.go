@@ -28,17 +28,44 @@ type fakeConnector struct {
 	conns    []*fakeConn
 }
 
-func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.Connection, error) {
+func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
 	f.password = password
 	f.profile = p
 	if f.err != nil {
-		return nil, f.err
+		return ports.SessionBundle{}, f.err
 	}
 	conn := &fakeConn{}
 	f.conns = append(f.conns, conn)
-	return conn, nil
+	return ports.SessionBundle{Session: conn, Catalog: fakeCatalog{database: p.Database}}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
+
+type fakeCatalog struct {
+	database string
+}
+
+func (c fakeCatalog) Databases(ctx context.Context) ([]domain.Node, error) {
+	return []domain.Node{{
+		Ref:        domain.ObjectRef{Kind: domain.KindDatabase, Database: c.database, Name: c.database},
+		Name:       c.database,
+		Kind:       domain.KindDatabase,
+		Expandable: true,
+	}}, nil
+}
+func (c fakeCatalog) Children(ctx context.Context, ref domain.ObjectRef) ([]domain.Node, error) {
+	return []domain.Node{{
+		Ref:        domain.ObjectRef{Kind: domain.KindSchema, Database: ref.Database, Schema: "public", Name: "public"},
+		Name:       "public",
+		Kind:       domain.KindSchema,
+		Expandable: true,
+	}}, nil
+}
+func (c fakeCatalog) Principals(ctx context.Context, ref domain.ObjectRef) ([]domain.Principal, error) {
+	return nil, nil
+}
+func (c fakeCatalog) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, error) {
+	return "", nil
+}
 
 type fixture struct {
 	home      string
@@ -327,7 +354,7 @@ func TestConnectPromptRequiredAndNeverStoresSecret(t *testing.T) {
 
 func TestConnectReadsSourceAndUpdatesLastUsed(t *testing.T) {
 	f := newFixture(t)
-	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\n", 0o600)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\ndb1:5432:billing:app_ro:billingpass\n", 0o600)
 	p := domain.Profile{
 		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
 		Database: "orders", User: "app_ro",
@@ -558,6 +585,113 @@ func TestConnectWarnsWhenLastUsedCannotBeSaved(t *testing.T) {
 	}
 	if !strings.Contains(result.Warning, "connection is still open") {
 		t.Fatalf("warning = %q", result.Warning)
+	}
+	_ = result.Session.Close()
+}
+
+func TestSessionSwitchesPostgresDatabase(t *testing.T) {
+	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\ndb1:5432:billing:app_ro:billingpass\n", 0o600)
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+		Source: &domain.Source{Kind: domain.SourcePgpass, Path: "~/.pgpass"},
+	}
+	f.seed(t, p)
+	result, err := f.svc.Connect(context.Background(), p, Credential{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Session.CurrentDatabase(); got != "orders" {
+		t.Fatalf("database = %q", got)
+	}
+	if _, err := result.Session.Children(context.Background(), domain.ObjectRef{
+		Kind: domain.KindDatabase, Database: "billing", Name: "billing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := result.Session.CurrentDatabase(); got != "billing" {
+		t.Fatalf("switched database = %q", got)
+	}
+	if len(f.connector.conns) != 2 || !f.connector.conns[0].closed {
+		t.Fatalf("expected one old closed connection and one live: %+v", f.connector.conns)
+	}
+	if f.connector.profile.Database != "billing" {
+		t.Fatalf("connector profile = %+v", f.connector.profile)
+	}
+	_ = result.Session.Close()
+}
+
+func TestSessionSwitchRereadsSourceAndUsesNewPassword(t *testing.T) {
+	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\n", 0o600)
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+		Source: &domain.Source{Kind: domain.SourcePgpass, Path: "~/.pgpass"},
+	}
+	f.seed(t, p)
+	result, err := f.svc.Connect(context.Background(), p, Credential{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\ndb1:5432:billing:app_ro:second\n", 0o600)
+	if _, err := result.Session.Children(context.Background(), domain.ObjectRef{
+		Kind: domain.KindDatabase, Database: "billing", Name: "billing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if f.connector.password != "second" {
+		t.Fatalf("switch password = %q", f.connector.password)
+	}
+	_ = result.Session.Close()
+}
+
+func TestSessionSwitchFailureMarksDead(t *testing.T) {
+	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:first\ndb1:5432:billing:app_ro:billingpass\n", 0o600)
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+		Source: &domain.Source{Kind: domain.SourcePgpass, Path: "~/.pgpass"},
+	}
+	f.seed(t, p)
+	result, err := f.svc.Connect(context.Background(), p, Credential{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.connector.err = &domain.Error{Kind: domain.KindAuth, Message: "authentication failed"}
+	if _, err := result.Session.Children(context.Background(), domain.ObjectRef{
+		Kind: domain.KindDatabase, Database: "billing", Name: "billing",
+	}); err == nil {
+		t.Fatal("switch failure must return an error")
+	}
+	if result.Session.Alive() {
+		t.Fatal("failed switch must leave the session dead")
+	}
+}
+
+func TestSessionSwitchUsesRetainedPromptPassword(t *testing.T) {
+	f := newFixture(t)
+	p := domain.Profile{
+		Label: "prompt-pg", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	f.seed(t, p)
+	result, err := f.svc.Connect(context.Background(), p, Credential{Password: "entered", Provided: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := result.Session.Children(context.Background(), domain.ObjectRef{
+		Kind: domain.KindDatabase, Database: "billing", Name: "billing",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if result.Session.CurrentDatabase() != "billing" {
+		t.Fatalf("database = %q", result.Session.CurrentDatabase())
+	}
+	if f.connector.password != "entered" {
+		t.Fatalf("switch password = %q", f.connector.password)
 	}
 	_ = result.Session.Close()
 }

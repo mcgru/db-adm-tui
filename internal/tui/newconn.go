@@ -257,16 +257,16 @@ func (m Model) finishSave(save bool) (tea.Model, tea.Cmd) {
 	}
 	m = m.openWorkspace(app.ConnectResult{Session: session, Profile: profile})
 	if !save {
-		m.setMessage(levelSuccess, "connected · catalog preview")
-		return m, nil
+		m.setMessage(levelSuccess, "connected")
+		return m.loadRoot()
 	}
 	if err := m.svc.SaveProfile(context.Background(), profile); err != nil {
 		m.setMessage(levelError, "Could not save "+oneLine(profile.Label)+". The connection is still open.")
-		return m, nil
+		return m.loadRoot()
 	}
 	m.reloadProfiles(context.Background(), profile.Key())
 	m.setMessage(levelSuccess, "saved "+oneLine(profile.Label))
-	return m, nil
+	return m.loadRoot()
 }
 
 func (m Model) viewNewConn() string {

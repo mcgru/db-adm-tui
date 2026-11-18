@@ -27,11 +27,11 @@ func TestGolden(t *testing.T) {
 	assertGolden(t, "picker.golden", m.View().Content)
 
 	m = selectLabel(t, m, "prod-ro")
-	m = connectSelected(t, m)
+	m = workspaceFrom(t, m)
 	assertGolden(t, "workspace.golden", m.View().Content)
 
-	m, _ = press(t, m, "2")
-	assertGolden(t, "workspace-details.golden", m.View().Content)
+	m, _ = press(t, m, "1")
+	assertGolden(t, "workspace-data.golden", m.View().Content)
 
 	m, _ = press(t, m, "3")
 	assertGolden(t, "workspace-privileges.golden", m.View().Content)
@@ -41,7 +41,7 @@ func TestGolden(t *testing.T) {
 	assertGolden(t, "workspace-query-focus.golden", m.View().Content)
 
 	m = selectLabel(t, e.model(t), "prod-ro")
-	m = connectSelected(t, m)
+	m = workspaceFrom(t, m)
 	m, _ = press(t, m, "tab")
 	assertGolden(t, "workspace-main-focus.golden", m.View().Content)
 }
@@ -114,7 +114,7 @@ func TestGoldenWide(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = next.(Model)
 	m = selectLabel(t, m, "prod-ro")
-	m = connectSelected(t, m)
+	m = workspaceFrom(t, m)
 	assertGolden(t, "workspace-wide.golden", m.View().Content)
 }
 
@@ -274,7 +274,7 @@ func TestChordStubs(t *testing.T) {
 	if m.pendingChord {
 		t.Fatal("chord should resolve")
 	}
-	if m.message != "not available in this story" {
+	if m.message != "exact count lands in the next story" {
 		t.Fatalf("chord message = %q", m.message)
 	}
 
@@ -337,12 +337,12 @@ func TestTabsFocusDisconnect(t *testing.T) {
 	m := workspace(t)
 
 	m, _ = press(t, m, "2")
-	if m.tab != 1 {
-		t.Fatalf("tab = %d, want 1", m.tab)
+	if m.details.tab != 1 {
+		t.Fatalf("tab = %d, want 1", m.details.tab)
 	}
 	m, _ = press(t, m, "]")
-	if m.tab != 2 {
-		t.Fatalf("tab = %d, want 2", m.tab)
+	if m.details.tab != 2 {
+		t.Fatalf("tab = %d, want 2", m.details.tab)
 	}
 	m, _ = press(t, m, "tab")
 	if m.focus != FocusMain {
@@ -388,8 +388,8 @@ func TestTabSelection(t *testing.T) {
 	}
 	for _, tc := range cases {
 		m, _ = press(t, m, tc.key)
-		if m.tab != tc.want {
-			t.Fatalf("after %q tab = %d, want %d", tc.key, m.tab, tc.want)
+		if m.details.tab != tc.want {
+			t.Fatalf("after %q tab = %d, want %d", tc.key, m.details.tab, tc.want)
 		}
 	}
 }
@@ -418,14 +418,14 @@ func TestFocusCycle(t *testing.T) {
 
 func TestTreeNavigationBounds(t *testing.T) {
 	m := workspace(t)
-	if m.treeSel != 2 {
-		t.Fatalf("initial tree selection = %d, want 2", m.treeSel)
+	if m.tree.selected != 2 {
+		t.Fatalf("initial tree selection = %d, want 2", m.tree.selected)
 	}
 
 	m, _ = press(t, m, "tab")
-	before := m.treeSel
+	before := m.tree.selected
 	m, _ = press(t, m, "down")
-	if m.treeSel != before {
+	if m.tree.selected != before {
 		t.Fatal("tree must not move while another pane is focused")
 	}
 
@@ -436,14 +436,14 @@ func TestTreeNavigationBounds(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		m, _ = press(t, m, "down")
 	}
-	if m.treeSel != len(fakeTree)-1 {
-		t.Fatalf("down clamp = %d, want %d", m.treeSel, len(fakeTree)-1)
+	if m.tree.selected != len(m.tree.rows)-1 {
+		t.Fatalf("down clamp = %d, want %d", m.tree.selected, len(m.tree.rows)-1)
 	}
 	for i := 0; i < 20; i++ {
 		m, _ = press(t, m, "up")
 	}
-	if m.treeSel != 0 {
-		t.Fatalf("up clamp = %d, want 0", m.treeSel)
+	if m.tree.selected != 0 {
+		t.Fatalf("up clamp = %d, want 0", m.tree.selected)
 	}
 }
 
@@ -478,8 +478,8 @@ func TestReconnectResetsWorkspaceState(t *testing.T) {
 	}
 
 	m = connectSelected(t, m)
-	if m.tab != 0 || m.treeSel != 2 || m.focus != FocusTree {
-		t.Fatalf("workspace not reset: tab=%d tree=%d focus=%v", m.tab, m.treeSel, m.focus)
+	if m.details.tab != 0 || m.focus != FocusTree || m.tree.selected != 0 {
+		t.Fatalf("workspace not reset: tab=%d tree=%d focus=%v", m.details.tab, m.tree.selected, m.focus)
 	}
 }
 
@@ -495,19 +495,26 @@ func TestRawSelectionAndFocusStyles(t *testing.T) {
 	}
 
 	m = selectLabel(t, m, "prod-ro")
-	m = connectSelected(t, m)
+	m = workspaceFrom(t, m)
 	view := m.View().Content
 	if !strings.Contains(view, m.styles.Focused.Render("┌")) {
 		t.Fatal("focused tree frame lacks the Focused style")
 	}
-	if !strings.Contains(view, m.styles.Focused.Render(" objects 3 · preview ")) {
+	if !strings.Contains(view, m.styles.Focused.Render(fmt.Sprintf(" objects %d ", m.tree.objectCount()))) {
 		t.Fatal("focused tree title lacks the Focused style")
 	}
-	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("1 Data")
+	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("2 Details")
 	if !strings.Contains(view, activeTab) {
 		t.Fatal("active tab lacks bold/underline accent styling")
 	}
-	selectedTree := m.styles.Select.Render(Pad(fakeTree[2].line(), 24))
+	selected := ""
+	for _, row := range m.tree.rows {
+		if row.Key == m.tree.selectedKey() {
+			selected = treeRowText(row)
+			break
+		}
+	}
+	selectedTree := m.styles.Select.Render(Pad(selected, 24))
 	if !strings.Contains(view, selectedTree) {
 		t.Fatal("selected tree row lacks the Select style")
 	}
@@ -817,9 +824,10 @@ func TestNewConnectionPromptThenSave(t *testing.T) {
 	if m.saveProfile.Label != "orders@db1" {
 		t.Fatalf("save label = %q", m.saveProfile.Label)
 	}
-	m, _ = press(t, m, "enter")
-	if m.screen != ScreenWorkspace {
-		t.Fatalf("save did not open workspace: %q", m.message)
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if m.screen != ScreenWorkspace || len(m.tree.roots) == 0 {
+		t.Fatalf("save did not load workspace: %q roots=%v", m.message, m.tree.roots)
 	}
 	lines, err := os.ReadFile(e.store.Path())
 	if err != nil {
@@ -860,9 +868,10 @@ func TestNewConnectionMatchedSourceNeedsNoPrompt(t *testing.T) {
 	if e.connector.password != "pgsecret" {
 		t.Fatalf("source password not used: %q", e.connector.password)
 	}
-	m, _ = press(t, m, "enter")
-	if m.screen != ScreenWorkspace {
-		t.Fatalf("save did not open workspace: %q", m.message)
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if m.screen != ScreenWorkspace || len(m.tree.roots) == 0 {
+		t.Fatalf("save did not load workspace: %q roots=%v", m.message, m.tree.roots)
 	}
 	data, err := os.ReadFile(e.store.Path())
 	if err != nil {
@@ -886,9 +895,10 @@ func TestNewConnectionSkipSave(t *testing.T) {
 	if m.modal != modalSave {
 		t.Fatalf("modal = %v", m.modal)
 	}
-	m, _ = press(t, m, "esc")
-	if m.screen != ScreenWorkspace {
-		t.Fatalf("skip did not open workspace: %q", m.message)
+	m, cmd = press(t, m, "esc")
+	m = settle(t, m, cmd)
+	if m.screen != ScreenWorkspace || len(m.tree.roots) == 0 {
+		t.Fatalf("skip did not load workspace: %q roots=%v", m.message, m.tree.roots)
 	}
 	views, _ := e.svc.Profiles(context.Background())
 	if len(views) != 0 {
@@ -1198,11 +1208,370 @@ func TestSaveFailureKeepsWorkspaceOpen(t *testing.T) {
 	if m.modal != modalSave {
 		t.Fatalf("save prompt missing: %v %q", m.modal, m.newErr)
 	}
-	m, _ = press(t, m, "enter")
-	if m.screen != ScreenWorkspace {
-		t.Fatalf("save failure did not keep the workspace: %q", m.message)
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if m.screen != ScreenWorkspace || len(m.tree.roots) == 0 {
+		t.Fatalf("save failure did not load workspace: %q roots=%v", m.message, m.tree.roots)
 	}
 	if !strings.Contains(m.message, "Could not save") {
 		t.Fatalf("message = %q", m.message)
+	}
+}
+
+func TestTreeAccessMarkers(t *testing.T) {
+	m := workspace(t)
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"customers  ro", "invoices  rw", "audit_log  —", "customer_view  ro"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("marker %q missing:\n%s", want, view)
+		}
+	}
+	for _, row := range m.tree.rows {
+		if row.Info == "" && row.Node.Kind == domain.KindSequence {
+			if strings.Contains(treeRowText(row), "—") {
+				t.Fatalf("sequence carries a marker: %q", treeRowText(row))
+			}
+		}
+	}
+}
+
+func TestSecurityLoadsPrincipals(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindSecurity)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m = selectKind(t, m, domain.KindUsers)
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	foundUser := false
+	for _, row := range m.tree.rows {
+		if row.Info == "" && row.Node.Kind == domain.KindUser && row.Node.Name == "app_ro" {
+			foundUser = true
+		}
+	}
+	if !foundUser {
+		t.Fatalf("user row missing:\n%s", StripANSI(m.View().Content))
+	}
+	m = selectKind(t, m, domain.KindUser)
+	if view := StripANSI(m.View().Content); !strings.Contains(view, "scope") || !strings.Contains(view, "LOGIN") {
+		t.Fatalf("user details missing scope/attributes:\n%s", view)
+	}
+	m = selectKind(t, m, domain.KindRoles)
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	foundRole := false
+	for _, row := range m.tree.rows {
+		if row.Info == "" && row.Node.Kind == domain.KindRole && row.Node.Name == "reporting" {
+			foundRole = true
+		}
+	}
+	if !foundRole {
+		t.Fatalf("role row missing:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestTreeLazyErrorRetries(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.catalog = &fakeCatalog{engine: domain.EnginePostgreSQL, childrenErrAll: true}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindDatabase)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	if !strings.Contains(StripANSI(m.View().Content), "not permitted") {
+		t.Fatalf("permission error missing:\n%s", StripANSI(m.View().Content))
+	}
+	e.connector.catalog.childrenErrAll = false
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if !strings.Contains(StripANSI(m.View().Content), "public") {
+		t.Fatalf("retry did not load children:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestPostgresDatabaseSwitch(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.write(t, ".pgpass", "db1.internal:5432:orders:app_ro:pgsecret\ndb1.internal:5432:billing:app_ro:billingpass\n", 0o600)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m, _ = press(t, m, "down") // billing
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	if got := m.session.CurrentDatabase(); got != "billing" {
+		t.Fatalf("database = %q", got)
+	}
+	if !strings.Contains(StripANSI(m.viewTopStatus(80)), "billing") {
+		t.Fatalf("top status = %q", StripANSI(m.viewTopStatus(80)))
+	}
+	if len(e.connector.conns) != 2 || !e.connector.conns[0].closed {
+		t.Fatalf("expected a switched connection: %+v", e.connector.conns)
+	}
+}
+
+func TestPostgresSwitchFailureReturnsToPicker(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.write(t, ".pgpass", "db1.internal:5432:orders:app_ro:pgsecret\ndb1.internal:5432:billing:app_ro:billingpass\n", 0o600)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	e.connector.err = &domain.Error{Kind: domain.KindAuth, Message: "authentication failed"}
+	m, _ = press(t, m, "down")
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	if m.screen != ScreenPicker {
+		t.Fatalf("screen = %v, want picker", m.screen)
+	}
+	if !strings.Contains(m.message, "authentication failed") {
+		t.Fatalf("message = %q", m.message)
+	}
+	p, ok := m.currentPickerProfile()
+	if !ok || p.Label != "prod-ro" {
+		t.Fatalf("selected picker profile = %+v", p)
+	}
+	if !strings.Contains(m.rowErrors[p.Key()], "authentication failed") {
+		t.Fatalf("row error = %q", m.rowErrors[p.Key()])
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "authentication failed") {
+		t.Fatal("picker row error not rendered")
+	}
+}
+
+func TestMySQLAndMongoTrees(t *testing.T) {
+	for _, tc := range []struct {
+		label  string
+		engine domain.Engine
+	}{
+		{"billing", domain.EngineMySQL},
+		{"analytics", domain.EngineMongoDB},
+	} {
+		e := newTestEnv(t)
+		seedStandard(t, e)
+		m := selectLabel(t, e.model(t), tc.label)
+		m = connectSelected(t, m)
+		m = selectKind(t, m, domain.KindDatabase)
+		m, cmd := press(t, m, "right")
+		m = settle(t, m, cmd)
+		view := StripANSI(m.View().Content)
+		for _, want := range []string{"customers", "invoices", "customer_view"} {
+			if !strings.Contains(view, want) {
+				t.Fatalf("%s tree missing %q:\n%s", tc.label, want, view)
+			}
+		}
+		if strings.Contains(view, "public") {
+			t.Fatalf("%s tree must not show a schema:\n%s", tc.label, view)
+		}
+	}
+}
+
+func TestEmptyDatabaseState(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.catalog = &fakeCatalog{engine: domain.EnginePostgreSQL, empty: true}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindDatabase)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	if !strings.Contains(StripANSI(m.View().Content), "no objects visible") {
+		t.Fatalf("empty state missing:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestContextTabsAndPlaceholders(t *testing.T) {
+	m := workspace(t)
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "1 Data · 2 Details · 3 Privileges") {
+		t.Fatalf("table tabs missing:\n%s", view)
+	}
+	m, _ = press(t, m, "1")
+	if !strings.Contains(StripANSI(m.View().Content), "data browsing lands in story 4") {
+		t.Fatal("data placeholder missing")
+	}
+	m, _ = press(t, m, "3")
+	if !strings.Contains(StripANSI(m.View().Content), "privilege inspection lands in story 7") {
+		t.Fatal("privileges placeholder missing")
+	}
+	m = selectKind(t, m, domain.KindView)
+	if !strings.Contains(StripANSI(m.View().Content), "detail view not available in v1") {
+		t.Fatal("view placeholder missing")
+	}
+	if strings.Contains(StripANSI(m.View().Content), "1 Data") {
+		t.Fatal("view must not show a Data tab")
+	}
+	m = selectKind(t, m, domain.KindSequence)
+	if !strings.Contains(StripANSI(m.View().Content), "detail view not available in v1") {
+		t.Fatal("sequence placeholder missing")
+	}
+}
+
+func TestSecurityPermissionError(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.catalog = &fakeCatalog{
+		engine:       domain.EnginePostgreSQL,
+		principalErr: domain.NewError(domain.KindPermission, "catalog", "permission denied"),
+	}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindSecurity)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m = selectKind(t, m, domain.KindUsers)
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	if !strings.Contains(StripANSI(m.View().Content), "not permitted") {
+		t.Fatalf("permission state missing:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestLazyChildrenAreCached(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	catalog := &fakeCatalog{engine: domain.EnginePostgreSQL}
+	e.connector.catalog = catalog
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindDatabase)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	if catalog.childrenCalls != 1 {
+		t.Fatalf("children calls = %d", catalog.childrenCalls)
+	}
+	m, _ = press(t, m, "left")
+	m, _ = press(t, m, "right")
+	if catalog.childrenCalls != 1 {
+		t.Fatalf("cached children reloaded: %d calls", catalog.childrenCalls)
+	}
+}
+
+func TestTreeHomeEndAndPageMovement(t *testing.T) {
+	m := workspace(t)
+	m, _ = press(t, m, "home")
+	if p, _ := m.tree.selectedNode(); p.Name != "orders" {
+		t.Fatalf("home selected %q", p.Name)
+	}
+	m, _ = press(t, m, "end")
+	if p, _ := m.tree.selectedNode(); p.Kind != domain.KindSecurity {
+		t.Fatalf("end selected %q", p.Name)
+	}
+	tree := newTree()
+	tree.rows = []treeRow{
+		{Key: "a"},
+		{Key: "info", Info: "loading…"},
+		{Key: "b"},
+	}
+	tree.selected = 0
+	tree.move(1)
+	if tree.selected != 2 {
+		t.Fatalf("move over info selected %d", tree.selected)
+	}
+	tree.move(-1)
+	if tree.selected != 0 {
+		t.Fatalf("reverse move selected %d", tree.selected)
+	}
+}
+
+func TestTreeRootErrorAndRetry(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	catalog := &fakeCatalog{engine: domain.EnginePostgreSQL, databasesErr: domain.NewError(domain.KindPermission, "catalog", "permission denied")}
+	e.connector.catalog = catalog
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	if m.tree.rootErr == "" {
+		t.Fatal("root error not recorded")
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "not permitted") {
+		t.Fatalf("root error missing:\n%s", StripANSI(m.View().Content))
+	}
+	catalog.databasesErr = nil
+	m, cmd := press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if m.tree.rootErr != "" || len(m.tree.roots) == 0 {
+		t.Fatalf("retry did not load roots: err=%q roots=%v", m.tree.rootErr, m.tree.roots)
+	}
+}
+
+func TestTreeParentErrorIsAttached(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.catalog = &fakeCatalog{engine: domain.EnginePostgreSQL, childrenErrAll: true}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindDatabase)
+	key := m.tree.selectedKey()
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	node, ok := m.tree.node(key)
+	if !ok || node.Err == "" {
+		t.Fatalf("parent error not attached: %+v", node)
+	}
+	if !strings.Contains(StripANSI(m.viewTree(21, 28)), "error not permitted") {
+		t.Fatalf("tree error row missing:\n%s", StripANSI(m.viewTree(21, 28)))
+	}
+}
+
+func TestUnknownAccessOmitsMarker(t *testing.T) {
+	node := domain.Node{Kind: domain.KindTable, Name: "customers", Access: domain.AccessUnknown}
+	line := treeRowText(treeRow{Node: node})
+	if strings.Contains(line, "—") || strings.Contains(line, "ro") || strings.Contains(line, "rw") {
+		t.Fatalf("unknown access rendered a marker: %q", line)
+	}
+}
+
+func TestRightOnLeafKeepsTreeFocus(t *testing.T) {
+	m := workspace(t)
+	if m.focus != FocusTree {
+		t.Fatalf("focus = %v", m.focus)
+	}
+	m, _ = press(t, m, "right")
+	if m.focus != FocusTree {
+		t.Fatalf("right on leaf moved focus to %v", m.focus)
+	}
+}
+
+func TestStaleTreeRootAfterDisconnect(t *testing.T) {
+	m := workspace(t)
+	oldGen := m.treeGen
+	m, _ = press(t, m, "ctrl+d")
+	if m.screen != ScreenPicker {
+		t.Fatal("not disconnected")
+	}
+	next, _ := m.Update(treeRootMsg{gen: oldGen, nodes: []domain.Node{{Name: "late", Kind: domain.KindDatabase}}})
+	m = next.(Model)
+	if len(m.tree.roots) != 0 || strings.Contains(m.message, "connected ·") {
+		t.Fatalf("late root mutated picker: roots=%v message=%q", m.tree.roots, m.message)
+	}
+}
+
+func TestDetailsScrollAndPosition(t *testing.T) {
+	m := workspace(t)
+	m.details.node = domain.Node{Kind: domain.KindUser, Name: "role", Scope: "cluster"}
+	for i := 0; i < 30; i++ {
+		m.details.node.Attributes = append(m.details.node.Attributes, "ATTR")
+	}
+	m.details.selectNode(m.details.node)
+	m.scrollDetails(10)
+	if m.details.offset == 0 {
+		t.Fatal("details did not scroll")
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "of") {
+		t.Fatal("position indicator missing")
+	}
+}
+
+func TestReconnectResetsTableTabAndSelection(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = workspaceFrom(t, m)
+	m, _ = press(t, m, "3")
+	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "ctrl+d")
+	m = connectSelected(t, m)
+	if m.details.tab != 0 || m.tree.selected != 0 || m.screen != ScreenWorkspace {
+		t.Fatalf("workspace not reset: tab=%d tree=%d screen=%v", m.details.tab, m.tree.selected, m.screen)
 	}
 }

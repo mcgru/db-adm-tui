@@ -1,39 +1,12 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/tui/layout"
 )
-
-type treeRow struct {
-	prefix   string
-	text     string
-	marker   string
-	indent   int
-	security bool
-}
-
-var fakeTree = []treeRow{
-	{prefix: "▾", text: "orders"},
-	{prefix: "▾", text: "public", indent: 1},
-	{prefix: "·", text: "customers", marker: "ro", indent: 2},
-	{prefix: "·", text: "invoices", marker: "rw", indent: 2},
-	{prefix: "·", text: "audit_log", marker: "—", indent: 2},
-	{prefix: "▸", text: "billing"},
-	{prefix: "▾", text: "Security", security: true},
-	{prefix: "·", text: "users", indent: 1, security: true},
-	{prefix: "·", text: "roles", indent: 1, security: true},
-}
-
-func (r treeRow) line() string {
-	line := strings.Repeat("  ", r.indent) + r.prefix + " " + r.text
-	if r.marker != "" {
-		line += "  " + r.marker
-	}
-	return line
-}
 
 func (m Model) viewWorkspace(regions layout.Regions) string {
 	top := m.viewTopStatus(regions.Width)
@@ -63,68 +36,113 @@ func (m Model) viewTopStatus(width int) string {
 
 func (m Model) viewTree(height, width int) string {
 	inner := width - 4
-	lines := make([]string, 0, len(fakeTree))
-	for i, row := range fakeTree {
-		line := row.line()
-		switch {
-		case i == m.treeSel:
-			lines = append(lines, m.styles.Select.Render(Pad(line, inner)))
-		case row.security:
-			lines = append(lines, m.styles.Info.Render(line))
-		default:
-			lines = append(lines, m.styles.Text.Render(line))
+	visible := m.tree.visibleRows(height - 2)
+	var lines []string
+	switch {
+	case m.tree.loadingRoot:
+		lines = append(lines, m.styles.Muted.Render("loading…"))
+	case m.tree.rootErr != "":
+		lines = append(lines, m.styles.Error.Render(Truncate("error "+m.tree.rootErr, inner)))
+	case len(m.tree.rows) == 0:
+		lines = append(lines, m.styles.Muted.Render("no databases visible"))
+	default:
+		selectedKey := m.tree.selectedKey()
+		for _, row := range visible {
+			line := treeRowText(row)
+			switch {
+			case row.Info != "" && row.Error:
+				lines = append(lines, m.styles.Error.Render(Truncate(line, inner)))
+			case row.Info != "":
+				lines = append(lines, m.styles.Muted.Render(Truncate(line, inner)))
+			case row.Key == selectedKey:
+				lines = append(lines, m.styles.Select.Render(Pad(line, inner)))
+			case row.Node.Kind == domain.KindSecurity || row.Node.Kind == domain.KindUsers ||
+				row.Node.Kind == domain.KindRoles || row.Node.Kind == domain.KindUser ||
+				row.Node.Kind == domain.KindRole:
+				lines = append(lines, m.styles.Info.Render(Truncate(line, inner)))
+			default:
+				lines = append(lines, m.styles.Text.Render(Truncate(line, inner)))
+			}
 		}
 	}
-	return Box("objects 3 · preview", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusTree)
+	title := "objects " + strconv.Itoa(m.tree.objectCount())
+	return Box(title, strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusTree)
 }
 
 func (m Model) viewMain(height, width int) string {
-	tabs := []string{"1 Data", "2 Details", "3 Privileges"}
-	parts := make([]string, 0, len(tabs))
-	for i, label := range tabs {
-		if i == m.tab {
-			parts = append(parts, m.styles.Accent.Bold(true).Underline(true).Render(label))
+	if !m.details.has || len(m.details.tabs) == 0 {
+		body := m.styles.Muted.Render("Select a table or collection to browse.")
+		return Box("", body, width, height, m.styles, m.focus == FocusMain)
+	}
+	parts := make([]string, 0, len(m.details.tabs))
+	for i, label := range m.details.tabs {
+		numbered := strconv.Itoa(i+1) + " " + label
+		if i == m.details.tab {
+			parts = append(parts, m.styles.Accent.Bold(true).Underline(true).Render(numbered))
 		} else {
-			parts = append(parts, m.styles.Label.Render(label))
+			parts = append(parts, m.styles.Label.Render(numbered))
 		}
 	}
 	lines := []string{strings.Join(parts, m.styles.Muted.Render(" · ")), ""}
+	innerHeight := height - 2
+	bodyHeight := innerHeight - 2
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
 
-	switch m.tab {
-	case 1:
-		lines = append(lines,
-			m.styles.Header.Render("estimated   12,480 rows"),
-			m.styles.Text.Render("size        2.1 GB"),
-			m.styles.Header.Render("indexes"),
-			m.styles.Text.Render("  customers_pkey"),
-			m.styles.Header.Render("structure"),
-			m.styles.Text.Render("  id          bigint"),
-			m.styles.Text.Render("  email       text"),
-			m.styles.Text.Render("  status      text"),
-		)
-	case 2:
-		lines = append(lines,
-			m.styles.Header.Render("grants"),
-			m.styles.Text.Render("  CONNECT   orders"),
-			m.styles.Text.Render("  USAGE     public"),
-			m.styles.Text.Render("  SELECT    customers"),
-			m.styles.Header.Render("memberships"),
-			m.styles.Text.Render("  reporting (via role)"),
-			m.styles.Header.Render("effective"),
-			m.styles.Muted.Render("  native terms only"),
-		)
+	switch m.details.currentTab() {
+	case "Data":
+		lines = append(lines, m.styles.Muted.Render("data browsing lands in story 4"))
+	case "Privileges":
+		lines = append(lines, m.styles.Muted.Render("privilege inspection lands in story 7"))
 	default:
-		lines = append(lines,
-			m.styles.Header.Render("id    email                    status"),
-			m.styles.Text.Render("1041  anna@example.com         active"),
-			m.styles.Select.Render(Pad("1042  ali@example.com          active", width-4)),
-			m.styles.Text.Render("1043  mark@example.com         blocked"),
-			m.styles.Text.Render("1044  nina@example.com         active"),
-			m.styles.Text.Render("1045  omar@example.com         active"),
-			m.styles.Text.Render("1046  sara@example.com         blocked"),
-		)
+		detail := detailLines(m.details.node, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()))
+		offset := m.details.offset
+		if offset > len(detail)-bodyHeight {
+			offset = len(detail) - bodyHeight
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		end := offset + bodyHeight
+		if end > len(detail) {
+			end = len(detail)
+		}
+		hasPosition := len(detail) > bodyHeight
+		renderHeight := bodyHeight
+		if hasPosition {
+			renderHeight--
+			if renderHeight < 1 {
+				renderHeight = 1
+			}
+			end = offset + renderHeight
+			if end > len(detail) {
+				end = len(detail)
+			}
+		}
+		for _, line := range detail[offset:end] {
+			lines = append(lines, m.renderDetailLine(line))
+		}
+		if hasPosition {
+			lines = append(lines, m.styles.Muted.Render(detailPosition(offset, end-offset, len(detail))))
+		}
 	}
 	return Box("", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusMain)
+}
+
+func (m Model) renderDetailLine(line detailLine) string {
+	switch {
+	case line.Header:
+		return m.styles.Header.Render(line.Value)
+	case line.Label == "":
+		value := oneLine(line.Value)
+		if line.Mutable {
+			return m.styles.Muted.Render(value)
+		}
+		return m.styles.Text.Render(value)
+	default:
+		return m.styles.Muted.Render(field(line.Label, 12)) + " " + m.styles.Text.Render(oneLine(line.Value))
+	}
 }
 
 func (m Model) viewQuery(width int) string {
@@ -146,8 +164,12 @@ func (m Model) viewQuery(width int) string {
 }
 
 func (m Model) viewBottom(width int) string {
-	left := "connected · catalog preview"
+	left := "connected · " + oneLine(m.currentDatabase())
 	style := m.styles.Muted
+	if m.tree.loadingRoot {
+		left = "loading catalog…"
+		style = m.styles.Info
+	}
 	if m.message != "" {
 		left = m.message
 		style = m.messageStyle()
@@ -157,8 +179,13 @@ func (m Model) viewBottom(width int) string {
 		style = m.styles.Accent
 	}
 	right := "Tab focus"
-	if m.focus == FocusQuery {
+	switch m.focus {
+	case FocusTree:
+		right = "Enter open · Right expand"
+	case FocusMain:
+		right = "1/2/3 tab · Up/Down scroll"
+	case FocusQuery:
 		right = "Tab focus · Ctrl+X chord"
 	}
-	return ComposeLR(style.Render(Truncate(oneLine(left), width-20)), m.styles.Muted.Render(right), width)
+	return ComposeLR(style.Render(Truncate(oneLine(left), width-24)), m.styles.Muted.Render(right), width)
 }

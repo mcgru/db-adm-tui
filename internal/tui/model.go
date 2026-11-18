@@ -75,6 +75,26 @@ type connectDoneMsg struct {
 	err     error
 }
 
+type treeRootMsg struct {
+	gen   uint64
+	nodes []domain.Node
+	err   error
+}
+
+type treeChildrenMsg struct {
+	gen   uint64
+	key   string
+	nodes []domain.Node
+	err   error
+}
+
+type treePrincipalsMsg struct {
+	gen        uint64
+	key        string
+	principals []domain.Principal
+	err        error
+}
+
 // Model is the root Bubble Tea model. It owns view state only; the app service
 // owns storage, credential resolution, and connections.
 type Model struct {
@@ -94,10 +114,13 @@ type Model struct {
 	pendingChord bool
 	chordSeq     int
 
-	active  domain.Profile
-	session *app.Session
-	tab     int
-	treeSel int
+	active        domain.Profile
+	session       *app.Session
+	sessionCtx    context.Context
+	sessionCancel context.CancelFunc
+	tree          treeState
+	details       detailsState
+	treeGen       uint64
 
 	connecting      bool
 	connectingKey   string
@@ -143,7 +166,7 @@ func New(svc *app.Service) Model {
 		svc:       svc,
 		rowErrors: map[string]string{},
 		importSel: map[string]bool{},
-		treeSel:   2,
+		tree:      newTree(),
 		newFocus:  fieldURI,
 	}
 	m.newURI = newInput("postgres://user@host:5432/db", false)
@@ -203,6 +226,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case connectDoneMsg:
 		return m.handleConnectDone(msg)
+	case treeRootMsg:
+		return m.handleTreeRoot(msg)
+	case treeChildrenMsg:
+		return m.handleTreeChildren(msg)
+	case treePrincipalsMsg:
+		return m.handleTreePrincipals(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -278,6 +307,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		if m.screen == ScreenPicker {
 			return m.enterPicker()
 		}
+		if m.screen == ScreenWorkspace {
+			return m.openSelected()
+		}
 	case keymap.New:
 		if m.screen == ScreenPicker && !m.connecting {
 			m.openNewModal()
@@ -300,45 +332,79 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		switch {
 		case m.screen == ScreenPicker:
 			m.pickerMove(-1)
-		case m.focus == FocusTree && m.treeSel > 0:
-			m.treeSel--
+		case m.focus == FocusTree:
+			m.tree.move(-1)
+			m.syncDetails()
+		case m.focus == FocusMain:
+			m.scrollDetails(-1)
 		}
 	case keymap.Down:
 		switch {
 		case m.screen == ScreenPicker:
 			m.pickerMove(1)
-		case m.focus == FocusTree && m.treeSel < len(fakeTree)-1:
-			m.treeSel++
+		case m.focus == FocusTree:
+			m.tree.move(1)
+			m.syncDetails()
+		case m.focus == FocusMain:
+			m.scrollDetails(1)
 		}
 	case keymap.PageUp:
-		if m.screen == ScreenPicker {
+		switch {
+		case m.screen == ScreenPicker:
 			m.pickerMove(-8)
+		case m.focus == FocusTree:
+			m.tree.move(-m.treePage())
+			m.syncDetails()
+		case m.focus == FocusMain:
+			m.scrollDetails(-m.detailsPage())
 		}
 	case keymap.PageDown:
-		if m.screen == ScreenPicker {
+		switch {
+		case m.screen == ScreenPicker:
 			m.pickerMove(8)
+		case m.focus == FocusTree:
+			m.tree.move(m.treePage())
+			m.syncDetails()
+		case m.focus == FocusMain:
+			m.scrollDetails(m.detailsPage())
 		}
-	case keymap.Left, keymap.Right:
-		// Tree expansion lands with the catalog story.
+	case keymap.Home:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			m.tree.selectFirst()
+			m.syncDetails()
+		}
+	case keymap.End:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			m.tree.selectLast()
+			m.syncDetails()
+		}
+	case keymap.Left:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			m.collapseSelected()
+		}
+	case keymap.Right:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.expandSelected()
+		}
 	case keymap.Tab1:
 		if m.screen == ScreenWorkspace {
-			m.tab = 0
+			m.selectTab(0)
 		}
 	case keymap.Tab2:
 		if m.screen == ScreenWorkspace {
-			m.tab = 1
+			m.selectTab(1)
 		}
 	case keymap.Tab3:
 		if m.screen == ScreenWorkspace {
-			m.tab = 2
+			m.selectTab(2)
 		}
 	case keymap.PrevTab:
 		if m.screen == ScreenWorkspace {
-			m.tab = (m.tab + 2) % 3
+			m.cycleTab(-1)
 		}
 	case keymap.NextTab:
 		if m.screen == ScreenWorkspace {
-			m.tab = (m.tab + 1) % 3
+			m.cycleTab(1)
 		}
 	case keymap.Disconnect:
 		if m.screen == ScreenWorkspace {
@@ -354,10 +420,15 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.setMessage(levelInfo, "more — story 4")
 	case keymap.Execute:
 		m.setMessage(levelInfo, "execute — story 5")
-	case keymap.ExactCount, keymap.ToggleMode, keymap.Edit, keymap.CaseMode,
+	case keymap.Space:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.openSelected()
+		}
+	case keymap.ExactCount:
+		m.setMessage(levelInfo, "exact count lands in the next story")
+	case keymap.ToggleMode, keymap.Edit, keymap.CaseMode,
 		keymap.Completion, keymap.ContextHelp, keymap.ServerFilter, keymap.FetchAll,
-		keymap.Space, keymap.NextMatch, keymap.Home, keymap.End,
-		keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
+		keymap.NextMatch, keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
 		keymap.ResizeQueryUp, keymap.ResizeQueryDown:
 		m.setMessage(levelInfo, "not available in this story")
 	}
@@ -449,7 +520,8 @@ func (m Model) handleConnectDone(msg connectDoneMsg) (tea.Model, tea.Cmd) {
 			m.setMessage(levelError, oneLine(msg.err.Error()))
 			return m, nil
 		}
-		return m.openWorkspace(msg.result), nil
+		next := m.openWorkspace(msg.result)
+		return next.loadRoot()
 	case originPassword:
 		m.passwordBusy = false
 		if msg.err != nil {
@@ -459,7 +531,8 @@ func (m Model) handleConnectDone(msg connectDoneMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.closePasswordModal()
-		return m.openWorkspace(msg.result), nil
+		next := m.openWorkspace(msg.result)
+		return next.loadRoot()
 	case originNew:
 		m.newBusy = false
 		if msg.err != nil {
@@ -499,13 +572,17 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	if m.session != nil && m.session != result.Session {
 		_ = m.session.Close()
 	}
+	if m.sessionCancel != nil {
+		m.sessionCancel()
+	}
 	m.session = result.Session
+	m.sessionCtx, m.sessionCancel = context.WithCancel(context.Background())
 	m.active = result.Profile
 	m.screen = ScreenWorkspace
 	m.focus = FocusTree
-	m.tab = 0
-	m.treeSel = 2
-	m.message = "connected · catalog preview"
+	m.tree.reset()
+	m.details.clear()
+	m.message = "connected"
 	m.messageLevel = levelSuccess
 	if result.Warning != "" {
 		m.setMessage(levelWarning, oneLine(result.Warning))
@@ -515,15 +592,20 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 }
 
 func (m *Model) disconnect() {
+	if m.sessionCancel != nil {
+		m.sessionCancel()
+		m.sessionCancel = nil
+	}
 	if m.session != nil {
 		_ = m.session.Close()
 		m.session = nil
 	}
 	key := m.active.Key()
+	m.treeGen++
 	m.screen = ScreenPicker
 	m.focus = FocusTree
-	m.tab = 0
-	m.treeSel = 2
+	m.tree.reset()
+	m.details.clear()
 	m.reloadProfiles(context.Background(), key)
 	m.setMessage(levelInfo, "disconnected")
 }
@@ -699,16 +781,6 @@ func (m Model) viewModal() string {
 		return m.viewSave()
 	}
 	return ""
-}
-
-func (m Model) profileForStatus() domain.Profile {
-	if m.active.Engine.Valid() {
-		return m.active
-	}
-	if len(m.profiles) > 0 {
-		return m.profiles[0].Profile
-	}
-	return domain.Profile{Label: "—", Engine: domain.EnginePostgreSQL, User: "—"}
 }
 
 // dismissModal closes the current modal without applying it. A pending

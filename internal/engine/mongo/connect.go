@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -29,7 +30,7 @@ func (connector) Close() error { return nil }
 
 // Connect opens one client, pings it with a 10 second budget, and disconnects
 // on failure. The password never appears in an error.
-func (connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.Connection, error) {
+func (connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
 	uri := buildURI(p, password)
 	opts := options.Client().
 		ApplyURI(uri).
@@ -39,18 +40,22 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 	defer cancel()
 	client, err := mongo.Connect(opts)
 	if err != nil {
-		return nil, safeError("connect", password, err)
+		return ports.SessionBundle{}, safeError("connect", password, err)
 	}
 	if err := client.Ping(pingCtx, nil); err != nil {
 		_ = client.Disconnect(context.Background())
-		return nil, safeError("ping", password, err)
+		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
-	return &connection{client: client, password: password}, nil
+	live := &connection{client: client, password: password}
+	return ports.SessionBundle{Session: live, Catalog: live}, nil
 }
 
 type connection struct {
 	client   *mongo.Client
 	password string
+
+	authMu sync.Mutex
+	auth   mongoAuth
 }
 
 func (c *connection) Ping(ctx context.Context) error {

@@ -19,7 +19,7 @@ type Connector struct{}
 func NewConnector() ports.Connector { return Connector{} }
 
 // Connect dispatches to the engine adapter.
-func (Connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.Connection, error) {
+func (Connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
 	switch p.Engine {
 	case domain.EnginePostgreSQL:
 		return postgres.NewConnector().Connect(ctx, p, password)
@@ -28,7 +28,7 @@ func (Connector) Connect(ctx context.Context, p domain.Profile, password string)
 	case domain.EngineMongoDB:
 		return mongo.NewConnector().Connect(ctx, p, password)
 	default:
-		return nil, domain.NewError(domain.KindConfig, "connect", "the engine is not supported")
+		return ports.SessionBundle{}, domain.NewError(domain.KindConfig, "connect", "the engine is not supported")
 	}
 }
 

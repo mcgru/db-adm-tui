@@ -25,3 +25,11 @@
 - source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/2-connection-setup-profiles-import-new-connection.md`
   summary: The workspace still shows the story-1 preview tree, grid, details, and privileges; only the top status, database, user, and SQL/MQL prompt now come from the active profile.
   evidence: The story explicitly defers catalogs and data views to story 3; the tree title and status note `catalog preview`.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/3-common-tree-security-object-details.md`
+  summary: Object statistics, indexes, sampled MongoDB structure, and exact count are deferred to a follow-up CAP-3 story after the common tree and Security ship.
+  evidence: The original story combined CAP-2 and CAP-3, making a spec far above the 900–1600 token target. Tree navigation and Security are independently useful and must land first; the follow-up story will add StatsReader, engine statistics queries, exact count/cancel, and the full Details tab.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/3-common-tree-security-object-details.md`
+  summary: Live PostgreSQL, MySQL/MariaDB, and MongoDB catalog queries were not run against real engines; only query builders, mapping helpers, fakes, and goldens were exercised.
+  evidence: No database was available in the environment. `make test` covers the TUI tree, app session switching, catalog interfaces, and pure MySQL/Mongo helpers; a follow-up integration run should exercise real databases, including MySQL role-derived markers and MongoDB custom-role privileges.

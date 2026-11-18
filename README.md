@@ -3,11 +3,11 @@
 Terminal database administration for PostgreSQL, MongoDB, and MySQL/MariaDB,
 built to run on the database host inside a closed environment.
 
-The repository now implements the connection layer: a file-backed profile
-store, `~/.pgpass` and `~/.mongo.*` import, a new no-password URI form,
-connect-time password resolution, and real open/ping/close against the
-selected engine. Catalogs, data views, query execution, and privileges remain
-preview content until stories 3–7.
+The repository now implements the connection layer and the real catalog tree:
+profiles and import, connect-time password resolution, real open/ping/close,
+lazy database/schema/object navigation, a Security node with users and roles,
+and native access markers. Object statistics, data browsing, query execution,
+and privilege inspection land in later stories.
 
 ## Requirements
 
@@ -28,15 +28,16 @@ The tool starts on the profile picker.
 
 | Key | Action |
 |---|---|
-| `Enter` | Connect to the selected profile, submit a form, or import selected rows |
-| `Up` / `Down` | Move the picker, import list, or tree cursor |
-| `PgUp` / `PgDn` | Scroll the picker or import list |
-| `Home` / `End` | Jump to the first or last import row |
+| `Enter` | Connect, submit a form, import selected rows, expand a tree node, or open details |
+| `Up` / `Down` | Move the picker, import list, tree cursor, or details scroll |
+| `PgUp` / `PgDn` | Scroll the picker/import list, tree, or details |
+| `Left` / `Right` | Collapse / expand the selected tree node |
+| `Home` / `End` | Jump to the first or last tree or import row |
 | `n` | New connection (`new connection` modal) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
-| `Space` | Select an import row |
+| `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
-| `1` / `2` / `3`, `[` / `]` | Select the preview Data, Details, or Privileges tab |
+| `1` / `2` / `3`, `[` / `]` | Select a context tab by position; tabs differ by object |
 | `Esc` | Cancel an attempt or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
@@ -47,6 +48,35 @@ The tool starts on the profile picker.
 
 Latin and Cyrillic physical key positions resolve to the same actions
 (`n`/`т`, `i`/`ш`, `q`/`й`, `m`/`ь`, and the chord finals).
+
+## Tree and Security
+
+After connecting, the workspace shows the databases visible to the connected
+user plus a `Security` node. PostgreSQL databases expand into schemas and then
+tables, views, and sequences; MySQL/MariaDB databases expand directly into
+tables, views, and sequences; MongoDB databases expand into collections and
+views. Children load lazily on expand; a failed load stays attached to the
+parent and `Enter` retries it.
+
+`Security` expands into `users` and `roles` groups. PostgreSQL shows cluster
+roles with attributes, MySQL/MariaDB shows `user@host` accounts and roles, and
+MongoDB shows database-scoped principals. Missing privileges render
+`not permitted`.
+
+Tables, collections, and views carry a native access marker: `rw` for row-level
+write access, `ro` for read without write, and `—` for no read. Sequences carry
+no marker. An unavailable native check omits the marker instead of inventing
+one. Markers cover table/schema/global grants in v1; column-only grants are not
+inspected. The tree title counts loaded object rows across expanded nodes.
+
+PostgreSQL exposes only the current database on its one live connection.
+Expanding another database reconnects the same profile to it; a failed switch
+returns to the picker with the profile row error. MySQL/MariaDB and MongoDB see
+every database on one connection.
+
+Selecting a table or collection opens context tabs. Details currently shows
+basic identity; statistics and exact count are the next story. Data browsing
+lands in story 4 and privilege inspection in story 7.
 
 ## Profiles
 
@@ -131,6 +161,9 @@ non-secret fields and any matched source pointer, never the password.
   `Password for <profile>` modal. `Enter` connects and `Esc` returns to the
   picker. The value is never stored.
 - The source files are only read; the tool never writes them.
+- The resolved password is retained in memory for the life of the session so a
+  PostgreSQL database switch can reconnect; it is cleared on disconnect or
+  process exit and is never written to disk.
 - Errors name the profile and source file but never the secret.
 - Source-derived text, labels, filenames, and errors are sanitized of ANSI and
   control sequences before rendering.
@@ -151,4 +184,4 @@ go test ./internal/tui -run TestGolden -update
 ```
 
 The story spec lives at
-`_bmad-output/specs/spec-db-adm-tui/stories/2-connection-setup-profiles-import-new-connection.md`.
+`_bmad-output/specs/spec-db-adm-tui/stories/3-common-tree-security-object-details.md`.

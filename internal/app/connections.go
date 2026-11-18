@@ -28,29 +28,6 @@ type Credential struct {
 	Provided bool
 }
 
-// Session is an opaque live connection handle owned by the TUI. It carries no
-// secret after open.
-type Session struct {
-	conn    ports.Connection
-	Profile domain.Profile
-}
-
-// Close closes the underlying connection.
-func (s *Session) Close() error {
-	if s == nil || s.conn == nil {
-		return nil
-	}
-	return s.conn.Close()
-}
-
-// Ping checks that the session is still alive.
-func (s *Session) Ping(ctx context.Context) error {
-	if s == nil || s.conn == nil {
-		return domain.NewError(domain.KindConfig, "ping", "no active connection")
-	}
-	return s.conn.Ping(ctx)
-}
-
 // ConnectResult is a successful connection.
 type ConnectResult struct {
 	Session *Session
@@ -390,7 +367,7 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, ConnectTimeout)
 	defer cancel()
-	conn, err := s.connector.Connect(timeoutCtx, p, secret)
+	bundle, err := s.connector.Connect(timeoutCtx, p, secret)
 	if err != nil {
 		if ctx.Err() == context.Canceled || timeoutCtx.Err() == context.Canceled {
 			return ConnectResult{Profile: p}, connectionError(p, &domain.Error{
@@ -405,7 +382,9 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 		return ConnectResult{Profile: p}, connectionError(p, err, secret)
 	}
 	if ctx.Err() != nil {
-		_ = conn.Close()
+		if bundle.Session != nil {
+			_ = bundle.Session.Close()
+		}
 		return ConnectResult{Profile: p}, connectionError(p, &domain.Error{
 			Kind: domain.KindCancelled, Op: "connect", Message: "connection cancelled",
 		}, secret)
@@ -415,7 +394,7 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 	resultProfile := p
 	resultProfile.LastUsed = &now
 	result := ConnectResult{
-		Session: &Session{conn: conn, Profile: resultProfile},
+		Session: newSession(bundle, resultProfile, Credential{Password: secret, Provided: true}, s.connector, s.resolver),
 		Profile: resultProfile,
 	}
 	if err := s.touchLastUsed(ctx, p, now); err != nil {

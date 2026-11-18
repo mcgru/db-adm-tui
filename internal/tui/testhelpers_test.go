@@ -52,18 +52,143 @@ type fakeConnector struct {
 	err      error
 	password string
 	conns    []*fakeConn
+	catalog  *fakeCatalog
 }
 
-func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.Connection, error) {
+func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
 	f.password = password
 	if f.err != nil {
-		return nil, f.err
+		return ports.SessionBundle{}, f.err
 	}
 	conn := &fakeConn{}
 	f.conns = append(f.conns, conn)
-	return conn, nil
+	catalog := f.catalog
+	if catalog == nil {
+		catalog = &fakeCatalog{engine: p.Engine}
+	}
+	return ports.SessionBundle{Session: conn, Catalog: catalog}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
+
+type fakeCatalog struct {
+	engine         domain.Engine
+	childrenErr    map[string]error
+	databasesErr   error
+	childrenErrAll bool
+	childrenCalls  int
+	principalErr   error
+	empty          bool
+}
+
+func (c *fakeCatalog) Databases(ctx context.Context) ([]domain.Node, error) {
+	if c.databasesErr != nil {
+		return nil, c.databasesErr
+	}
+	name := "orders"
+	switch c.engine {
+	case domain.EngineMySQL:
+		name = "billing"
+	case domain.EngineMongoDB:
+		name = "analytics"
+	}
+	nodes := []domain.Node{databaseNode(name, c.engine)}
+	if c.engine == domain.EnginePostgreSQL {
+		nodes = append(nodes, databaseNode("billing", c.engine))
+	}
+	return nodes, nil
+}
+
+func databaseNode(name string, engine domain.Engine) domain.Node {
+	return domain.Node{
+		Ref:        domain.ObjectRef{Engine: engine, Kind: domain.KindDatabase, Database: name, Name: name},
+		Name:       name,
+		Kind:       domain.KindDatabase,
+		Expandable: true,
+	}
+}
+
+func (c *fakeCatalog) Children(ctx context.Context, ref domain.ObjectRef) ([]domain.Node, error) {
+	c.childrenCalls++
+	if c.childrenErrAll {
+		return nil, domain.NewError(domain.KindPermission, "catalog", "permission denied")
+	}
+	if c.childrenErr != nil {
+		if err := c.childrenErr[ref.Key()]; err != nil {
+			return nil, err
+		}
+	}
+	if c.empty {
+		return nil, nil
+	}
+	switch ref.Kind {
+	case domain.KindDatabase:
+		if c.engine == domain.EnginePostgreSQL {
+			return []domain.Node{{
+				Ref:        domain.ObjectRef{Engine: c.engine, Kind: domain.KindSchema, Database: ref.Database, Schema: "public", Name: "public"},
+				Name:       "public",
+				Kind:       domain.KindSchema,
+				Expandable: true,
+			}}, nil
+		}
+		return c.objects(ref.Database, ""), nil
+	case domain.KindSchema:
+		return c.objects(ref.Database, ref.Schema), nil
+	}
+	return nil, domain.NewError(domain.KindConfig, "catalog", "no children")
+}
+
+func (c *fakeCatalog) objects(database, schema string) []domain.Node {
+	kind := domain.KindTable
+	if c.engine == domain.EngineMongoDB {
+		kind = domain.KindCollection
+	}
+	nodes := []domain.Node{
+		{Ref: domain.ObjectRef{Engine: c.engine, Kind: kind, Database: database, Schema: schema, Name: "customers"}, Name: "customers", Kind: kind, Access: domain.AccessRead},
+		{Ref: domain.ObjectRef{Engine: c.engine, Kind: kind, Database: database, Schema: schema, Name: "invoices"}, Name: "invoices", Kind: kind, Access: domain.AccessWrite},
+		{Ref: domain.ObjectRef{Engine: c.engine, Kind: kind, Database: database, Schema: schema, Name: "audit_log"}, Name: "audit_log", Kind: kind, Access: domain.AccessNone},
+		{Ref: domain.ObjectRef{Engine: c.engine, Kind: domain.KindView, Database: database, Schema: schema, Name: "customer_view"}, Name: "customer_view", Kind: domain.KindView, Access: domain.AccessRead},
+	}
+	if c.engine != domain.EngineMongoDB {
+		nodes = append(nodes, domain.Node{
+			Ref:  domain.ObjectRef{Engine: c.engine, Kind: domain.KindSequence, Database: database, Schema: schema, Name: "orders_seq"},
+			Name: "orders_seq", Kind: domain.KindSequence,
+		})
+	}
+	return nodes
+}
+
+func (c *fakeCatalog) Principals(ctx context.Context, ref domain.ObjectRef) ([]domain.Principal, error) {
+	if c.principalErr != nil {
+		return nil, c.principalErr
+	}
+	if ref.Kind == domain.KindUsers {
+		name := "app_ro"
+		scope := "cluster"
+		switch c.engine {
+		case domain.EngineMySQL:
+			name = "billing_ro@%"
+			scope = "%"
+		case domain.EngineMongoDB:
+			name = "analyst@analytics"
+			scope = "analytics"
+		}
+		return []domain.Principal{{Name: name, Kind: domain.KindUser, Scope: scope, Attributes: []string{"LOGIN"}}}, nil
+	}
+	name := "reporting"
+	scope := "cluster"
+	if c.engine == domain.EngineMongoDB {
+		name = "reporting@analytics"
+		scope = "analytics"
+	}
+	return []domain.Principal{{Name: name, Kind: domain.KindRole, Scope: scope, Attributes: []string{"NOLOGIN"}}}, nil
+}
+
+func (c *fakeCatalog) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, error) {
+	if c.engine == domain.EngineMongoDB {
+		return "_id", nil
+	}
+	return "id", nil
+}
 
 type testEnv struct {
 	home      string
@@ -216,15 +341,21 @@ func typeString(t *testing.T, m Model, text string) Model {
 
 func runCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
-	if cmd == nil {
-		t.Fatal("expected a command")
+	return settle(t, m, cmd)
+}
+
+func settle(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for i := 0; cmd != nil && i < 20; i++ {
+		next, nextCmd := m.Update(cmd())
+		mm, ok := next.(Model)
+		if !ok {
+			t.Fatalf("Update returned %T", next)
+		}
+		m = mm
+		cmd = nextCmd
 	}
-	next, _ := m.Update(cmd())
-	mm, ok := next.(Model)
-	if !ok {
-		t.Fatalf("Update returned %T", next)
-	}
-	return mm
+	return m
 }
 
 // connectSelected presses Enter on the picker, answers a password prompt when
@@ -240,6 +371,19 @@ func connectSelected(t *testing.T, m Model) Model {
 		t.Fatalf("no connect command: message=%q modal=%v", m.message, m.modal)
 	}
 	return runCmd(t, m, cmd)
+}
+
+func selectKind(t *testing.T, m Model, kind domain.ObjectKind) Model {
+	t.Helper()
+	for i, row := range m.tree.rows {
+		if row.Info == "" && row.Node.Kind == kind {
+			m.tree.selected = i
+			m.syncDetails()
+			return m
+		}
+	}
+	t.Fatalf("tree kind %q not found", kind)
+	return m
 }
 
 func selectLabel(t *testing.T, m Model, label string) Model {
@@ -273,10 +417,21 @@ func workspace(t *testing.T) Model {
 	e := newTestEnv(t)
 	seedStandard(t, e)
 	m := selectLabel(t, e.model(t), "prod-ro")
+	return workspaceFrom(t, m)
+}
+
+func workspaceFrom(t *testing.T, m Model) Model {
+	t.Helper()
 	m = connectSelected(t, m)
 	if m.screen != ScreenWorkspace {
 		t.Fatalf("expected workspace, message=%q modal=%v", m.message, m.modal)
 	}
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "down")
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "down")
 	return m
 }
 

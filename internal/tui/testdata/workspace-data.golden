@@ -1,15 +1,15 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
-┌ objects 3 · preview ─────┐ ┌─────────────────────────────────────────────────┐
+┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
 │   ▾ public               │ │                                                 │
-│     · customers  ro      │ │ estimated   12,480 rows                         │
-│     · invoices  rw       │ │ size        2.1 GB                              │
-│     · audit_log  —       │ │ indexes                                         │
-│ ▸ billing                │ │   customers_pkey                                │
-│ ▾ Security               │ │ structure                                       │
-│   · users                │ │   id          bigint                            │
-│   · roles                │ │   email       text                              │
-│                          │ │   status      text                              │
+│     · customers  ro      │ │ data browsing lands in story 4                  │
+│     · invoices  rw       │ │                                                 │
+│     · audit_log  —       │ │                                                 │
+│     · customer_view  ro  │ │                                                 │
+│     · orders_seq         │ │                                                 │
+│ ▸ billing                │ │                                                 │
+│ ▸ Security               │ │                                                 │
+│                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
 SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
-connected · catalog preview                                            Tab focus
+connected · orders                                     Enter open · Right expand

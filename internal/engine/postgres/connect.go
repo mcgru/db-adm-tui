@@ -31,10 +31,10 @@ func (connector) Close() error { return nil }
 
 // Connect opens one database/sql connection, pings it with a 10 second budget,
 // and closes it on failure. The password is never placed in an error.
-func (connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.Connection, error) {
+func (connector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
 	db, err := sql.Open("pgx", buildDSN(p, password))
 	if err != nil {
-		return nil, safeError("connect", password, err)
+		return ports.SessionBundle{}, safeError("connect", password, err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
@@ -44,14 +44,15 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 	conn, err := db.Conn(pingCtx)
 	if err != nil {
 		_ = db.Close()
-		return nil, safeError("connect", password, err)
+		return ports.SessionBundle{}, safeError("connect", password, err)
 	}
 	if err := conn.PingContext(pingCtx); err != nil {
 		_ = conn.Close()
 		_ = db.Close()
-		return nil, safeError("ping", password, err)
+		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
-	return &connection{conn: conn, db: db, password: password}, nil
+	live := &connection{conn: conn, db: db, password: password}
+	return ports.SessionBundle{Session: live, Catalog: newCatalog(live)}, nil
 }
 
 type connection struct {

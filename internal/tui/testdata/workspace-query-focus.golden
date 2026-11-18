@@ -1,15 +1,15 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
-┌ objects 3 · preview ─────┐ ┌─────────────────────────────────────────────────┐
+┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
 │   ▾ public               │ │                                                 │
-│     · customers  ro      │ │ grants                                          │
-│     · invoices  rw       │ │   CONNECT   orders                              │
-│     · audit_log  —       │ │   USAGE     public                              │
-│ ▸ billing                │ │   SELECT    customers                           │
-│ ▾ Security               │ │ memberships                                     │
-│   · users                │ │   reporting (via role)                          │
-│   · roles                │ │ effective                                       │
-│                          │ │   native terms only                             │
+│     · customers  ro      │ │ privilege inspection lands in story 7           │
+│     · invoices  rw       │ │                                                 │
+│     · audit_log  —       │ │                                                 │
+│     · customer_view  ro  │ │                                                 │
+│     · orders_seq         │ │                                                 │
+│ ▸ billing                │ │                                                 │
+│ ▸ Security               │ │                                                 │
+│                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
 SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
-connected · catalog preview                             Tab focus · Ctrl+X chord
+connected · orders                                      Tab focus · Ctrl+X chord
