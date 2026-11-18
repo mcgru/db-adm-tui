@@ -82,17 +82,20 @@ Expanding another database reconnects the same profile to it; a failed switch
 returns to the picker with the profile row error. MySQL/MariaDB and MongoDB see
 every database on one connection.
 
-Selecting a table or collection opens the context tabs and defaults to Data.
-Details currently shows basic identity; statistics and exact count are the next
-story. Privilege inspection lands in story 7.
+Selecting a table or collection opens the context tabs and defaults to Details.
+Details shows identity, the statistics placeholder, and the structure. Press
+`Enter` to switch to Data and load its first page. Statistics and exact count
+are the next story; privilege inspection lands in story 7.
 
 ## Object details and indexes
 
-Tables and collections expose `Data`, `Details`, `Indexes`, and `Privileges`
-tabs. Details shows identity, the statistics placeholder, and a Structure
-table: PostgreSQL/MySQL list columns with type, nullability, and default;
-MongoDB samples the first 100 documents and lists field paths with presence
-counts and percentages. Table cells are separated with `│` and `┼` rules.
+Tables and collections expose `Details`, `Indexes`, `Privileges`, and `Data`
+tabs (`1`–`4`; `[`/`]` cycle). Selecting one in the tree opens Details and loads
+its structure; `Enter` switches to Data and loads the first page. Details shows
+identity, the statistics placeholder, and a Structure table: PostgreSQL/MySQL
+list columns with type, nullability, and default; MongoDB samples the first 100
+documents and lists field paths with presence counts and percentages. Table
+cells are separated with `│` and `┼` rules.
 
 The Indexes tab has three sections: Details (name, unique, method), Statistics
 (size and engine-specific extras such as cardinality, sparse, or TTL), and

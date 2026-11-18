@@ -1,6 +1,6 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
-│ ▾ orders                 │ │ 1 Data · 2 Details · 3 Indexes · 4 Privileges   │
+│ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ error: relation unavailable                     │
 │     · invoices  rw       │ │ press m to retry                                │

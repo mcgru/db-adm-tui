@@ -42,7 +42,7 @@ func (m *Model) syncDetails() tea.Cmd {
 	} else {
 		m.resetData()
 	}
-	return nil
+	return m.ensureTabInfo()
 }
 
 func (m *Model) selectTab(index int) tea.Cmd {
@@ -148,12 +148,25 @@ func (m Model) openSelected() (tea.Model, tea.Cmd) {
 	if node.Expandable {
 		return m.expandSelected()
 	}
-	_ = m.syncDetails()
+	syncCmd := m.syncDetails()
 	if node.IsObject() || node.IsPrincipal() {
 		m.focus = FocusMain
-		return m, m.ensureData()
+		if index := tabIndex(m.details.tabs, "Data"); index >= 0 {
+			m.details.tab = index
+			m.details.offset = 0
+			return m, tea.Batch(syncCmd, m.ensureData())
+		}
 	}
-	return m, nil
+	return m, syncCmd
+}
+
+func tabIndex(tabs []string, want string) int {
+	for i, tab := range tabs {
+		if tab == want {
+			return i
+		}
+	}
+	return -1
 }
 
 func (m Model) loadRoot() (tea.Model, tea.Cmd) {

@@ -60,7 +60,7 @@ func (d *detailsState) clear() {
 func tabsFor(kind domain.ObjectKind) []string {
 	switch kind {
 	case domain.KindTable, domain.KindCollection:
-		return []string{"Data", "Details", "Indexes", "Privileges"}
+		return []string{"Details", "Indexes", "Privileges", "Data"}
 	case domain.KindView, domain.KindSequence:
 		return []string{"Details"}
 	case domain.KindDatabase, domain.KindSchema, domain.KindUser, domain.KindRole:
@@ -73,7 +73,7 @@ func tabsFor(kind domain.ObjectKind) []string {
 }
 
 // defaultTab returns the tab opened by a new selection. Tables and collections
-// open on Data; every other context opens Details.
+// open on Details; Enter explicitly switches them to Data.
 func defaultTab(domain.ObjectKind) int { return 0 }
 
 func (d *detailsState) currentTab() string {

@@ -49,8 +49,8 @@ func TestDataInitialPageAndPaging(t *testing.T) {
 	if !m.data.loaded || m.data.loading {
 		t.Fatalf("data state loaded=%v loading=%v", m.data.loaded, m.data.loading)
 	}
-	if m.details.tab != 0 || m.details.currentTab() != "Data" {
-		t.Fatalf("default tab = %d %q", m.details.tab, m.details.currentTab())
+	if m.details.currentTab() != "Data" {
+		t.Fatalf("data tab = %d %q", m.details.tab, m.details.currentTab())
 	}
 	if m.focus != FocusMain {
 		t.Fatalf("focus = %v", m.focus)

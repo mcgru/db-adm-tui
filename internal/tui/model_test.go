@@ -30,15 +30,15 @@ func TestGolden(t *testing.T) {
 	m = workspaceFrom(t, m)
 	assertGolden(t, "workspace.golden", m.View().Content)
 
-	m, cmd := press(t, m, "2")
+	m, cmd := press(t, m, "1")
 	m = settle(t, m, cmd)
 	assertGolden(t, "workspace-details.golden", m.View().Content)
 
-	m, cmd = press(t, m, "3")
+	m, cmd = press(t, m, "2")
 	m = settle(t, m, cmd)
 	assertGolden(t, "workspace-indexes.golden", m.View().Content)
 
-	m, _ = press(t, m, "4")
+	m, _ = press(t, m, "3")
 	assertGolden(t, "workspace-privileges.golden", m.View().Content)
 
 	m, _ = press(t, m, "tab")
@@ -641,7 +641,7 @@ func TestRawSelectionAndFocusStyles(t *testing.T) {
 	if !strings.Contains(view, m.styles.Focused.Render(fmt.Sprintf(" objects %d ", m.tree.objectCount()))) {
 		t.Fatal("focused tree title lacks the Focused style")
 	}
-	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("1 Data")
+	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("4 Data")
 	if !strings.Contains(view, activeTab) {
 		t.Fatal("active tab lacks bold/underline accent styling")
 	}
@@ -1390,7 +1390,7 @@ func TestTreeAccessMarkerIsDimmed(t *testing.T) {
 
 func TestMongoDetailsStructureAndIndexes(t *testing.T) {
 	m, _ := dataWorkspaceWith(t, "analytics", nil)
-	m, cmd := press(t, m, "2")
+	m, cmd := press(t, m, "1")
 	m = settle(t, m, cmd)
 	view := StripANSI(m.View().Content)
 	for _, want := range []string{"sampled from 2 documents", "profile.email", "1/2 (50%)"} {
@@ -1398,7 +1398,7 @@ func TestMongoDetailsStructureAndIndexes(t *testing.T) {
 			t.Fatalf("mongo structure %q missing:\n%s", want, view)
 		}
 	}
-	m, cmd = press(t, m, "3")
+	m, cmd = press(t, m, "2")
 	m = settle(t, m, cmd)
 	view = StripANSI(m.View().Content)
 	for _, want := range []string{"_id_", "btree", "8.0 KB", "Statistics", "Structure"} {
@@ -1584,16 +1584,50 @@ func TestEmptyDatabaseState(t *testing.T) {
 	}
 }
 
+func TestTreeSelectionShowsDetailsUntilEnter(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "down")
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "down")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Details" {
+		t.Fatalf("tree selection tab = %q, want Details", m.details.currentTab())
+	}
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"Structure", "bigint"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("details %q missing:\n%s", want, view)
+		}
+	}
+	if m.data.loaded {
+		t.Fatal("tree selection must not load the Data page")
+	}
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Data" || !m.data.loaded {
+		t.Fatalf("Enter tab=%q loaded=%v", m.details.currentTab(), m.data.loaded)
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "row-001") {
+		t.Fatal("Enter did not load the Data page")
+	}
+}
+
 func TestContextTabsAndPlaceholders(t *testing.T) {
 	m := workspace(t)
 	view := StripANSI(m.View().Content)
-	if !strings.Contains(view, "1 Data · 2 Details · 3 Indexes · 4 Privileges") {
+	if !strings.Contains(view, "1 Details · 2 Indexes · 3 Privileges · 4 Data") {
 		t.Fatalf("table tabs missing:\n%s", view)
 	}
 	if !strings.Contains(view, "row-001") {
 		t.Fatalf("data grid missing rows:\n%s", view)
 	}
-	m, cmd := press(t, m, "2")
+	m, cmd := press(t, m, "1")
 	m = settle(t, m, cmd)
 	view = StripANSI(m.View().Content)
 	for _, want := range []string{"public.customers", "Structure", "column", "bigint"} {
@@ -1601,7 +1635,7 @@ func TestContextTabsAndPlaceholders(t *testing.T) {
 			t.Fatalf("details %q missing:\n%s", want, view)
 		}
 	}
-	m, cmd = press(t, m, "3")
+	m, cmd = press(t, m, "2")
 	m = settle(t, m, cmd)
 	view = StripANSI(m.View().Content)
 	for _, want := range []string{"customers_pkey", "Statistics", "Structure", "btree"} {
@@ -1609,9 +1643,13 @@ func TestContextTabsAndPlaceholders(t *testing.T) {
 			t.Fatalf("indexes %q missing:\n%s", want, view)
 		}
 	}
-	m, _ = press(t, m, "4")
+	m, _ = press(t, m, "3")
 	if !strings.Contains(StripANSI(m.View().Content), "privilege inspection lands in story 7") {
 		t.Fatal("privileges placeholder missing")
+	}
+	m, _ = press(t, m, "4")
+	if !strings.Contains(StripANSI(m.View().Content), "row-001") {
+		t.Fatal("4 must show the Data tab")
 	}
 	m = selectKind(t, m, domain.KindView)
 	if !strings.Contains(StripANSI(m.View().Content), "detail view not available in v1") {
