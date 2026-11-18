@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -16,16 +17,29 @@ func StripANSI(s string) string {
 }
 
 // Sanitize removes terminal escape and control sequences from external text.
-// It preserves newlines and tabs for legitimate layout input.
+// It preserves newlines and tabs for legitimate layout input. C0/C1 controls,
+// DEL, and format controls (bidi/zero-width) are stripped.
 func Sanitize(s string) string {
 	s = ansi.Strip(s)
 	var b strings.Builder
 	for _, r := range s {
-		if r == '\n' || r == '\t' || (r >= 0x20 && r != 0x7f) {
+		if r == '\n' || r == '\t' {
 			b.WriteRune(r)
+			continue
 		}
+		if unicode.IsControl(r) || isUnsafeFormat(r) {
+			continue
+		}
+		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// isUnsafeFormat strips bidi overrides/isolates that can disguise terminal
+// text, while preserving ZWNJ/ZWJ, RTL marks, and variation selectors needed by
+// legitimate labels and emoji sequences.
+func isUnsafeFormat(r rune) bool {
+	return (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
 }
 
 // Truncate keeps at most width cells, ending with an ellipsis when content is

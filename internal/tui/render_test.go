@@ -17,6 +17,15 @@ func TestStripAndSanitize(t *testing.T) {
 	if got := Sanitize(styled + "\x07\n\tok\x00\x7f"); got != "hi\n\tok" {
 		t.Fatalf("Sanitize = %q", got)
 	}
+	if got := Sanitize("a\u009bb"); got != "ab" {
+		t.Fatalf("C1 control survived: %q", got)
+	}
+	if got := Sanitize("a\u200cb\u200dc\u200bd"); got != "a\u200cb\u200dc\u200bd" {
+		t.Fatalf("legitimate format characters were stripped: %q", got)
+	}
+	if got := Sanitize("a\u202eb\u2066c\u2069"); got != "abc" {
+		t.Fatalf("bidi overrides/isolates survived: %q", got)
+	}
 }
 
 func TestTruncateIsANSISafe(t *testing.T) {

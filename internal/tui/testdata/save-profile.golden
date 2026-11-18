@@ -1,0 +1,24 @@
+db-adm-tui · choose a connection                                      3 profiles
+                                                                                
+label          engine     host                user        source         last   
+analytics      MongoDB    mongo1:27017        analyst     ~/.mongo.anal… 01-02  
+billing        MySQL      mysql1:3306         billing_ro  prompt         —      
+prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02  
+                                                                                
+                                                                                
+                                                                                
+          ┌ save profile ────────────────────────────────────────────┐          
+          │ Save prod-ro2 as a profile?                              │          
+          │                                                          │          
+          │ Enter save · Esc skip                                    │          
+          └──────────────────────────────────────────────────────────┘          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+connected                                                                       
+Enter connect · n new · i import · ? help · q quit                              

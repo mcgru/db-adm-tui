@@ -1,5 +1,5 @@
 prod-ro · PostgreSQL · orders · r/o                                       app_ro
-┌ objects 3 ───────────────┐ ┌─────────────────────────────────────────────────┐
+┌ objects 3 · preview ─────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges               │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ estimated   12,480 rows                         │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
 SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;         
-loaded 100 of ~12,480 · case: sensitive · / search · ? help            Tab focus
+connected · catalog preview                                            Tab focus

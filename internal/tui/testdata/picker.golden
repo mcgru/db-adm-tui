@@ -1,9 +1,9 @@
-db-adm-tui · choose a connection                                                
+db-adm-tui · choose a connection                                      3 profiles
                                                                                 
 label          engine     host                user        source         last   
-prod-ro        PostgreSQL db1.internal        app_ro      ~/.pgpass      2m ago 
-analytics      MongoDB    mongo1:27017        analyst     ~/.mongo.anal… yester…
-billing        MySQL      mysql1:3306         billing_ro  manual         3d ago 
+analytics      MongoDB    mongo1:27017        analyst     ~/.mongo.anal… 01-02  
+billing        MySQL      mysql1:3306         billing_ro  prompt         —      
+prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02  
                                                                                 
                                                                                 
                                                                                 

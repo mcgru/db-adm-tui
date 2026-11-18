@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 
+	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/tui/layout"
 )
 
@@ -48,11 +49,15 @@ func (m Model) viewWorkspace(regions layout.Regions) string {
 }
 
 func (m Model) viewTopStatus(width int) string {
-	p := m.profile()
-	left := m.styles.Text.Render(p.Label) +
-		m.styles.Muted.Render(" · "+p.Engine+" · orders · ") +
+	p := m.profileForStatus()
+	database := p.Database
+	if database == "" {
+		database = "—"
+	}
+	left := m.styles.Text.Render(oneLine(p.Label)) +
+		m.styles.Muted.Render(" · "+p.Engine.DisplayName()+" · "+oneLine(database)+" · ") +
 		m.styles.ModeRO.Render("r/o")
-	right := m.styles.Muted.Render(p.User)
+	right := m.styles.Muted.Render(oneLine(p.User))
 	return ComposeLR(left, right, width)
 }
 
@@ -70,7 +75,7 @@ func (m Model) viewTree(height, width int) string {
 			lines = append(lines, m.styles.Text.Render(line))
 		}
 	}
-	return Box("objects 3", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusTree)
+	return Box("objects 3 · preview", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusTree)
 }
 
 func (m Model) viewMain(height, width int) string {
@@ -124,24 +129,28 @@ func (m Model) viewMain(height, width int) string {
 
 func (m Model) viewQuery(width int) string {
 	label := "SQL"
-	if m.profile().Engine == "MongoDB" {
+	statement := "SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;"
+	switch m.profileForStatus().Engine {
+	case domain.EngineMongoDB:
 		label = "MQL"
+		statement = "db.customers.find({ status: 'active' }).limit(100);"
+	case domain.EngineMySQL:
+		statement = "SELECT * FROM customers WHERE status = 'active' LIMIT 100;"
 	}
 	promptStyle := m.styles.ModeRO
 	if m.focus == FocusQuery {
 		promptStyle = m.styles.Focused
 	}
 	prompt := promptStyle.Render(label) + " " + m.styles.Accent.Render("›")
-	statement := m.styles.Text.Render("SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;")
-	return Pad(prompt+" "+statement, width)
+	return Pad(prompt+" "+m.styles.Text.Render(statement), width)
 }
 
 func (m Model) viewBottom(width int) string {
-	left := "loaded 100 of ~12,480 · case: sensitive · / search · ? help"
+	left := "connected · catalog preview"
 	style := m.styles.Muted
 	if m.message != "" {
 		left = m.message
-		style = m.styles.Info
+		style = m.messageStyle()
 	}
 	if m.pendingChord {
 		left = "Ctrl+X …"
@@ -151,5 +160,5 @@ func (m Model) viewBottom(width int) string {
 	if m.focus == FocusQuery {
 		right = "Tab focus · Ctrl+X chord"
 	}
-	return ComposeLR(style.Render(Truncate(left, width-20)), m.styles.Muted.Render(right), width)
+	return ComposeLR(style.Render(Truncate(oneLine(left), width-20)), m.styles.Muted.Render(right), width)
 }
