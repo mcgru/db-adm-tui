@@ -10,6 +10,7 @@ type ObjectKind string
 const (
 	KindDatabase   ObjectKind = "database"
 	KindSchema     ObjectKind = "schema"
+	KindSchemas    ObjectKind = "schemas"
 	KindTable      ObjectKind = "table"
 	KindCollection ObjectKind = "collection"
 	KindView       ObjectKind = "view"

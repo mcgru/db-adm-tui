@@ -304,6 +304,16 @@ func (t treeState) visibleRows(height int) []treeRow {
 }
 
 func treeRowText(row treeRow) string {
+	line := treeRowLabel(row)
+	if access := treeRowAccess(row); access != "" {
+		line += "  " + access
+	}
+	return line
+}
+
+// treeRowLabel is the row text without the access marker, so the view can
+// render the marker in a quieter style than the object name.
+func treeRowLabel(row treeRow) string {
 	indent := strings.Repeat("  ", row.Depth)
 	if row.Info != "" {
 		return indent + row.Info
@@ -315,9 +325,12 @@ func treeRowText(row treeRow) string {
 			prefix = "▾"
 		}
 	}
-	line := indent + prefix + " " + oneLine(row.Node.Name)
+	return indent + prefix + " " + oneLine(row.Node.Name)
+}
+
+func treeRowAccess(row treeRow) string {
 	if row.Node.HasAccessMarker() && row.Node.Access != domain.AccessUnknown {
-		line += "  " + string(row.Node.Access)
+		return string(row.Node.Access)
 	}
-	return line
+	return ""
 }

@@ -7,9 +7,9 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │     · audit_log  —       │ │ No rows. public.customers is empty.             │
 │     · customer_view  ro  │ │                                                 │
 │     · orders_seq         │ │                                                 │
+│   ▸ schemas              │ │                                                 │
 │ ▸ billing                │ │                                                 │
 │ ▸ Security               │ │                                                 │
-│                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │

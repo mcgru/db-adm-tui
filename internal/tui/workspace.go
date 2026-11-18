@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/tui/layout"
 )
@@ -61,7 +63,19 @@ func (m Model) viewTree(height, width int) string {
 				row.Node.Kind == domain.KindRole:
 				lines = append(lines, m.styles.Info.Render(Truncate(line, inner)))
 			default:
-				lines = append(lines, m.styles.Text.Render(Truncate(line, inner)))
+				label := treeRowLabel(row)
+				access := treeRowAccess(row)
+				if access == "" {
+					lines = append(lines, m.styles.Text.Render(Truncate(label, inner)))
+					break
+				}
+				suffix := "  " + access
+				labelWidth := inner - lipgloss.Width(suffix)
+				if labelWidth < 1 {
+					labelWidth = 1
+				}
+				lines = append(lines, m.styles.Text.Render(Truncate(label, labelWidth))+
+					m.styles.Muted.Render(suffix))
 			}
 		}
 	}

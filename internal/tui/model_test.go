@@ -1369,6 +1369,17 @@ func TestTreeAccessMarkers(t *testing.T) {
 	}
 }
 
+func TestTreeAccessMarkerIsDimmed(t *testing.T) {
+	m := workspace(t)
+	raw := m.View().Content
+	if !strings.Contains(raw, m.styles.Muted.Render("  rw")) {
+		t.Fatalf("access marker is not rendered with the muted style:\n%q", raw)
+	}
+	if !strings.Contains(raw, m.styles.Text.Render("    · invoices")) {
+		t.Fatalf("object name is not rendered with the text style:\n%q", raw)
+	}
+}
+
 func TestSecurityLoadsPrincipals(t *testing.T) {
 	m := workspace(t)
 	m = selectKind(t, m, domain.KindSecurity)
@@ -1421,6 +1432,38 @@ func TestTreeLazyErrorRetries(t *testing.T) {
 	m = settle(t, m, cmd)
 	if !strings.Contains(StripANSI(m.View().Content), "public") {
 		t.Fatalf("retry did not load children:\n%s", StripANSI(m.View().Content))
+	}
+}
+
+func TestPostgresSchemasGrouping(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = connectSelected(t, m)
+	m = selectKind(t, m, domain.KindDatabase)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	public, group := -1, -1
+	for i, row := range m.tree.rows {
+		if row.Info != "" {
+			continue
+		}
+		if row.Node.Kind == domain.KindSchema && row.Node.Name == "public" {
+			public = i
+		}
+		if row.Node.Kind == domain.KindSchemas {
+			group = i
+		}
+	}
+	if public < 0 || group < 0 || public > group {
+		t.Fatalf("schemas not grouped after public: public=%d group=%d\n%s", public, group, StripANSI(m.View().Content))
+	}
+	m = selectKind(t, m, domain.KindSchemas)
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "reporting") {
+		t.Fatalf("schema group did not load children:\n%s", view)
 	}
 }
 

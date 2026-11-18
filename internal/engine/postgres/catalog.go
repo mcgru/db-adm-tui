@@ -48,6 +48,8 @@ func (c *catalog) Children(ctx context.Context, ref domain.ObjectRef) ([]domain.
 	switch ref.Kind {
 	case domain.KindDatabase:
 		return c.schemas(ctx, ref.Database)
+	case domain.KindSchemas:
+		return c.otherSchemas(ctx, ref.Database)
 	case domain.KindSchema:
 		return c.objects(ctx, ref.Database, ref.Schema)
 	default:
@@ -55,7 +57,49 @@ func (c *catalog) Children(ctx context.Context, ref domain.ObjectRef) ([]domain.
 	}
 }
 
+// schemas lists the public schema first and folds the remaining schemas into
+// one expandable group. Public stays one keystroke away; rarely used schemas do
+// not crowd the database node.
 func (c *catalog) schemas(ctx context.Context, database string) ([]domain.Node, error) {
+	nodes, err := c.schemaNodes(ctx, database)
+	if err != nil {
+		return nil, err
+	}
+	var out []domain.Node
+	other := 0
+	for _, node := range nodes {
+		if node.Name == "public" {
+			out = append(out, node)
+			continue
+		}
+		other++
+	}
+	if other > 0 {
+		out = append(out, domain.Node{
+			Ref:        domain.ObjectRef{Kind: domain.KindSchemas, Database: database, Name: "schemas"},
+			Name:       "schemas",
+			Kind:       domain.KindSchemas,
+			Expandable: true,
+		})
+	}
+	return out, nil
+}
+
+func (c *catalog) otherSchemas(ctx context.Context, database string) ([]domain.Node, error) {
+	nodes, err := c.schemaNodes(ctx, database)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Node, 0, len(nodes))
+	for _, node := range nodes {
+		if node.Name != "public" {
+			out = append(out, node)
+		}
+	}
+	return out, nil
+}
+
+func (c *catalog) schemaNodes(ctx context.Context, database string) ([]domain.Node, error) {
 	rows, err := c.conn.conn.QueryContext(ctx, `
 SELECT nspname
 FROM pg_namespace

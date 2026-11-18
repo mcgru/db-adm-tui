@@ -205,14 +205,29 @@ func (c *fakeCatalog) Children(ctx context.Context, ref domain.ObjectRef) ([]dom
 	switch ref.Kind {
 	case domain.KindDatabase:
 		if c.engine == domain.EnginePostgreSQL {
-			return []domain.Node{{
-				Ref:        domain.ObjectRef{Engine: c.engine, Kind: domain.KindSchema, Database: ref.Database, Schema: "public", Name: "public"},
-				Name:       "public",
-				Kind:       domain.KindSchema,
-				Expandable: true,
-			}}, nil
+			return []domain.Node{
+				{
+					Ref:        domain.ObjectRef{Engine: c.engine, Kind: domain.KindSchema, Database: ref.Database, Schema: "public", Name: "public"},
+					Name:       "public",
+					Kind:       domain.KindSchema,
+					Expandable: true,
+				},
+				{
+					Ref:        domain.ObjectRef{Engine: c.engine, Kind: domain.KindSchemas, Database: ref.Database, Name: "schemas"},
+					Name:       "schemas",
+					Kind:       domain.KindSchemas,
+					Expandable: true,
+				},
+			}, nil
 		}
 		return c.objects(ref.Database, ""), nil
+	case domain.KindSchemas:
+		return []domain.Node{{
+			Ref:        domain.ObjectRef{Engine: c.engine, Kind: domain.KindSchema, Database: ref.Database, Schema: "reporting", Name: "reporting"},
+			Name:       "reporting",
+			Kind:       domain.KindSchema,
+			Expandable: true,
+		}}, nil
 	case domain.KindSchema:
 		return c.objects(ref.Database, ref.Schema), nil
 	}

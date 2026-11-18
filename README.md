@@ -59,8 +59,9 @@ Latin and Cyrillic physical key positions resolve to the same actions
 ## Tree and Security
 
 After connecting, the workspace shows the databases visible to the connected
-user plus a `Security` node. PostgreSQL databases expand into schemas and then
-tables, views, and sequences; MySQL/MariaDB databases expand directly into
+user plus a `Security` node. PostgreSQL databases show the `public` schema
+first and fold every other schema under a `schemas` group; both expand into
+tables, views, and sequences. MySQL/MariaDB databases expand directly into
 tables, views, and sequences; MongoDB databases expand into collections and
 views. Children load lazily on expand; a failed load stays attached to the
 parent and `Enter` retries it.

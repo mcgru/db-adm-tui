@@ -7,9 +7,9 @@ prod-ro · PostgreSQL · orders · r/o                                          
 │     · audit_log  —       │ │   1  1    row-001 active                                            │
 │     · customer_view  ro  │ │   2  2    row-002 paused                                            │
 │     · orders_seq         │ │   3  3    row-003 closed                                            │
-│ ▸ billing                │ │   4  4    row-004 active                                            │
-│ ▸ Security               │ │   5  5    row-005 paused                                            │
-│                          │ │                                                                     │
+│   ▸ schemas              │ │   4  4    row-004 active                                            │
+│ ▸ billing                │ │   5  5    row-005 paused                                            │
+│ ▸ Security               │ │                                                                     │
 │                          │ │                                                                     │
 │                          │ │                                                                     │
 │                          │ │                                                                     │

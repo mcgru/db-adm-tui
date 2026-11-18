@@ -42,7 +42,7 @@ func tabsFor(kind domain.ObjectKind) []string {
 		return []string{"Details"}
 	case domain.KindDatabase, domain.KindSchema, domain.KindUser, domain.KindRole:
 		return []string{"Details", "Privileges"}
-	case domain.KindSecurity, domain.KindUsers, domain.KindRoles:
+	case domain.KindSecurity, domain.KindUsers, domain.KindRoles, domain.KindSchemas:
 		return []string{"Details"}
 	default:
 		return nil
@@ -102,6 +102,17 @@ func detailLines(node domain.Node, currentDB string, childCount int) []detailLin
 		if childCount >= 0 {
 			lines = append(lines, detailLine{Label: "children", Value: strconv.Itoa(childCount)})
 		}
+		return lines
+	case domain.KindSchemas:
+		lines := []detailLine{
+			{Label: "group", Value: "schemas"},
+			{Label: "database", Value: node.Ref.Database},
+			{Label: "kind", Value: "schema group"},
+		}
+		if childCount >= 0 {
+			lines = append(lines, detailLine{Label: "children", Value: strconv.Itoa(childCount)})
+		}
+		lines = append(lines, detailLine{Value: "expand to load schemas", Mutable: true})
 		return lines
 	case domain.KindUser, domain.KindRole:
 		lines := []detailLine{
