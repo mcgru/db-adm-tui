@@ -33,3 +33,15 @@
 - source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/3-common-tree-security-object-details.md`
   summary: Live PostgreSQL, MySQL/MariaDB, and MongoDB catalog queries were not run against real engines; only query builders, mapping helpers, fakes, and goldens were exercised.
   evidence: No database was available in the environment. `make test` covers the TUI tree, app session switching, catalog interfaces, and pure MySQL/Mongo helpers; a follow-up integration run should exercise real databases, including MySQL role-derived markers and MongoDB custom-role privileges.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`
+  summary: Buffer filtering with `/`, `n`/`N` match navigation, server-side `Ctrl+F` regexp, the focus prompt, filter banner, and session-wide case mode are deferred to a follow-up search story.
+  evidence: The original story combined browsing/paging and search, far above the 900–1600 token target. The search surfaces layer on the loaded grid and are independently reviewable once paging, windowing, and the Data tab are stable.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`
+  summary: Live data pages were not run against real PostgreSQL, MySQL/MariaDB, or MongoDB servers; query construction, type mapping, Mongo union, session switching, fakes, and 80x24 goldens were exercised instead.
+  evidence: No database was available in the environment. The first opt-in `DB_ADM_TEST_*` integration run should verify real estimates, quoted identifiers, binary/JSON values, stable offset paging, and MongoDB documents whose fields appear only on later pages.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`
+  summary: A primary-key column name containing a comma cannot be represented in `Catalog.OrderKey`'s comma-joined string, so its stable ordering falls back to an invalid column list.
+  evidence: `Catalog.OrderKey` returns a single string and the data adapters split it on commas. Normal identifiers, including quoted mixed-case names, are covered; a structured order-key list would be needed before this edge can be handled safely.

@@ -3,8 +3,10 @@ package tui
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -53,6 +55,7 @@ type fakeConnector struct {
 	password string
 	conns    []*fakeConn
 	catalog  *fakeCatalog
+	data     *fakeDataReader
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
@@ -66,9 +69,87 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if catalog == nil {
 		catalog = &fakeCatalog{engine: p.Engine}
 	}
-	return ports.SessionBundle{Session: conn, Catalog: catalog}, nil
+	data := f.data
+	if data == nil {
+		data = &fakeDataReader{total: 5}
+	}
+	return ports.SessionBundle{Session: conn, Catalog: catalog, DataReader: data}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
+
+type fakeDataReader struct {
+	total        int
+	noOrder      bool
+	columns      []domain.Column
+	estimate     int64
+	unavailable  bool
+	emptyColumns bool
+	failAt       map[int]error
+	block        chan struct{}
+	calls        []domain.DataQuery
+	pageFn       func(domain.DataQuery) (domain.DataPage, error)
+}
+
+func (d *fakeDataReader) Page(ctx context.Context, query domain.DataQuery) (domain.DataPage, error) {
+	d.calls = append(d.calls, query)
+	if d.block != nil {
+		select {
+		case <-ctx.Done():
+			return domain.DataPage{}, ctx.Err()
+		case <-d.block:
+		}
+	}
+	if err, ok := d.failAt[query.Offset]; ok {
+		return domain.DataPage{}, err
+	}
+	if d.pageFn != nil {
+		return d.pageFn(query)
+	}
+	columns := d.columns
+	if len(columns) == 0 && !d.emptyColumns {
+		columns = []domain.Column{{Name: "id"}, {Name: "name"}, {Name: "status"}}
+	}
+	offset := query.Offset
+	if offset > d.total {
+		offset = d.total
+	}
+	end := offset + query.Limit
+	if end > d.total {
+		end = d.total
+	}
+	statuses := []string{"active", "paused", "closed"}
+	rows := make([]domain.Row, 0, end-offset)
+	for i := offset; i < end; i++ {
+		rows = append(rows, domain.Row{Cells: []domain.Cell{
+			{Text: strconv.Itoa(i + 1), Kind: domain.CellNumber},
+			{Text: fmt.Sprintf("row-%03d", i+1), Kind: domain.CellText},
+			{Text: statuses[i%len(statuses)], Kind: domain.CellText},
+		}})
+	}
+	grid := domain.Grid{Columns: columns, Rows: rows}
+	total := int64(d.total)
+	source := domain.EstimateCatalog
+	if d.unavailable {
+		total = -1
+		source = ""
+	}
+	if d.estimate > 0 {
+		total = d.estimate
+	}
+	orderKey := "id"
+	if d.noOrder {
+		orderKey = ""
+	}
+	return domain.DataPage{
+		Grid:           grid,
+		Offset:         query.Offset,
+		HasMore:        end < d.total,
+		EstimatedTotal: total,
+		EstimateSource: source,
+		OrderKey:       orderKey,
+		OrderKeyKnown:  true,
+	}, nil
+}
 
 type fakeCatalog struct {
 	engine         domain.Engine
@@ -78,6 +159,7 @@ type fakeCatalog struct {
 	childrenCalls  int
 	principalErr   error
 	empty          bool
+	noOrder        bool
 }
 
 func (c *fakeCatalog) Databases(ctx context.Context) ([]domain.Node, error) {
@@ -184,6 +266,9 @@ func (c *fakeCatalog) Principals(ctx context.Context, ref domain.ObjectRef) ([]d
 }
 
 func (c *fakeCatalog) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, error) {
+	if c.noOrder {
+		return "", nil
+	}
 	if c.engine == domain.EngineMongoDB {
 		return "_id", nil
 	}
@@ -378,8 +463,7 @@ func selectKind(t *testing.T, m Model, kind domain.ObjectKind) Model {
 	for i, row := range m.tree.rows {
 		if row.Info == "" && row.Node.Kind == kind {
 			m.tree.selected = i
-			m.syncDetails()
-			return m
+			return settle(t, m, m.syncDetails())
 		}
 	}
 	t.Fatalf("tree kind %q not found", kind)
@@ -431,7 +515,11 @@ func workspaceFrom(t *testing.T, m Model) Model {
 	m, _ = press(t, m, "down")
 	m, cmd = press(t, m, "right")
 	m = settle(t, m, cmd)
-	m, _ = press(t, m, "down")
+	m, cmd = press(t, m, "down")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "shift+tab")
 	return m
 }
 

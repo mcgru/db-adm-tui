@@ -62,6 +62,7 @@ type Styles struct {
 	Label       lipgloss.Style
 	Match       lipgloss.Style
 	Select      lipgloss.Style
+	Cursor      lipgloss.Style
 	ModeRO      lipgloss.Style
 	ModeRW      lipgloss.Style
 	Border      lipgloss.Style
@@ -87,6 +88,7 @@ func New() Styles {
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Muted)).Bold(true),
 		Match:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Base)).Background(lipgloss.Color(Nightshift.Match)),
 		Select:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Text)).Background(lipgloss.Color(Nightshift.Selection)).Reverse(true).Bold(true),
+		Cursor:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Base)).Background(lipgloss.Color(Nightshift.Accent)).Bold(true),
 		ModeRO:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.ReadOnly)).Bold(true),
 		ModeRW:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.ReadWrite)).Bold(true),
 		Border:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Border)),

@@ -52,7 +52,7 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{conn: conn, db: db, password: password}
-	return ports.SessionBundle{Session: live, Catalog: newCatalog(live)}, nil
+	return ports.SessionBundle{Session: live, Catalog: newCatalog(live), DataReader: live}, nil
 }
 
 type connection struct {

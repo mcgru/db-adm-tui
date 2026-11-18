@@ -92,7 +92,7 @@ func (m Model) viewMain(height, width int) string {
 
 	switch m.details.currentTab() {
 	case "Data":
-		lines = append(lines, m.styles.Muted.Render("data browsing lands in story 4"))
+		lines = append(lines, m.viewData(width-4, bodyHeight)...)
 	case "Privileges":
 		lines = append(lines, m.styles.Muted.Render("privilege inspection lands in story 7"))
 	default:
@@ -187,5 +187,24 @@ func (m Model) viewBottom(width int) string {
 	case FocusQuery:
 		right = "Tab focus · Ctrl+X chord"
 	}
-	return ComposeLR(style.Render(Truncate(oneLine(left), width-24)), m.styles.Muted.Render(right), width)
+	if m.screen == ScreenWorkspace && m.dataTabActive() {
+		if m.message == "" {
+			if summary := m.dataSummary(); summary != "" {
+				left = summary
+				style = m.styles.Muted
+				if m.data.loading {
+					style = m.styles.Info
+				}
+			}
+		}
+		switch m.focus {
+		case FocusMain:
+			right = "↑↓ rows · m more"
+		case FocusQuery:
+			right = "Ctrl+X chord"
+		default:
+			right = "Enter open"
+		}
+	}
+	return ComposeLR(style.Render(oneLine(left)), m.styles.Muted.Render(right), width)
 }

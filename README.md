@@ -3,11 +3,12 @@
 Terminal database administration for PostgreSQL, MongoDB, and MySQL/MariaDB,
 built to run on the database host inside a closed environment.
 
-The repository now implements the connection layer and the real catalog tree:
-profiles and import, connect-time password resolution, real open/ping/close,
-lazy database/schema/object navigation, a Security node with users and roles,
-and native access markers. Object statistics, data browsing, query execution,
-and privilege inspection land in later stories.
+The repository now implements the connection layer, the real catalog tree, and
+read-only data browsing: profiles and import, connect-time password resolution,
+real open/ping/close, lazy database/schema/object navigation, a Security node
+with users and roles, native access markers, and a paged Data tab with a bounded
+loaded window. Object statistics, search, query execution, and privilege
+inspection land in later stories.
 
 ## Requirements
 
@@ -28,20 +29,23 @@ The tool starts on the profile picker.
 
 | Key | Action |
 |---|---|
-| `Enter` | Connect, submit a form, import selected rows, expand a tree node, or open details |
-| `Up` / `Down` | Move the picker, import list, tree cursor, or details scroll |
-| `PgUp` / `PgDn` | Scroll the picker/import list, tree, or details |
-| `Left` / `Right` | Collapse / expand the selected tree node |
-| `Home` / `End` | Jump to the first or last tree or import row |
+| `Enter` | Connect, submit a form, import selected rows, expand a tree node, or open Data/details |
+| `Up` / `Down` | Move the picker, import list, tree cursor, Data row cursor, or details scroll |
+| `PgUp` / `PgDn` | Scroll the picker/import list, tree, or details; page the Data grid |
+| `Left` / `Right` | Collapse / expand the selected tree node; move the Data cell cursor |
+| `Home` / `End` | Jump to the first/last tree or import row; first/last Data column |
+| `m` | Append the next Data page (Data tab focused) |
+| `Ctrl+A` | Load up to the 10,000-row window, then use 10,000-row batches |
 | `n` | New connection (`new connection` modal) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3`, `[` / `]` | Select a context tab by position; tabs differ by object |
-| `Esc` | Cancel an attempt or close the current modal |
+| `Esc` | Cancel a fetch, cancel an attempt, or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
 | `Ctrl+X` then `s` / `Ctrl+E` / `Ctrl+W` / `i` | Chord stubs for count, edit, mode, case |
+| `/` or `.` / `Ctrl+F` | Data-tab placeholder; search lands in the next story |
 | `?` / `F1` | Help stub |
 | `q` | Quit, but only at the picker |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
@@ -74,9 +78,50 @@ Expanding another database reconnects the same profile to it; a failed switch
 returns to the picker with the profile row error. MySQL/MariaDB and MongoDB see
 every database on one connection.
 
-Selecting a table or collection opens context tabs. Details currently shows
-basic identity; statistics and exact count are the next story. Data browsing
-lands in story 4 and privilege inspection in story 7.
+Selecting a table or collection opens the context tabs and defaults to Data.
+Details currently shows basic identity; statistics and exact count are the next
+story. Privilege inspection lands in story 7.
+
+## Data browsing
+
+The Data tab opens for every table and collection. Moving the tree cursor only
+selects an object; press `Enter` or focus the Data tab to load the first page.
+It shows up to 100 rows or documents with a pinned row-number gutter, column
+headers, and a status line such as `loaded 100 of ~12,480` or
+`loaded 100 · total unavailable`.
+
+- With Data focused, `m` appends the next batch: 100 rows normally, or 10,000
+  after `Ctrl+A`. `Ctrl+A` first fills the window up to 10,000 rows; later
+  batches use 10,000 rows.
+- At the last loaded row, press `PgDown` twice or `Down` three times to fetch
+  the next page. The first press explains the gesture.
+- The loaded window holds at most 10,000 rows or 64 MB. A forward fetch that
+  would exceed the cap drops the oldest rows and advances the window start;
+  scrolling above the start prepends the previous batch and drops rows from the
+  tail. The status shows a range such as `rows 5,001–15,000 of ~15,000`; `m`
+  after a full window slides forward.
+- The stable order comes from the primary key (PostgreSQL/MySQL) or `_id`
+  (MongoDB). Without one, the pane warns
+  `no stable order; rows may repeat or skip` and browsing still works.
+- PostgreSQL and MySQL keep driver column order. MongoDB unions top-level
+  fields across loaded pages, `_id` first, then first-seen order; nested
+  documents and arrays render as compact JSON (MongoDB extended JSON for
+  ObjectID/date/binary wrappers). Missing fields stay empty, explicit nulls
+  render `null`, empty strings render blank, binary values render as
+  `<binary N bytes>`, and long widths truncate with `…`.
+- Arrows move the row/column cursor, `Home`/`End` jump to the first/last
+  column, and `PgUp`/`PgDn` move a screen. Wide rows scroll horizontally while
+  the row-number gutter stays pinned.
+- `Esc` while a page is loading cancels it, keeps the previous rows, and shows
+  `cancelled`. A failed page keeps the previous window and shows an inline
+  error; `m` retries the next page. A failed first page shows
+  `press Enter to load rows` and retries with `m`.
+- `/` and `Ctrl+F` only say `search lands in the next story`; they never query
+  the database. Sorting, editing, export, and query execution are not present
+  in this story.
+
+All data reads are read-only and parameterized. Values never become SQL text,
+and identifiers are quoted per engine. Views and sequences have no Data tab.
 
 ## Profiles
 
@@ -184,4 +229,4 @@ go test ./internal/tui -run TestGolden -update
 ```
 
 The story spec lives at
-`_bmad-output/specs/spec-db-adm-tui/stories/3-common-tree-security-object-details.md`.
+`_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`.

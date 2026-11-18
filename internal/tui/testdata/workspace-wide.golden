@@ -2,13 +2,13 @@ prod-ro · PostgreSQL · orders · r/o                                          
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Data · 2 Details · 3 Privileges                                   │
 │   ▾ public               │ │                                                                     │
-│     · customers  ro      │ │ object       public.customers                                       │
-│     · invoices  rw       │ │ database     orders                                                 │
-│     · audit_log  —       │ │ schema       public                                                 │
-│     · customer_view  ro  │ │ access       ro                                                     │
-│     · orders_seq         │ │ statistics are not available in this story                          │
-│ ▸ billing                │ │                                                                     │
-│ ▸ Security               │ │                                                                     │
+│     · customers  ro      │ │      id   name    status                                            │
+│     · invoices  rw       │ │ ─────────────────────────────────────────────────────────────────── │
+│     · audit_log  —       │ │   1  1    row-001 active                                            │
+│     · customer_view  ro  │ │   2  2    row-002 paused                                            │
+│     · orders_seq         │ │   3  3    row-003 closed                                            │
+│ ▸ billing                │ │   4  4    row-004 active                                            │
+│ ▸ Security               │ │   5  5    row-005 paused                                            │
 │                          │ │                                                                     │
 │                          │ │                                                                     │
 │                          │ │                                                                     │
@@ -27,4 +27,4 @@ prod-ro · PostgreSQL · orders · r/o                                          
 │                          │ │                                                                     │
 └──────────────────────────┘ └─────────────────────────────────────────────────────────────────────┘
 SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;                             
-connected · orders                                                         Enter open · Right expand
+loaded 5 of ~5                                                                            Enter open

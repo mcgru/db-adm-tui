@@ -49,12 +49,9 @@ func tabsFor(kind domain.ObjectKind) []string {
 	}
 }
 
-func defaultTab(kind domain.ObjectKind) int {
-	if kind == domain.KindTable || kind == domain.KindCollection {
-		return 1
-	}
-	return 0
-}
+// defaultTab returns the tab opened by a new selection. Tables and collections
+// open on Data; every other context opens Details.
+func defaultTab(domain.ObjectKind) int { return 0 }
 
 func (d *detailsState) currentTab() string {
 	if d.tab < 0 || d.tab >= len(d.tabs) {

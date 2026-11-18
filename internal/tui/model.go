@@ -120,7 +120,9 @@ type Model struct {
 	sessionCancel context.CancelFunc
 	tree          treeState
 	details       detailsState
+	data          dataState
 	treeGen       uint64
+	dataGen       uint64
 
 	connecting      bool
 	connectingKey   string
@@ -167,6 +169,7 @@ func New(svc *app.Service) Model {
 		rowErrors: map[string]string{},
 		importSel: map[string]bool{},
 		tree:      newTree(),
+		data:      newDataState(),
 		newFocus:  fieldURI,
 	}
 	m.newURI = newInput("postgres://user@host:5432/db", false)
@@ -210,6 +213,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.data.endDown = 0
+		m.data.endPg = 0
 		m.resizeInputs()
 		if layout.Compute(m.width, m.height).TooSmall {
 			m.dismissModal()
@@ -232,6 +237,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTreeChildren(msg)
 	case treePrincipalsMsg:
 		return m.handleTreePrincipals(msg)
+	case dataPageMsg:
+		return m.handleDataPage(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -256,6 +263,12 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	if m.modal != modalNone {
+		m.data.endDown = 0
+		m.data.endPg = 0
+	} else {
+		m.resetDataGestures(key)
 	}
 	switch m.modal {
 	case modalNew:
@@ -323,10 +336,16 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.Tab:
 		if m.screen == ScreenWorkspace {
 			m.focus = (m.focus + 1) % 3
+			if m.focus == FocusMain {
+				return m, m.ensureData()
+			}
 		}
 	case keymap.ShiftTab:
 		if m.screen == ScreenWorkspace {
 			m.focus = (m.focus + 2) % 3
+			if m.focus == FocusMain {
+				return m, m.ensureData()
+			}
 		}
 	case keymap.Up:
 		switch {
@@ -334,8 +353,11 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.pickerMove(-1)
 		case m.focus == FocusTree:
 			m.tree.move(-1)
-			m.syncDetails()
+			return m, m.syncDetails()
 		case m.focus == FocusMain:
+			if m.dataTabActive() {
+				return m, m.moveDataRow(-1)
+			}
 			m.scrollDetails(-1)
 		}
 	case keymap.Down:
@@ -344,8 +366,11 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.pickerMove(1)
 		case m.focus == FocusTree:
 			m.tree.move(1)
-			m.syncDetails()
+			return m, m.syncDetails()
 		case m.focus == FocusMain:
+			if m.dataTabActive() {
+				return m, m.moveDataRow(1)
+			}
 			m.scrollDetails(1)
 		}
 	case keymap.PageUp:
@@ -354,8 +379,11 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.pickerMove(-8)
 		case m.focus == FocusTree:
 			m.tree.move(-m.treePage())
-			m.syncDetails()
+			return m, m.syncDetails()
 		case m.focus == FocusMain:
+			if m.dataTabActive() {
+				return m, m.moveDataPage(-1)
+			}
 			m.scrollDetails(-m.detailsPage())
 		}
 	case keymap.PageDown:
@@ -364,60 +392,110 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.pickerMove(8)
 		case m.focus == FocusTree:
 			m.tree.move(m.treePage())
-			m.syncDetails()
+			return m, m.syncDetails()
 		case m.focus == FocusMain:
+			if m.dataTabActive() {
+				return m, m.moveDataPage(1)
+			}
 			m.scrollDetails(m.detailsPage())
 		}
 	case keymap.Home:
-		if m.screen == ScreenWorkspace && m.focus == FocusTree {
-			m.tree.selectFirst()
-			m.syncDetails()
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				m.tree.selectFirst()
+				return m, m.syncDetails()
+			case FocusMain:
+				if m.dataTabActive() {
+					m.moveDataColumnEdge(false)
+				}
+			}
 		}
 	case keymap.End:
-		if m.screen == ScreenWorkspace && m.focus == FocusTree {
-			m.tree.selectLast()
-			m.syncDetails()
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				m.tree.selectLast()
+				return m, m.syncDetails()
+			case FocusMain:
+				if m.dataTabActive() {
+					m.moveDataColumnEdge(true)
+				}
+			}
 		}
 	case keymap.Left:
-		if m.screen == ScreenWorkspace && m.focus == FocusTree {
-			m.collapseSelected()
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				return m, m.collapseSelected()
+			case FocusMain:
+				if m.dataTabActive() {
+					m.moveDataColumn(-1)
+				}
+			}
 		}
 	case keymap.Right:
-		if m.screen == ScreenWorkspace && m.focus == FocusTree {
-			return m.expandSelected()
+		if m.screen == ScreenWorkspace {
+			switch m.focus {
+			case FocusTree:
+				return m.expandSelected()
+			case FocusMain:
+				if m.dataTabActive() {
+					m.moveDataColumn(1)
+				}
+			}
 		}
 	case keymap.Tab1:
 		if m.screen == ScreenWorkspace {
-			m.selectTab(0)
+			return m, m.selectTab(0)
 		}
 	case keymap.Tab2:
 		if m.screen == ScreenWorkspace {
-			m.selectTab(1)
+			return m, m.selectTab(1)
 		}
 	case keymap.Tab3:
 		if m.screen == ScreenWorkspace {
-			m.selectTab(2)
+			return m, m.selectTab(2)
 		}
 	case keymap.PrevTab:
 		if m.screen == ScreenWorkspace {
-			m.cycleTab(-1)
+			return m, m.cycleTab(-1)
 		}
 	case keymap.NextTab:
 		if m.screen == ScreenWorkspace {
-			m.cycleTab(1)
+			return m, m.cycleTab(1)
 		}
 	case keymap.Disconnect:
 		if m.screen == ScreenWorkspace {
 			m.disconnect()
 		}
 	case keymap.Cancel:
+		if m.data.loading {
+			m.cancelDataFetch()
+			m.setMessage(levelInfo, "cancelled")
+			return m, nil
+		}
 		if m.connecting {
 			m.cancelConnect()
 		}
 	case keymap.Search:
-		m.setMessage(levelInfo, "search — story 4")
+		m.setMessage(levelInfo, "search lands in the next story")
+	case keymap.ServerFilter:
+		if m.dataTabActive() {
+			m.setMessage(levelInfo, "search lands in the next story")
+		} else {
+			m.setMessage(levelInfo, "not available in this story")
+		}
 	case keymap.More:
-		m.setMessage(levelInfo, "more — story 4")
+		if m.dataFocused() {
+			return m, m.nextDataPage()
+		}
+		m.setMessage(levelInfo, "m fetches the next page in the Data tab")
+	case keymap.FetchAll:
+		if m.dataFocused() {
+			return m, m.fetchAllData()
+		}
+		m.setMessage(levelInfo, "Ctrl+A fetches rows in the Data tab")
 	case keymap.Execute:
 		m.setMessage(levelInfo, "execute — story 5")
 	case keymap.Space:
@@ -427,7 +505,7 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ExactCount:
 		m.setMessage(levelInfo, "exact count lands in the next story")
 	case keymap.ToggleMode, keymap.Edit, keymap.CaseMode,
-		keymap.Completion, keymap.ContextHelp, keymap.ServerFilter, keymap.FetchAll,
+		keymap.Completion, keymap.ContextHelp,
 		keymap.NextMatch, keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
 		keymap.ResizeQueryUp, keymap.ResizeQueryDown:
 		m.setMessage(levelInfo, "not available in this story")
@@ -582,6 +660,7 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.resetData()
 	m.message = "connected"
 	m.messageLevel = levelSuccess
 	if result.Warning != "" {
@@ -606,6 +685,7 @@ func (m *Model) disconnect() {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.resetData()
 	m.reloadProfiles(context.Background(), key)
 	m.setMessage(levelInfo, "disconnected")
 }

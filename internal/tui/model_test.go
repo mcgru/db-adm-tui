@@ -30,9 +30,6 @@ func TestGolden(t *testing.T) {
 	m = workspaceFrom(t, m)
 	assertGolden(t, "workspace.golden", m.View().Content)
 
-	m, _ = press(t, m, "1")
-	assertGolden(t, "workspace-data.golden", m.View().Content)
-
 	m, _ = press(t, m, "3")
 	assertGolden(t, "workspace-privileges.golden", m.View().Content)
 
@@ -244,7 +241,7 @@ func TestCyrillicAliasesOpenFlows(t *testing.T) {
 func TestMoreAndHelpMessages(t *testing.T) {
 	m := workspace(t)
 	m, _ = press(t, m, "m")
-	if m.message != "more — story 4" {
+	if m.message != "m fetches the next page in the Data tab" {
 		t.Fatalf("m message = %q", m.message)
 	}
 	m, _ = press(t, m, "?")
@@ -503,7 +500,7 @@ func TestRawSelectionAndFocusStyles(t *testing.T) {
 	if !strings.Contains(view, m.styles.Focused.Render(fmt.Sprintf(" objects %d ", m.tree.objectCount()))) {
 		t.Fatal("focused tree title lacks the Focused style")
 	}
-	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("2 Details")
+	activeTab := m.styles.Accent.Bold(true).Underline(true).Render("1 Data")
 	if !strings.Contains(view, activeTab) {
 		t.Fatal("active tab lacks bold/underline accent styling")
 	}
@@ -1385,9 +1382,12 @@ func TestContextTabsAndPlaceholders(t *testing.T) {
 	if !strings.Contains(view, "1 Data · 2 Details · 3 Privileges") {
 		t.Fatalf("table tabs missing:\n%s", view)
 	}
-	m, _ = press(t, m, "1")
-	if !strings.Contains(StripANSI(m.View().Content), "data browsing lands in story 4") {
-		t.Fatal("data placeholder missing")
+	if !strings.Contains(view, "row-001") {
+		t.Fatalf("data grid missing rows:\n%s", view)
+	}
+	m, _ = press(t, m, "2")
+	if !strings.Contains(StripANSI(m.View().Content), "public.customers") {
+		t.Fatal("details identity missing")
 	}
 	m, _ = press(t, m, "3")
 	if !strings.Contains(StripANSI(m.View().Content), "privilege inspection lands in story 7") {

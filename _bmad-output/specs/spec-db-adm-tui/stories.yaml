@@ -24,29 +24,50 @@
     source pointer prompts once per connect.
 
 - id: "3"
-  title: Common tree, Security, and object details
+  title: Common tree and Security
   description: >-
     Implement catalog adapters for PostgreSQL, MySQL/MariaDB, and MongoDB, the
-    common tree with Security and access markers, and object details/statistics
-    including exact count. Covers CAP-2 and CAP-3.
+    common tree with Security, access markers, and PostgreSQL database
+    switching. Covers CAP-2.
   spec_checkpoint: false
   done_checkpoint: false
   invoke_dev_with: >-
-    Use Catalog.OrderKey for paging order; MongoDB defaults to _id. Estimates
-    must never render as 0 when unavailable; views/sequences show the v1
-    placeholder only.
+    Use Catalog.OrderKey for paging order; MongoDB defaults to _id. Lazy load
+    children and keep failures attached to the parent.
+
+- id: "3b"
+  title: Object details and statistics
+  description: >-
+    Implement estimated count, size, indexes, sampled MongoDB structure, and
+    cancellable exact count in the Details tab. Covers CAP-3.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    Estimates must never render as 0 when unavailable; views/sequences show the
+    v1 placeholder only. Section failures degrade independently.
 
 - id: "4"
-  title: Data browsing and search
+  title: Data browsing and paging
   description: >-
-    Implement paged table/collection browsing with the offset window, grid,
-    `/` filter, `Ctrl+F` regexp, and global case mode. Covers CAP-4.
+    Implement paged table/collection browsing with the offset window and grid.
+    Covers the browsing half of CAP-4.
   spec_checkpoint: false
   done_checkpoint: false
   invoke_dev_with: >-
-    Enforce the 10,000-row/64 MB window and the end-of-data gesture. `/` is
-    local to loaded rows; `Ctrl+F` is server-side on the focused field; no
-    sorting or editing.
+    Enforce the 10,000-row/64 MB window and the end-of-data gesture. No sorting
+    or editing.
+
+- id: "4b"
+  title: Data search and case mode
+  description: >-
+    Implement the `/` buffer filter, `n`/`N` match navigation, `Ctrl+F`
+    server-side regexp on the focused field, and session-wide case mode. Covers
+    the search half of CAP-4.
+  spec_checkpoint: false
+  done_checkpoint: false
+  invoke_dev_with: >-
+    `/` is local to loaded rows; `Ctrl+F` is server-side on the focused field.
+    Preserve the previous view on errors and cancellation.
 
 - id: "5"
   title: Query bar, Results, completion, and history

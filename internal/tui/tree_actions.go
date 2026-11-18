@@ -23,39 +23,48 @@ func (m Model) detailsPage() int {
 	return 4
 }
 
-func (m *Model) syncDetails() {
+func (m *Model) syncDetails() tea.Cmd {
 	node, ok := m.tree.selectedNode()
 	if !ok {
 		m.details.clear()
-		return
+		m.resetData()
+		return nil
 	}
 	if m.details.has && m.details.node.Ref.Key() == node.Ref.Key() {
 		m.details.node = node
-		return
+		return nil
 	}
 	m.details.selectNode(node)
+	if node.Kind == domain.KindTable || node.Kind == domain.KindCollection {
+		m.resetDataFor(node.Ref)
+	} else {
+		m.resetData()
+	}
+	return nil
 }
 
-func (m *Model) selectTab(index int) {
+func (m *Model) selectTab(index int) tea.Cmd {
 	if !m.details.has {
 		m.setMessage(levelInfo, "select an object first")
-		return
+		return nil
 	}
 	if index < 0 || index >= len(m.details.tabs) {
 		m.setMessage(levelInfo, m.details.tabNote(index))
-		return
+		return nil
 	}
 	m.details.tab = index
 	m.details.offset = 0
+	return m.ensureData()
 }
 
-func (m *Model) cycleTab(delta int) {
+func (m *Model) cycleTab(delta int) tea.Cmd {
 	if !m.details.has || len(m.details.tabs) == 0 {
 		m.setMessage(levelInfo, "select an object first")
-		return
+		return nil
 	}
 	m.details.tab = (m.details.tab + delta + len(m.details.tabs)) % len(m.details.tabs)
 	m.details.offset = 0
+	return m.ensureData()
 }
 
 func (m *Model) scrollDetails(delta int) {
@@ -67,20 +76,20 @@ func (m *Model) scrollDetails(delta int) {
 	m.details.scroll(delta, height, len(lines))
 }
 
-func (m *Model) collapseSelected() {
+func (m *Model) collapseSelected() tea.Cmd {
 	node, ok := m.tree.selectedNode()
 	if !ok {
-		return
+		return nil
 	}
 	key := node.Ref.Key()
 	if m.tree.collapse(key) {
-		m.syncDetails()
-		return
+		return m.syncDetails()
 	}
 	if tn, ok := m.tree.node(key); ok && tn.Parent != "" {
 		m.tree.selectKey(tn.Parent)
-		m.syncDetails()
+		return m.syncDetails()
 	}
+	return nil
 }
 
 func (m Model) expandSelected() (tea.Model, tea.Cmd) {
@@ -93,7 +102,7 @@ func (m Model) expandSelected() (tea.Model, tea.Cmd) {
 	}
 	if !node.Expandable {
 		if node.IsObject() || node.IsPrincipal() {
-			m.syncDetails()
+			return m, m.syncDetails()
 		}
 		return m, nil
 	}
@@ -114,8 +123,7 @@ func (m Model) expandSelected() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree.expand(key)
-	m.syncDetails()
-	return m, nil
+	return m, m.syncDetails()
 }
 
 func (m Model) openSelected() (tea.Model, tea.Cmd) {
@@ -129,9 +137,10 @@ func (m Model) openSelected() (tea.Model, tea.Cmd) {
 	if node.Expandable {
 		return m.expandSelected()
 	}
-	m.syncDetails()
+	_ = m.syncDetails()
 	if node.IsObject() || node.IsPrincipal() {
 		m.focus = FocusMain
+		return m, m.ensureData()
 	}
 	return m, nil
 }
@@ -199,11 +208,10 @@ func (m Model) handleTreeRoot(msg treeRootMsg) (tea.Model, tea.Cmd) {
 	})
 	m.tree.rebuild()
 	m.tree.selectFirst()
-	m.syncDetails()
 	if m.messageLevel != levelError && m.messageLevel != levelWarning {
 		m.setMessage(levelSuccess, "connected · "+databaseCount(len(nodes)))
 	}
-	return m, nil
+	return m, m.syncDetails()
 }
 
 func (m Model) handleTreeChildren(msg treeChildrenMsg) (tea.Model, tea.Cmd) {
@@ -222,8 +230,7 @@ func (m Model) handleTreeChildren(msg treeChildrenMsg) (tea.Model, tea.Cmd) {
 	if node, ok := m.tree.node(msg.key); ok && node.Node.Kind == domain.KindDatabase {
 		m.setMessage(levelInfo, "database "+node.Node.Ref.Database)
 	}
-	m.syncDetails()
-	return m, nil
+	return m, m.syncDetails()
 }
 
 func (m Model) handleTreePrincipals(msg treePrincipalsMsg) (tea.Model, tea.Cmd) {
@@ -256,8 +263,7 @@ func (m Model) handleTreePrincipals(msg treePrincipalsMsg) (tea.Model, tea.Cmd) 
 	}
 	m.tree.addChildren(msg.key, nodes)
 	m.tree.expand(msg.key)
-	m.syncDetails()
-	return m, nil
+	return m, m.syncDetails()
 }
 
 func (m Model) stampNodes(nodes []domain.Node) []domain.Node {
@@ -315,6 +321,7 @@ func (m Model) leaveWorkspace(err error) (tea.Model, tea.Cmd) {
 	m.focus = FocusTree
 	m.tree.reset()
 	m.details.clear()
+	m.resetData()
 	m.reloadProfiles(context.Background(), key)
 	m.rowErrors[key] = oneLine(err.Error())
 	m.setMessage(levelError, oneLine(err.Error()))

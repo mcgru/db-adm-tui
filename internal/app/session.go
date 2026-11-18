@@ -158,9 +158,33 @@ func (s *Session) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, e
 	return s.bundle.Catalog.OrderKey(ctx, ref)
 }
 
+// Page returns one read-only data window. The caller owns cancellation; user
+// data pages have no default timeout.
+func (s *Session) Page(ctx context.Context, query domain.DataQuery) (domain.DataPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyData(); err != nil {
+		return domain.DataPage{}, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, query.Ref.Database); err != nil {
+		return domain.DataPage{}, err
+	}
+	if err := s.readyData(); err != nil {
+		return domain.DataPage{}, err
+	}
+	return s.bundle.DataReader.Page(ctx, query)
+}
+
 func (s *Session) ready() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.Catalog == nil {
 		return domain.NewError(domain.KindConfig, "session", "no active connection")
+	}
+	return nil
+}
+
+func (s *Session) readyData() error {
+	if s.dead || s.bundle.Session == nil || s.bundle.DataReader == nil {
+		return domain.NewError(domain.KindConfig, "data", "data browsing is not available")
 	}
 	return nil
 }

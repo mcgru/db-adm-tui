@@ -26,6 +26,7 @@ type fakeConnector struct {
 	password string
 	profile  domain.Profile
 	conns    []*fakeConn
+	data     ports.DataReader
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
@@ -36,7 +37,7 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	}
 	conn := &fakeConn{}
 	f.conns = append(f.conns, conn)
-	return ports.SessionBundle{Session: conn, Catalog: fakeCatalog{database: p.Database}}, nil
+	return ports.SessionBundle{Session: conn, Catalog: fakeCatalog{database: p.Database}, DataReader: f.data}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
 
