@@ -42,7 +42,7 @@ func (m *Model) syncDetails() tea.Cmd {
 	} else {
 		m.resetData()
 	}
-	return m.ensureTabInfo()
+	return tea.Batch(m.ensureData(), m.ensureTabInfo())
 }
 
 func (m *Model) selectTab(index int) tea.Cmd {

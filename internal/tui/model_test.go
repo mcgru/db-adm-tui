@@ -1618,6 +1618,54 @@ func TestTreeSelectionShowsDetailsUntilEnter(t *testing.T) {
 	}
 }
 
+func TestTreeMoveKeepsActiveTab(t *testing.T) {
+	m := workspace(t)
+	m, cmd := press(t, m, "1")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "down")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Details" || m.details.node.Name != "invoices" || !m.details.structureLoaded {
+		t.Fatalf("details move = %q %q loaded=%v", m.details.currentTab(), m.details.node.Name, m.details.structureLoaded)
+	}
+	m, cmd = press(t, m, "2")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "down")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Indexes" || m.details.node.Name != "audit_log" || !m.details.indexesLoaded {
+		t.Fatalf("indexes move = %q %q loaded=%v", m.details.currentTab(), m.details.node.Name, m.details.indexesLoaded)
+	}
+	m, cmd = press(t, m, "4")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "up")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Data" || m.details.node.Name != "invoices" || !m.data.loaded {
+		t.Fatalf("data move = %q %q loaded=%v", m.details.currentTab(), m.details.node.Name, m.data.loaded)
+	}
+}
+
+func TestTreeMoveResetsPagingState(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
+	m, cmd := press(t, m, "m")
+	m = settle(t, m, cmd)
+	m, cmd = press(t, m, "ctrl+a")
+	m = settle(t, m, cmd)
+	if m.data.batch != dataFetchAllSize || len(m.data.rows) < 200 {
+		t.Fatalf("setup rows=%d batch=%d", len(m.data.rows), m.data.batch)
+	}
+	m, _ = press(t, m, "shift+tab")
+	m, cmd = press(t, m, "down")
+	m = settle(t, m, cmd)
+	if m.details.currentTab() != "Data" || m.details.node.Name != "invoices" {
+		t.Fatalf("tab = %q node = %q", m.details.currentTab(), m.details.node.Name)
+	}
+	if m.data.batch != dataPageSize || m.data.maxRows != dataMaxWindowRows || m.data.windowStart != 0 {
+		t.Fatalf("paging not reset: batch=%d maxRows=%d start=%d", m.data.batch, m.data.maxRows, m.data.windowStart)
+	}
+	if !m.data.loaded || len(m.data.rows) != 100 {
+		t.Fatalf("first page = %d rows, loaded=%v", len(m.data.rows), m.data.loaded)
+	}
+}
+
 func TestContextTabsAndPlaceholders(t *testing.T) {
 	m := workspace(t)
 	view := StripANSI(m.View().Content)

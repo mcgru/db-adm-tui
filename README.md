@@ -91,7 +91,10 @@ are the next story; privilege inspection lands in story 7.
 
 Tables and collections expose `Details`, `Indexes`, `Privileges`, and `Data`
 tabs (`1`–`4`; `[`/`]` cycle). Selecting one in the tree opens Details and loads
-its structure; `Enter` switches to Data and loads the first page. Details shows
+its structure; `Enter` switches to Data and loads the first page. Moving the
+cursor to the next table keeps the active tab: Details reloads structure,
+Indexes reloads indexes, and Data loads a fresh 100-row page. Paging state
+(`m`, `Ctrl+A`) does not carry over to the new table. Details shows
 identity, the statistics placeholder, and a Structure table: PostgreSQL/MySQL
 list columns with type, nullability, and default; MongoDB samples the first 100
 documents and lists field paths with presence counts and percentages. Table

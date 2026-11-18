@@ -38,10 +38,19 @@ type detailLine struct {
 }
 
 func (d *detailsState) selectNode(node domain.Node) {
+	previousTab := ""
+	if d.has {
+		previousTab = d.currentTab()
+	}
 	d.node = node
 	d.has = true
 	d.tabs = tabsFor(node.Kind)
 	d.tab = defaultTab(node.Kind)
+	if previousTab != "" {
+		if index := tabIndex(d.tabs, previousTab); index >= 0 {
+			d.tab = index
+		}
+	}
 	d.offset = 0
 	d.structure = domain.Structure{}
 	d.structureErr = ""

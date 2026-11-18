@@ -726,20 +726,26 @@ func TestGoldenDataStates(t *testing.T) {
 	assertGolden(t, "workspace-data-error.golden", failed.View().Content)
 }
 
-func TestDataTreeCursorDoesNotFetchUntilOpened(t *testing.T) {
-	reader := &fakeDataReader{total: 100}
+func TestTreeCursorLoadsDataOnlyWhenDataTabActive(t *testing.T) {
+	reader := &fakeDataReader{total: 250}
 	m, _ := dataWorkspaceWithReader(t, reader)
 	m, _ = press(t, m, "tab")
 	m, _ = press(t, m, "tab") // tree
 	before := len(reader.calls)
-	m, _ = press(t, m, "down") // invoices
-	if len(reader.calls) != before {
-		t.Fatalf("cursor move queried data: %d -> %d", before, len(reader.calls))
-	}
-	m, cmd := press(t, m, "enter")
+	m, cmd := press(t, m, "down") // invoices
 	m = settle(t, m, cmd)
-	if len(reader.calls) <= before {
-		t.Fatal("Enter on a table did not load data")
+	if len(reader.calls) != before+1 {
+		t.Fatalf("Data cursor move did not load the first page: %d -> %d", before, len(reader.calls))
+	}
+	if len(m.data.rows) != 100 || m.data.windowStart != 0 {
+		t.Fatalf("first page = %d rows, start=%d", len(m.data.rows), m.data.windowStart)
+	}
+	m, cmd = press(t, m, "1") // Details
+	m = settle(t, m, cmd)
+	before = len(reader.calls)
+	m, _ = press(t, m, "down") // audit_log
+	if len(reader.calls) != before {
+		t.Fatalf("Details cursor move queried data: %d -> %d", before, len(reader.calls))
 	}
 }
 
