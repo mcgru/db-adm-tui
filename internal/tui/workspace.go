@@ -45,8 +45,18 @@ func (m Model) viewTopStatus(width int) string {
 
 func (m Model) viewTree(height, width int) string {
 	inner := width - 4
-	visible := m.tree.visibleRows(height - 2)
+	rows := height - 2
+	if m.treeSearchVisible() {
+		rows--
+	}
+	if rows < 1 {
+		rows = 1
+	}
+	visible := m.tree.visibleRows(rows)
 	var lines []string
+	if m.treeSearchVisible() {
+		lines = append(lines, m.renderTreeSearchBar(inner))
+	}
 	switch {
 	case m.tree.loadingRoot:
 		lines = append(lines, m.styles.Muted.Render("loading…"))
@@ -64,16 +74,28 @@ func (m Model) viewTree(height, width int) string {
 			case row.Info != "":
 				lines = append(lines, m.styles.Muted.Render(Truncate(line, inner)))
 			case row.Key == selectedKey:
-				lines = append(lines, m.styles.Select.Render(Pad(line, inner)))
+				if m.tree.searchPattern == "" {
+					lines = append(lines, m.styles.Select.Render(Pad(line, inner)))
+					break
+				}
+				label := m.renderTreeSearchLabel(row, m.styles.Select)
+				if access := treeRowAccess(row); access != "" {
+					label += m.styles.Select.Render("  " + access)
+				}
+				lines = append(lines, Pad(Truncate(label, inner), inner))
 			case row.Node.Kind == domain.KindSecurity || row.Node.Kind == domain.KindUsers ||
 				row.Node.Kind == domain.KindRoles || row.Node.Kind == domain.KindUser ||
 				row.Node.Kind == domain.KindRole:
-				lines = append(lines, m.styles.Info.Render(Truncate(line, inner)))
+				label := m.renderTreeSearchLabel(row, m.styles.Info)
+				if access := treeRowAccess(row); access != "" {
+					label += m.styles.Info.Render("  " + access)
+				}
+				lines = append(lines, Truncate(label, inner))
 			default:
-				label := treeRowLabel(row)
+				label := m.renderTreeSearchLabel(row, m.styles.Text)
 				access := treeRowAccess(row)
 				if access == "" {
-					lines = append(lines, m.styles.Text.Render(Truncate(label, inner)))
+					lines = append(lines, Truncate(label, inner))
 					break
 				}
 				suffix := "  " + access
@@ -81,7 +103,7 @@ func (m Model) viewTree(height, width int) string {
 				if labelWidth < 1 {
 					labelWidth = 1
 				}
-				lines = append(lines, m.styles.Text.Render(Truncate(label, labelWidth))+
+				lines = append(lines, Truncate(label, labelWidth)+
 					m.styles.Muted.Render(suffix))
 			}
 		}
@@ -252,6 +274,9 @@ func (m Model) viewBottom(width int) string {
 		right = "1/2/3 tab · Up/Down scroll"
 	case FocusQuery:
 		right = "Enter run · Ctrl+Space complete"
+	}
+	if m.tree.searchPrompt {
+		right = "type to search · Enter keep · Esc clear"
 	}
 	if m.queryRunning {
 		right = "Esc cancels"

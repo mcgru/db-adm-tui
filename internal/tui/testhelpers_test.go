@@ -60,6 +60,43 @@ type fakeConnector struct {
 	privileges *fakePrivilegeReader
 	query      *fakeQueryExecutor
 	mode       *fakeModeController
+	role       *fakeRoleAdmin
+}
+
+type fakeRoleAdmin struct {
+	result domain.MutationResult
+	err    error
+	calls  int
+}
+
+func (f *fakeRoleAdmin) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) DropRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) GrantRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) RevokeRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) GrantPrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) RevokePrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
 }
 
 type fakeModeController struct {
@@ -296,10 +333,14 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if mode == nil {
 		mode = &fakeModeController{}
 	}
+	role := f.role
+	if role == nil {
+		role = &fakeRoleAdmin{result: domain.MutationResult{Statement: "role change"}}
+	}
 	return ports.SessionBundle{
 		Session: conn, Catalog: catalog, DataReader: data,
 		StatsReader: stats, PrivilegeReader: privileges, QueryExecutor: query,
-		ModeController: mode,
+		ModeController: mode, RoleAdmin: role,
 	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }

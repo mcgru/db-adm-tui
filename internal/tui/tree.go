@@ -34,6 +34,10 @@ type treeState struct {
 	selected    int
 	loadingRoot bool
 	rootErr     string
+
+	searchPrompt  bool
+	searchPattern string
+	searchCursor  int
 }
 
 func newTree() treeState {

@@ -43,13 +43,15 @@ The tool starts on the profile picker.
 | `m` | Append the next Data/Results page |
 | `Ctrl+A` | Append a full-fetch batch (Data) or drain the result cursor up to 10,000 rows |
 | `` ` `` | Data/Results: expand/collapse the selected JSON object column into dotted subcolumns |
-| `/` or `.` | Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
+| `/` or `.` | Tree: quick search over loaded/expanded nodes. Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
 | `Ctrl+F` | Data tab: server-side regexp on the focused column or field |
 | `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
-| `n` | New connection at the picker; next match in a filtered Data view |
-| `N` | Previous match in a filtered Data view (wraps) |
+| `n` | New connection at the picker; next tree-search or filtered Data view match |
+| `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
-| `e` | Edit the selected profile at the picker |
+| `e` | Edit the selected profile at the picker; with a role selected in the tree, open the role grant editor |
+| `+` | With the roles group selected: create a role. With a role selected: grant privileges or assign the role. Requires `r/w` |
+| `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. Requires `r/w` |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
@@ -77,6 +79,19 @@ tables, views, and sequences. MySQL/MariaDB databases expand directly into
 tables, views, and sequences; MongoDB databases expand into collections and
 views. Children load lazily on expand; a failed load stays attached to the
 parent and `Enter` retries it.
+
+**Tree quick search.** With focus on the tree, `/` (or `.`) opens a one-line
+search bar over the rows already loaded and expanded: database names, schemas,
+tables, collections, views, and security principals. Matching is literal and
+follows the session case mode; matching text is highlighted with the match
+style, including on the selected row. Typing jumps the selection to the first
+matching row as soon as a pattern matches. `Enter` keeps the search, closes the
+bar, and jumps to the first match; `n`/`N` jump to the next/previous match
+below/above the current row with wrapping, and `Esc` clears the search. Typing
+`n` while the bar is open inserts `n`; `Tab`, `Shift+Tab`, `Ctrl+D`, and other
+global keys still work. The search never queries the database and never expands
+a node by itself. With focus in the main pane, `/` continues to filter loaded
+Data/Results rows as before.
 
 `Security` expands into `users` and `roles` groups. PostgreSQL shows cluster
 roles with attributes, MySQL/MariaDB shows `user@host` accounts and roles, and
@@ -126,7 +141,28 @@ the selected object, database/schema, Security connection, or user/role. It
 keeps PostgreSQL `has_*` checks and `requires SET ROLE`, MySQL `SHOW GRANTS`
 plus granted/active roles, and MongoDB roles and inherited privileges in their
 native terms. A failed section shows `not permitted` without hiding the other
-sections. There is no `GRANT` or `REVOKE` action.
+sections. There is no `GRANT` or `REVOKE` action in read-only mode.
+
+## Role administration (Story 9b)
+
+Role changes are available only in `r/w`. In `r/o`, `+`, `-`, and the role
+editor report that read-write mode is required and point to `Ctrl+X Ctrl+W`;
+the tool never switches automatically.
+
+- `roles` group + `+`: create a native role.
+- role + `+`: grant native privileges on a database/schema/table/collection,
+  or assign the role to a user/role.
+- role + `-`: revoke privileges, remove an assignment, or drop the role.
+- role + `e`: open the grant editor directly.
+
+The editor keeps engine-native terms. `Space` cycles the target kind or toggles
+a privilege, `Tab`/`Shift+Tab` move between fields, `Up`/`Down` move through the
+multi-select privilege list, `Enter` applies, and `Esc` cancels. Targets and
+privilege names are validated by the engine adapter; unsupported combinations
+are rejected before execution. Successful changes are audited in the existing
+history and refresh the Security list or the current Privileges pane.
+
+Users (Story 9c) and row add/remove (Story 9a) are not implemented yet.
 
 ## Data browsing
 

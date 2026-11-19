@@ -340,6 +340,7 @@ SELECT CURRENT_DATE;`,
 	"tree": `Enter opens the selected object.
 Right expands the node.
 Left collapses it.
+/ searches loaded/expanded tree names; typing jumps to the first match; Enter jumps to it; n/N walk matches.
 Ctrl+D disconnects.`,
 
 	"details": `Select an object and press 1.
@@ -387,11 +388,14 @@ Ctrl+X Ctrl+W asks before enabling r/w.
 Ctrl+X Ctrl+W again returns to r/o immediately.
 Esc releases an open Results cursor before switching.`,
 
-	"filter": `/ filters loaded rows only; n/N walk matches.
+	"filter": `With tree focus, / searches loaded/expanded tree rows; n/N walk matches.
+In Data/Results, / filters loaded rows only; n/N walk matches.
 Ctrl+F runs a server-side regexp in Data.
 Esc clears the filter.`,
 
 	"security": `Expand Security to see users and roles.
+Select a role and use + to grant/assign, - to revoke/remove/drop, or e to open the grant editor.
+Role changes require read-write mode.
 Select a principal and open Privileges for native grants and memberships.`,
 
 	"status": `The bottom line shows counts, elapsed query time, errors, and cancellation hints.

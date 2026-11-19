@@ -488,6 +488,71 @@ func (s *Session) ResultsNext(ctx context.Context, limit int) (domain.QueryPage,
 	return page, nil
 }
 
+// CreateRole creates a native role.
+func (s *Session) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.CreateRole(ctx, role)
+	})
+}
+
+// DropRole drops a native role.
+func (s *Session) DropRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.DropRole(ctx, role)
+	})
+}
+
+// GrantRole grants one native role to a user or role.
+func (s *Session) GrantRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.GrantRole(ctx, membership)
+	})
+}
+
+// RevokeRole removes one native role from a user or role.
+func (s *Session) RevokeRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.RevokeRole(ctx, membership)
+	})
+}
+
+// GrantPrivileges grants native privileges on a database, schema, or table to
+// a role.
+func (s *Session) GrantPrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.GrantPrivileges(ctx, grant)
+	})
+}
+
+// RevokePrivileges removes native privileges on a target from a role.
+func (s *Session) RevokePrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RoleAdmin.RevokePrivileges(ctx, grant)
+	})
+}
+
+func (s *Session) runRoleMutation(ctx context.Context, operation func() (domain.MutationResult, error)) (domain.MutationResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.RoleAdmin == nil {
+		return domain.MutationResult{}, domain.NewError(domain.KindConfig, "role", "role administration is not available")
+	}
+	if s.readOnly.Load() {
+		return domain.MutationResult{}, domain.NewError(domain.KindGuard, "role", "read-write mode is required; Ctrl+X Ctrl+W to switch.")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.MutationResult{}, err
+	}
+	start := time.Now()
+	result, err := operation()
+	if err != nil {
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		return result, err
+	}
+	s.recordHistoryLocked(result.Statement, start, "ok")
+	return result, nil
+}
+
 // CancelQuery interrupts a running query or paging call without waiting for
 // the serialized session lock. The cursor is cleaned up when the call returns.
 func (s *Session) CancelQuery() {

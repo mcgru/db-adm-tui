@@ -48,6 +48,10 @@ const (
 	modalStatement
 	modalHelp
 	modalMode
+	modalRoleMenu
+	modalRoleCreate
+	modalRoleForm
+	modalRoleConfirm
 )
 
 type messageLevel int
@@ -166,6 +170,7 @@ type Model struct {
 	query           textinput.Model
 	statementInput  textinput.Model
 	statementOrigin string
+	role            roleState
 	history         []string
 	historyIndex    int
 	historyDraft    string
@@ -195,6 +200,7 @@ type Model struct {
 	treeWidth      int
 	queryHeight    int
 	layoutKey      string
+	roleGen        uint64
 
 	connecting      bool
 	connectingKey   string
@@ -265,6 +271,7 @@ func New(svc *app.Service) Model {
 	m.passwordInput = newInput("", true)
 	m.query = newInput("", false)
 	m.statementInput = newInput("", false)
+	m.role = newRoleState()
 	m.editLabel = newInput("label", false)
 	m.editHost = newInput("host", false)
 	m.editPort = newInput("5432", false)
@@ -355,6 +362,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEscChordTimeout(msg)
 	case modeDoneMsg:
 		return m.handleModeDone(msg)
+	case roleDoneMsg:
+		return m.handleRoleDone(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -399,6 +408,14 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	case modalMode:
 		return m.handleModeKey(msg)
+	case modalRoleMenu:
+		return m.handleRoleMenuKey(msg)
+	case modalRoleCreate:
+		return m.handleRoleCreateKey(msg)
+	case modalRoleForm:
+		return m.handleRoleFormKey(msg)
+	case modalRoleConfirm:
+		return m.handleRoleConfirmKey(msg)
 	}
 	if m.pendingChord {
 		m.pendingChord = false
@@ -418,6 +435,11 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 			return chordTimeoutMsg{seq: seq}
 		})
+	}
+	if m.tree.searchPrompt {
+		if next, cmd, handled := m.handleTreeSearchKey(msg); handled {
+			return next, cmd
+		}
 	}
 	if m.completion.active {
 		if next, cmd, handled := m.handleCompletionKey(msg); handled {
@@ -465,6 +487,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m.openSelected()
 		}
 	case keymap.New:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree &&
+			m.tree.searchPattern != "" && !m.tree.searchPrompt {
+			return m, m.nextTreeMatch(1)
+		}
 		if m.filterKeepsNewKey() {
 			if (m.data.bufferPattern != "" || m.data.serverFilter != nil) && m.data.prompt == promptNone {
 				return m, m.nextMatch(1)
@@ -488,11 +514,31 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 				m.openEditModal(p)
 			}
 		}
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.startRoleEdit()
+		}
+	case keymap.Add:
+		if m.screen == ScreenWorkspace {
+			if m.focus == FocusTree {
+				return m.startRoleAdd()
+			}
+			m.setMessage(levelInfo, "row changes are story 9a")
+		}
+	case keymap.Remove:
+		if m.screen == ScreenWorkspace {
+			if m.focus == FocusTree {
+				return m.startRoleRemove()
+			}
+			m.setMessage(levelInfo, "row changes are story 9a")
+		}
 	case keymap.Help:
 		m.setMessage(levelInfo, "help — story 9")
 	case keymap.Tab:
 		if m.screen == ScreenWorkspace {
 			m.completion = completionState{}
+			if m.focus == FocusTree {
+				m.clearTreeSearch()
+			}
 			m.focus = (m.focus + 1) % 3
 			m.syncQueryFocus()
 			m.syncQueryPlaceholder()
@@ -503,6 +549,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ShiftTab:
 		if m.screen == ScreenWorkspace {
 			m.completion = completionState{}
+			if m.focus == FocusTree {
+				m.clearTreeSearch()
+			}
 			m.focus = (m.focus + 2) % 3
 			m.syncQueryFocus()
 			m.syncQueryPlaceholder()
@@ -661,6 +710,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.disconnect()
 		}
 	case keymap.Cancel:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree && m.tree.searchPattern != "" {
+			m.clearTreeSearch()
+			return m, nil
+		}
 		if m.queryRunning {
 			return m.cancelResults()
 		}
@@ -691,6 +744,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.cancelConnect()
 		}
 	case keymap.Search:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			m.openTreeSearch()
+			return m, nil
+		}
 		return m, m.openBufferFilter()
 	case keymap.ServerFilter:
 		return m, m.openServerFilter()
@@ -727,6 +784,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.CaseMode:
 		return m, m.toggleCaseMode()
 	case keymap.NextMatch:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree &&
+			m.tree.searchPattern != "" && !m.tree.searchPrompt {
+			return m, m.nextTreeMatch(-1)
+		}
 		return m, m.nextMatch(-1)
 	case keymap.ToggleMode:
 		if m.screen != ScreenWorkspace || m.session == nil {
@@ -934,6 +995,7 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.queryRunning = false
 	m.modeBusy = false
 	m.modeGen++
+	m.roleGen++
 	m.escChord = false
 	m.completion = completionState{}
 	warnings := []string{}
@@ -986,6 +1048,7 @@ func (m *Model) disconnect() {
 	m.queryRunning = false
 	m.modeBusy = false
 	m.modeGen++
+	m.roleGen++
 	m.elevated = false
 	m.escChord = false
 	m.completion = completionState{}
@@ -1209,6 +1272,14 @@ func (m Model) viewModal() string {
 		return m.viewHelp()
 	case modalMode:
 		return m.viewModeConfirm()
+	case modalRoleMenu:
+		return m.viewRoleMenu()
+	case modalRoleCreate:
+		return m.viewRoleCreate()
+	case modalRoleForm:
+		return m.viewRoleForm()
+	case modalRoleConfirm:
+		return m.viewRoleConfirm()
 	}
 	return ""
 }
@@ -1236,6 +1307,8 @@ func (m *Model) dismissModal() {
 		m.helpTerm = ""
 		m.helpBody = ""
 	case modalMode:
+		m.modal = modalNone
+	case modalRoleMenu, modalRoleCreate, modalRoleForm, modalRoleConfirm:
 		m.modal = modalNone
 	}
 }

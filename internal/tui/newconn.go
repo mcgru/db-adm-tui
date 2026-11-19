@@ -197,6 +197,10 @@ func (m Model) handlePasswordKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	if m.modal == modalNone && m.screen == ScreenWorkspace && m.focus == FocusTree && m.tree.searchPrompt {
+		m.tree.searchPattern, m.tree.searchCursor = insertFilterText(m.tree.searchPattern, m.tree.searchCursor, msg.Content)
+		return m, nil
+	}
 	if m.modal == modalNone && m.screen == ScreenWorkspace && m.focus == FocusQuery && !m.queryRunning {
 		updated, cmd := m.query.Update(msg)
 		m.query = updated

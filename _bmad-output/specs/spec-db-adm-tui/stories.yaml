@@ -117,3 +117,28 @@
     Run the credential-leak test, ANSI injection test, and history rotation
     test. Build CGO_ENABLED=0 binaries for linux amd64/arm64 and verify no
     daemon, listening port, or telemetry.
+
+- id: "9"
+  title: "Structured write operations: users, access roles, and rows (v2)"
+  description: >-
+    Add contextual + / - actions for native users, access roles/grants, and
+    rows or documents. Every action requires read-write mode and an explicit
+    confirmation; native terms and engine-specific scope are preserved.
+  v2: true
+  spec_checkpoint: true
+  done_checkpoint: true
+  invoke_dev_with: >-
+    Start with 9b roles/grants, then 9c users; keep 9a rows deferred. Both are
+    unavailable in r/o and must refuse mutations with the mode-switch hint.
+    Cover PostgreSQL, MySQL/MariaDB, and MongoDB. Keep native terms; do not
+    invent a cross-engine "user in database" model. Amend the v1 PRD/FR-40 and
+    the read-only-source invariant before coding. Use ~/.pgpass and ~/.mypass
+    with HOST:PORT:DBNAME:USER:PASSWORD lines; DBNAME "*" matches every
+    database. Use ~/.mongo.USER-in-DB files with full mongodb:// URIs. Comment
+    the old matching entry, append the new one, offer the save-as-profile
+    prompt, and audit through existing history. Replace the first-slice modal
+    grant forms with the two matrices (Principal×Role and Principal/Role×Object)
+    opened by Ctrl+X Ctrl+R; expose structured matrix data from the adapters.
+    The current account must be the admin; do not switch or impersonate the
+    target user. No live databases are available; use sqlmock and Mongo seams
+    and defer live integration.

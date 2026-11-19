@@ -44,6 +44,8 @@ const (
 	ExpandJSON      Action = "expand-json"
 	Space           Action = "space"
 	NextMatch       Action = "next-match"
+	Add             Action = "add"
+	Remove          Action = "remove"
 	ResizeTreeLeft  Action = "resize-tree-left"
 	ResizeTreeRight Action = "resize-tree-right"
 	ResizeQueryUp   Action = "resize-query-up"
@@ -88,6 +90,8 @@ var single = map[string]Action{
 
 	"/": Search, ".": Search,
 	"`": ExpandJSON, "ё": ExpandJSON,
+	"+": Add, "=": Add,
+	"-": Remove,
 
 	"ctrl+a":     FetchAll,
 	"ctrl+f":     ServerFilter,

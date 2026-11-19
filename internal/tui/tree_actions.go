@@ -172,6 +172,7 @@ func (m Model) openSelected() (tea.Model, tea.Cmd) {
 	}
 	syncCmd := m.syncDetails()
 	if node.IsObject() || node.IsPrincipal() {
+		m.clearTreeSearch()
 		m.focus = FocusMain
 		if index := tabIndex(m.details.tabs, "Data"); index >= 0 {
 			m.details.tab = index

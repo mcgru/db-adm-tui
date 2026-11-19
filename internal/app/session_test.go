@@ -620,3 +620,86 @@ func TestHistoryFailureWarnsWithoutBlockingQuery(t *testing.T) {
 		t.Fatal("warning was not cleared")
 	}
 }
+
+type fakeRoleAdmin struct {
+	result domain.MutationResult
+	err    error
+	calls  int
+}
+
+func (f *fakeRoleAdmin) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) DropRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) GrantRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) RevokeRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) GrantPrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func (f *fakeRoleAdmin) RevokePrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
+	f.calls++
+	return f.result, f.err
+}
+
+func TestRoleMutationsRequireReadWriteAndAudit(t *testing.T) {
+	f := newFixture(t)
+	mode := &fakeModeController{}
+	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `CREATE ROLE "app_role"`}}
+	historyStore := &fakeHistoryStore{}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: mode, RoleAdmin: admin,
+	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, historyStore)
+	if _, err := session.CreateRole(context.Background(), domain.RoleRef{Name: "app_role"}); err == nil || domain.KindOf(err) != domain.KindGuard {
+		t.Fatalf("read-only err = %v", err)
+	}
+	if admin.calls != 0 {
+		t.Fatal("read-only mutation reached the engine")
+	}
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.CreateRole(context.Background(), domain.RoleRef{Name: "app_role"})
+	if err != nil || result.Statement == "" || admin.calls != 1 {
+		t.Fatalf("result = %+v, err = %v, calls=%d", result, err, admin.calls)
+	}
+	if len(historyStore.entries) != 1 || historyStore.entries[0].Mode != "r/w" {
+		t.Fatalf("history = %+v", historyStore.entries)
+	}
+}
+
+func TestRoleMutationFailureIsAudited(t *testing.T) {
+	f := newFixture(t)
+	admin := &fakeRoleAdmin{
+		result: domain.MutationResult{Statement: `DROP ROLE "app_role"`},
+		err:    domain.NewError(domain.KindPermission, "role", "not permitted"),
+	}
+	historyStore := &fakeHistoryStore{}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, RoleAdmin: admin,
+	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, historyStore)
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.DropRole(context.Background(), domain.RoleRef{Name: "app_role"}); err == nil {
+		t.Fatal("expected error")
+	}
+	if len(historyStore.entries) != 1 || historyStore.entries[0].Status != "error" {
+		t.Fatalf("history = %+v", historyStore.entries)
+	}
+}
