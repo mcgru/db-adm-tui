@@ -90,6 +90,7 @@ type dataState struct {
 	batch          int
 	orderKey       string
 	orderKnown     bool
+	selected       map[string]rowSelection
 	err            string
 	tooLarge       bool
 	endDown        int
@@ -1317,6 +1318,9 @@ func (m Model) dataHeaderLineCount() int {
 	if m.data.serverFilter != nil {
 		count += len(m.filterBannerLines(m.dataInnerWidth()))
 	}
+	if m.data.selectedCount() > 0 {
+		count++
+	}
 	if m.data.orderKnown && m.data.orderKey == "" {
 		count++
 	}
@@ -1445,6 +1449,10 @@ func (m Model) viewData(width, height int) []string {
 	}
 	if d.serverFilter != nil {
 		lines = append(lines, m.filterBannerLines(width)...)
+	}
+	if count := d.selectedCount(); count > 0 {
+		lines = append(lines, m.styles.Accent.Render(Truncate(
+			fmt.Sprintf("%d selected · Space toggles · e update · - delete · Esc clears", count), width)))
 	}
 	if d.orderKnown && d.orderKey == "" {
 		lines = append(lines, m.styles.Warning.Render(Truncate("no stable order; rows may repeat or skip", width)))
@@ -1622,9 +1630,14 @@ func (m Model) renderGrid(width, height int) []string {
 
 func (m Model) renderGridRow(row domain.Row, view []dataColumn, visible []visibleColumn, gutter, absolute, width int) string {
 	d := m.data
+	selected := m.rowSelected(row)
+	prefix := fmt.Sprintf("%*d", gutter, absolute+1)
+	if selected {
+		prefix = fmt.Sprintf("*%*d", gutter-1, absolute+1)
+	}
 	if absolute == d.cursorRow {
 		var b strings.Builder
-		b.WriteString(m.styles.Select.Render(fmt.Sprintf("%*d  ", gutter, absolute+1)))
+		b.WriteString(m.styles.Select.Render(prefix + "  "))
 		used := gutter + 2
 		for j, column := range visible {
 			sep := ""
@@ -1650,7 +1663,11 @@ func (m Model) renderGridRow(row domain.Row, view []dataColumn, visible []visibl
 		return b.String()
 	}
 	var b strings.Builder
-	b.WriteString(m.styles.Muted.Render(fmt.Sprintf("%*d", gutter, absolute+1)))
+	if selected {
+		b.WriteString(m.styles.Accent.Render(prefix))
+	} else {
+		b.WriteString(m.styles.Muted.Render(prefix))
+	}
 	b.WriteString("  ")
 	for j, column := range visible {
 		if j > 0 {

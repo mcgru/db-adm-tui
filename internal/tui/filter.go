@@ -196,6 +196,7 @@ func (m *Model) openBufferFilter() tea.Cmd {
 		return nil
 	}
 	cmd := m.clearServerFilter()
+	m.clearDataSelection()
 	d := &m.data
 	d.err = ""
 	d.prompt = promptBuffer
@@ -236,6 +237,7 @@ func (m *Model) openServerFilter() tea.Cmd {
 		return nil
 	}
 	m.clearLocalFilter()
+	m.clearDataSelection()
 	m.data.err = ""
 	d := &m.data
 	d.prompt = promptServer
@@ -564,6 +566,7 @@ func (m *Model) revertFilterOnError() {
 // resetDataFilters clears both filter surfaces. Object changes discard the
 // whole data state; tab changes call this to restore the unfiltered window.
 func (m *Model) resetDataFilters() tea.Cmd {
+	m.clearDataSelection()
 	d := &m.data
 	d.prompt = promptNone
 	d.bufferPattern = ""

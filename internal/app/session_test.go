@@ -890,6 +890,7 @@ type fakeRowAdmin struct {
 	err    error
 	calls  int
 	insert domain.RowInsert
+	update domain.RowUpdate
 	delete domain.RowDelete
 }
 
@@ -899,7 +900,13 @@ func (f *fakeRowAdmin) InsertRow(ctx context.Context, spec domain.RowInsert) (do
 	return f.result, f.err
 }
 
-func (f *fakeRowAdmin) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+func (f *fakeRowAdmin) UpdateRows(ctx context.Context, spec domain.RowUpdate) (domain.MutationResult, error) {
+	f.calls++
+	f.update = spec
+	return f.result, f.err
+}
+
+func (f *fakeRowAdmin) DeleteRows(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
 	f.calls++
 	f.delete = spec
 	return f.result, f.err
@@ -930,10 +937,19 @@ func TestRowMutationsRequireReadWriteAndAudit(t *testing.T) {
 	if len(historyStore.entries) != 1 || historyStore.entries[0].Mode != "r/w" || historyStore.entries[0].Affected != 1 {
 		t.Fatalf("history = %+v", historyStore.entries)
 	}
-	if _, err := session.DeleteRow(context.Background(), domain.RowDelete{Ref: spec.Ref, Keys: []domain.RowValue{{Column: "id", Value: "1"}}}); err != nil {
+	keys := [][]domain.RowValue{{{Column: "id", Value: "1"}}, {{Column: "id", Value: "2"}}}
+	if _, err := session.UpdateRows(context.Background(), domain.RowUpdate{
+		Ref: spec.Ref, Column: "status", Value: domain.RowValue{Value: "active"}, Rows: keys,
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if rows.calls != 2 {
-		t.Fatalf("delete calls = %d", rows.calls)
+	if _, err := session.DeleteRows(context.Background(), domain.RowDelete{Ref: spec.Ref, Rows: keys}); err != nil {
+		t.Fatal(err)
+	}
+	if rows.calls != 3 || len(rows.update.Rows) != 2 || len(rows.delete.Rows) != 2 {
+		t.Fatalf("calls=%d update=%+v delete=%+v", rows.calls, rows.update, rows.delete)
+	}
+	if len(historyStore.entries) != 3 || historyStore.entries[1].Affected != 1 || historyStore.entries[2].Affected != 1 {
+		t.Fatalf("history = %+v", historyStore.entries)
 	}
 }

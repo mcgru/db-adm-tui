@@ -239,6 +239,17 @@ func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.modal == modalRowEdit {
+		if m.rowEdit.mode != rowValue {
+			m.rowEdit.value = ""
+			m.rowEdit.valuePos = 0
+			m.rowEdit.mode = rowValue
+		}
+		m.rowEdit.value, m.rowEdit.valuePos = insertFilterText(
+			m.rowEdit.value, m.rowEdit.valuePos, msg.Content)
+		m.rowEdit.err = ""
+		return m, nil
+	}
 	switch m.modal {
 	case modalNew:
 		if m.newBusy {

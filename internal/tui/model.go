@@ -57,6 +57,7 @@ const (
 	modalUserConfirm
 	modalUserSave
 	modalRowInsert
+	modalRowEdit
 	modalRowDelete
 )
 
@@ -182,6 +183,7 @@ type Model struct {
 	matrix          matrixState
 	user            userState
 	rowInsert       rowInsertState
+	rowEdit         rowEditState
 	rowDelete       rowDeleteState
 	history         []string
 	historyIndex    int
@@ -457,6 +459,8 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUserSaveKey(msg)
 	case modalRowInsert:
 		return m.handleRowInsertKey(msg)
+	case modalRowEdit:
+		return m.handleRowEditKey(msg)
 	case modalRowDelete:
 		return m.handleRowDeleteKey(msg)
 	}
@@ -556,6 +560,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			if p, ok := m.currentPickerProfile(); ok {
 				m.openEditModal(p)
 			}
+		}
+		if m.screen == ScreenWorkspace && m.rowDataTab() {
+			return m.startRowEdit()
 		}
 		if m.screen == ScreenWorkspace && m.focus == FocusTree {
 			return m.startRoleEdit()
@@ -785,6 +792,11 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		if m.data.serverFilter != nil {
 			return m, m.clearServerFilter()
 		}
+		if m.data.selectedCount() > 0 {
+			m.clearDataSelection()
+			m.setMessage(levelInfo, "selection cleared")
+			return m, nil
+		}
 		if m.resultsActive {
 			m.leaveResults()
 			return m, nil
@@ -827,6 +839,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.Space:
 		if m.screen == ScreenWorkspace && m.focus == FocusTree {
 			return m.openSelected()
+		}
+		if m.dataFocused() {
+			return m, m.toggleDataSelection()
 		}
 	case keymap.ExactCount:
 		return m, m.startExactCount()
@@ -1347,6 +1362,8 @@ func (m Model) viewModal() string {
 		return m.viewUserSave()
 	case modalRowInsert:
 		return m.viewRowInsert()
+	case modalRowEdit:
+		return m.viewRowEdit()
 	case modalRowDelete:
 		return m.viewRowDelete()
 	}
@@ -1385,7 +1402,7 @@ func (m *Model) dismissModal() {
 	case modalUserForm, modalUserConfirm, modalUserSave:
 		m.modal = modalNone
 		m.user = newUserState()
-	case modalRowInsert, modalRowDelete:
+	case modalRowInsert, modalRowEdit, modalRowDelete:
 		m.modal = modalNone
 	}
 }

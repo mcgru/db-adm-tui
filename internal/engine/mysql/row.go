@@ -23,7 +23,20 @@ func (c *connection) InsertRow(ctx context.Context, spec domain.RowInsert) (doma
 	return domain.MutationResult{Statement: statement, Affected: affected}, nil
 }
 
-func (c *connection) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+func (c *connection) UpdateRows(ctx context.Context, spec domain.RowUpdate) (domain.MutationResult, error) {
+	statement, args, err := buildRowUpdate(spec)
+	if err != nil {
+		return domain.MutationResult{}, err
+	}
+	result, err := c.conn.ExecContext(ctx, statement, args...)
+	if err != nil {
+		return domain.MutationResult{Statement: statement}, safeError("row", c.password, err)
+	}
+	affected, _ := result.RowsAffected()
+	return domain.MutationResult{Statement: statement, Affected: affected}, nil
+}
+
+func (c *connection) DeleteRows(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
 	statement, args, err := buildRowDelete(spec)
 	if err != nil {
 		return domain.MutationResult{}, err
@@ -70,25 +83,80 @@ func buildRowInsert(spec domain.RowInsert) (string, []any, error) {
 		") VALUES (" + strings.Join(placeholders, ", ") + ")", args, nil
 }
 
+func buildRowUpdate(spec domain.RowUpdate) (string, []any, error) {
+	table, err := mysqlRowTable(spec.Ref)
+	if err != nil {
+		return "", nil, err
+	}
+	column := strings.TrimSpace(spec.Column)
+	if column == "" {
+		return "", nil, domain.NewError(domain.KindConfig, "row", "the update column is empty")
+	}
+	set := quoteIdentifier(column) + " = "
+	var args []any
+	if spec.Value.Default {
+		set += "DEFAULT"
+	} else {
+		set += "?"
+		args = append(args, rowArgument(spec.Value))
+	}
+	predicate, keyArgs, err := buildRowPredicate(spec.Rows)
+	if err != nil {
+		return "", nil, err
+	}
+	args = append(args, keyArgs...)
+	return "UPDATE " + table + " SET " + set + " WHERE " + predicate, args, nil
+}
+
 func buildRowDelete(spec domain.RowDelete) (string, []any, error) {
 	table, err := mysqlRowTable(spec.Ref)
 	if err != nil {
 		return "", nil, err
 	}
-	if len(spec.Keys) == 0 {
+	predicate, args, err := buildRowPredicate(spec.Rows)
+	if err != nil {
+		return "", nil, err
+	}
+	return "DELETE FROM " + table + " WHERE " + predicate, args, nil
+}
+
+func buildRowPredicate(rows [][]domain.RowValue) (string, []any, error) {
+	if len(rows) == 0 {
 		return "", nil, domain.NewError(domain.KindConfig, "row", "the row has no primary key")
 	}
-	var predicates []string
-	var args []any
-	for _, key := range spec.Keys {
-		column := strings.TrimSpace(key.Column)
-		if column == "" {
+	first := rows[0]
+	if len(first) == 0 {
+		return "", nil, domain.NewError(domain.KindConfig, "row", "the row has no primary key")
+	}
+	names := make([]string, len(first))
+	for i, key := range first {
+		name := strings.TrimSpace(key.Column)
+		if name == "" {
 			return "", nil, domain.NewError(domain.KindConfig, "row", "a key column is empty")
 		}
-		predicates = append(predicates, quoteIdentifier(column)+" = ?")
-		args = append(args, rowArgument(key))
+		names[i] = name
 	}
-	return "DELETE FROM " + table + " WHERE " + strings.Join(predicates, " AND "), args, nil
+
+	var args []any
+	var groups []string
+	for _, row := range rows {
+		if len(row) != len(names) {
+			return "", nil, domain.NewError(domain.KindConfig, "row", "key columns differ between selected rows")
+		}
+		var parts []string
+		for i, key := range row {
+			if strings.TrimSpace(key.Column) != names[i] {
+				return "", nil, domain.NewError(domain.KindConfig, "row", "key columns differ between selected rows")
+			}
+			if key.Null {
+				return "", nil, domain.NewError(domain.KindConfig, "row", "a key value is empty")
+			}
+			parts = append(parts, quoteIdentifier(names[i])+" = ?")
+			args = append(args, rowArgument(key))
+		}
+		groups = append(groups, "("+strings.Join(parts, " AND ")+")")
+	}
+	return strings.Join(groups, " OR "), args, nil
 }
 
 func mysqlRowTable(ref domain.ObjectRef) (string, error) {

@@ -71,6 +71,7 @@ type fakeRowAdmin struct {
 	err     error
 	calls   int
 	inserts []domain.RowInsert
+	updates []domain.RowUpdate
 	deletes []domain.RowDelete
 }
 
@@ -80,7 +81,13 @@ func (f *fakeRowAdmin) InsertRow(ctx context.Context, spec domain.RowInsert) (do
 	return f.result, f.err
 }
 
-func (f *fakeRowAdmin) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+func (f *fakeRowAdmin) UpdateRows(ctx context.Context, spec domain.RowUpdate) (domain.MutationResult, error) {
+	f.calls++
+	f.updates = append(f.updates, spec)
+	return f.result, f.err
+}
+
+func (f *fakeRowAdmin) DeleteRows(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
 	f.calls++
 	f.deletes = append(f.deletes, spec)
 	return f.result, f.err

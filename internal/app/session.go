@@ -713,10 +713,17 @@ func (s *Session) InsertRow(ctx context.Context, spec domain.RowInsert) (domain.
 	})
 }
 
-// DeleteRow deletes one structured row or document by primary key/_id.
-func (s *Session) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+// UpdateRows updates one cell/field across one or more selected rows.
+func (s *Session) UpdateRows(ctx context.Context, spec domain.RowUpdate) (domain.MutationResult, error) {
 	return s.runRowMutation(ctx, func() (domain.MutationResult, error) {
-		return s.bundle.RowAdmin.DeleteRow(ctx, spec)
+		return s.bundle.RowAdmin.UpdateRows(ctx, spec)
+	})
+}
+
+// DeleteRows deletes one or more rows/documents by primary key/_id.
+func (s *Session) DeleteRows(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+	return s.runRowMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RowAdmin.DeleteRows(ctx, spec)
 	})
 }
 
