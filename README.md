@@ -38,6 +38,8 @@ The tool starts on the profile picker.
 | `Left` / `Right` | Collapse / expand the selected tree node; move the Data/Results cell cursor |
 | `Home` / `End` | Jump to the first/last tree or import row; first/last Data/Results column |
 | `Ctrl+Home` / `Ctrl+End` | Jump to the first/last row of the loaded Data range |
+| `Ctrl+Left` / `Ctrl+Right` | Resize the tree by 2 cells (16 cells to half the terminal width) |
+| `Ctrl+Up` / `Ctrl+Down` | Resize the query bar between 1 and 3 lines |
 | `m` | Append the next Data/Results page |
 | `Ctrl+A` | Append a full-fetch batch (Data) or drain the result cursor up to 10,000 rows |
 | `` ` `` | Data/Results: expand/collapse the selected JSON object column into dotted subcolumns |
@@ -241,6 +243,14 @@ input, shell escapes, and write statements are blocked before an engine call
 while read-only mode is on. The mode is shown as `r/o` or `r/w` next to the
 database; `Ctrl+X Ctrl+W` switches, and enabling read-write requires
 confirmation.
+
+The tree width and query height are adjustable with `Ctrl+Left`/`Ctrl+Right`
+and `Ctrl+Up`/`Ctrl+Down`; the tree clamps to 16 cells through half the
+terminal, the query bar to 1–3 lines. Both persist per profile in
+`$XDG_STATE_HOME/db-adm-tui/layouts.json` (default
+`~/.local/state/db-adm-tui/layouts.json`). A smaller terminal clamps the
+display without overwriting the saved size. The query bar wraps the same
+logical statement; it never becomes a multi-statement editor.
 
 `Enter` runs the statement when the completion popup is closed, and
 `Ctrl+X Ctrl+X` runs it from the tree, details, Data, or query zone. While a

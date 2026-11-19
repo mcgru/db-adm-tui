@@ -10,6 +10,7 @@ import (
 	"github.com/mcgru/db-adm-tui/internal/engine"
 	"github.com/mcgru/db-adm-tui/internal/history"
 	"github.com/mcgru/db-adm-tui/internal/profile"
+	"github.com/mcgru/db-adm-tui/internal/state"
 	"github.com/mcgru/db-adm-tui/internal/tui"
 )
 
@@ -43,6 +44,12 @@ func main() {
 		os.Exit(1)
 	} else {
 		service.SetHistory(historyStore)
+	}
+	if layoutStore, err := state.NewDefaultStore(); err != nil {
+		fmt.Fprintln(os.Stderr, "Could not determine the layout state path:", err)
+		os.Exit(1)
+	} else {
+		service.SetLayoutStore(layoutStore)
 	}
 
 	program := tea.NewProgram(tui.New(service))

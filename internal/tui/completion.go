@@ -410,23 +410,11 @@ func (m Model) completionAnchor(popupWidth, popupHeight int) (int, int) {
 	if m.modal == modalStatement {
 		return m.statementCompletionAnchor(popupWidth, popupHeight)
 	}
-	inputStart := 8 // two-cell marker + "SQL"/"MQL ›" + one space
-	runes := []rune(m.query.Value())
-	pos := m.query.Position()
-	if pos < 0 {
-		pos = 0
-	}
-	if pos > len(runes) {
-		pos = len(runes)
-	}
-	prefixWidth := lipgloss.Width(string(runes[:pos]))
-	inputWidth := m.query.Width()
-	if inputWidth > 0 && prefixWidth >= inputWidth {
-		prefixWidth = inputWidth - 1
-	}
-	x := inputStart + prefixWidth
-	queryLine := m.height - 2
-	y := queryLine - popupHeight
+	line, column := m.queryCursor(m.width)
+	x := 8 + column
+	regions := m.regions()
+	queryTop := 1 + regions.BodyHeight
+	y := queryTop + line - popupHeight
 	return x, y
 }
 

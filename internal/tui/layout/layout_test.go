@@ -42,3 +42,32 @@ func TestComputeWide(t *testing.T) {
 		t.Fatalf("tree/main = %d/%d, want 28/71", r.TreeWidth, r.MainWidth)
 	}
 }
+
+func TestComputeSizeClamps(t *testing.T) {
+	r := ComputeSize(80, 24, 60, 9)
+	if r.TreeWidth != 40 || r.QueryHeight != 3 || r.MainWidth != 39 {
+		t.Fatalf("clamped regions = %+v", r)
+	}
+	if r.BodyHeight != 19 {
+		t.Fatalf("body height = %d, want 19", r.BodyHeight)
+	}
+	r = ComputeSize(120, 30, 4, 0)
+	if r.TreeWidth != MinTreeWidth || r.QueryHeight != MinQueryLines {
+		t.Fatalf("low clamp = %+v", r)
+	}
+}
+
+func TestClampHelpers(t *testing.T) {
+	if got := ClampTreeWidth(80, 16); got != 16 {
+		t.Fatalf("tree min = %d", got)
+	}
+	if got := ClampTreeWidth(80, 41); got != 40 {
+		t.Fatalf("tree max = %d", got)
+	}
+	if got := ClampQueryHeight(0); got != 1 {
+		t.Fatalf("query min = %d", got)
+	}
+	if got := ClampQueryHeight(4); got != 3 {
+		t.Fatalf("query max = %d", got)
+	}
+}

@@ -14,7 +14,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
-	"github.com/mcgru/db-adm-tui/internal/tui/layout"
 	"github.com/mcgru/db-adm-tui/internal/tui/theme"
 )
 
@@ -1278,7 +1277,7 @@ func (m *Model) ensureDataViewport() {
 }
 
 func (m Model) dataBodyHeight() int {
-	regions := layout.Compute(m.width, m.height)
+	regions := m.regions()
 	height := regions.BodyHeight - 4
 	if height < 1 {
 		height = 1
@@ -1319,7 +1318,7 @@ func (m Model) dataHeaderLineCount() int {
 }
 
 func (m Model) dataInnerWidth() int {
-	regions := layout.Compute(m.width, m.height)
+	regions := m.regions()
 	width := regions.MainWidth - 4
 	if width < 1 {
 		width = 1

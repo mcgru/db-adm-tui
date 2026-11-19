@@ -192,6 +192,9 @@ type Model struct {
 	modeBusy       bool
 	modeGen        uint64
 	saveResult     app.ConnectResult
+	treeWidth      int
+	queryHeight    int
+	layoutKey      string
 
 	connecting      bool
 	connectingKey   string
@@ -253,6 +256,8 @@ func New(svc *app.Service) Model {
 		newFocus:        fieldURI,
 		caseInsensitive: true,
 		rootLaunch:      os.Geteuid() == 0,
+		treeWidth:       layout.TreeWidth,
+		queryHeight:     layout.QueryLines,
 	}
 	m.newURI = newInput("postgres://user@host:5432/db", false)
 	m.newLabel = newInput("", false)
@@ -305,7 +310,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.data.endDown = 0
 		m.data.endPg = 0
 		m.resizeInputs()
-		if layout.Compute(m.width, m.height).TooSmall {
+		if m.regions().TooSmall {
 			m.dismissModal()
 			if m.connecting {
 				m.cancelConnect()
@@ -360,7 +365,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	if layout.Compute(m.width, m.height).TooSmall {
+	if m.regions().TooSmall {
 		action, ok := keymap.Lookup(key)
 		if !ok {
 			return m, nil
@@ -417,6 +422,13 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.completion.active {
 		if next, cmd, handled := m.handleCompletionKey(msg); handled {
 			return next, cmd
+		}
+	}
+	if action, ok := keymap.Lookup(key); ok {
+		switch action {
+		case keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
+			keymap.ResizeQueryUp, keymap.ResizeQueryDown:
+			return m.apply(action)
 		}
 	}
 	if m.screen == ScreenWorkspace && m.modal == modalNone && m.focus == FocusQuery {
@@ -736,9 +748,15 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.startModeSwitch(true)
-	case keymap.Completion,
-		keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
-		keymap.ResizeQueryUp, keymap.ResizeQueryDown:
+	case keymap.ResizeTreeLeft:
+		m.resizeTree(-2)
+	case keymap.ResizeTreeRight:
+		m.resizeTree(2)
+	case keymap.ResizeQueryUp:
+		m.resizeQuery(1)
+	case keymap.ResizeQueryDown:
+		m.resizeQuery(-1)
+	case keymap.Completion:
 		m.setMessage(levelInfo, "not available in this story")
 	}
 	return m, nil
@@ -891,6 +909,16 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.screen = ScreenWorkspace
 	m.focus = FocusTree
 	m.caseInsensitive = true
+	m.layoutKey = result.Profile.Key()
+	savedLayout := m.svc.Layout(context.Background(), m.layoutKey)
+	m.treeWidth = savedLayout.TreeWidth
+	if m.treeWidth <= 0 {
+		m.treeWidth = layout.TreeWidth
+	}
+	m.queryHeight = savedLayout.QueryHeight
+	if m.queryHeight <= 0 {
+		m.queryHeight = layout.QueryLines
+	}
 	m.history = m.svc.History(context.Background(), result.Profile)
 	m.historyIndex = len(m.history)
 	m.historyDraft = ""
@@ -961,6 +989,9 @@ func (m *Model) disconnect() {
 	m.elevated = false
 	m.escChord = false
 	m.completion = completionState{}
+	m.layoutKey = ""
+	m.treeWidth = layout.TreeWidth
+	m.queryHeight = layout.QueryLines
 	m.history = nil
 	m.historyIndex = 0
 	m.tree.reset()
@@ -1115,8 +1146,12 @@ func (m *Model) resizeInputs() {
 	m.editUser.SetWidth(newWidth)
 }
 
+func (m Model) regions() layout.Regions {
+	return layout.ComputeSize(m.width, m.height, m.treeWidth, m.queryHeight)
+}
+
 func (m Model) View() tea.View {
-	regions := layout.Compute(m.width, m.height)
+	regions := m.regions()
 	var content string
 	switch {
 	case regions.TooSmall:

@@ -18,7 +18,7 @@ func (m Model) viewWorkspace(regions layout.Regions) string {
 		JoinColumns(strings.Split(tree, "\n"), strings.Split(main, "\n"), regions.Gap),
 		"\n",
 	)
-	query := m.viewQuery(regions.Width)
+	query := m.viewQueryHeight(regions.Width, regions.QueryHeight)
 	bottom := m.viewBottom(regions.Width)
 	return strings.Join([]string{top, body, query, bottom}, "\n")
 }
@@ -193,39 +193,6 @@ func (m Model) renderDetailLine(line detailLine) string {
 	default:
 		return m.styles.Muted.Render(field(line.Label, 12)) + " " + m.styles.Text.Render(oneLine(line.Value))
 	}
-}
-
-func (m Model) viewQuery(width int) string {
-	engine := m.profileForStatus().Engine
-	label := "SQL"
-	if engine == domain.EngineMongoDB {
-		label = "MQL"
-	}
-	marker := "  "
-	promptStyle := m.styles.ModeRO
-	valueStyle := m.styles.Text
-	if m.focus == FocusQuery {
-		marker = m.styles.Focused.Render("▸ ")
-		promptStyle = m.styles.Focused
-		valueStyle = m.styles.Focused
-	}
-	prompt := promptStyle.Render(label) + " " + m.styles.Accent.Render("›")
-
-	if available, hint := m.queryAvailability(); !available && strings.TrimSpace(m.query.Value()) == "" {
-		return Pad(marker+prompt+" "+m.styles.Muted.Render(Truncate(hint, width-10)), width)
-	}
-	var value string
-	switch {
-	case m.queryRunning:
-		value = m.styles.Muted.Render(Truncate(oneLine(m.query.Value()), width-10))
-	case m.focus == FocusQuery:
-		value = m.query.View()
-	case strings.TrimSpace(m.query.Value()) == "":
-		value = m.styles.Muted.Render(Truncate(queryPlaceholder(engine, m.currentQueryRef()), width-10))
-	default:
-		value = valueStyle.Render(Truncate(oneLine(m.query.Value()), width-10))
-	}
-	return Pad(marker+prompt+" "+value, width)
 }
 
 func queryPlaceholder(engine domain.Engine, ref domain.ObjectRef) string {

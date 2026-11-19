@@ -87,6 +87,7 @@ type Service struct {
 	resolver  *profile.Resolver
 	connector ports.Connector
 	history   ports.HistoryStore
+	layouts   ports.LayoutStore
 	now       func() time.Time
 	mu        sync.Mutex
 }
@@ -100,6 +101,33 @@ func NewService(store ports.ProfileStore, resolver *profile.Resolver, connector 
 // history without affecting queries.
 func (s *Service) SetHistory(store ports.HistoryStore) {
 	s.history = store
+}
+
+// SetLayoutStore wires the optional per-profile workspace-dimension store.
+func (s *Service) SetLayoutStore(store ports.LayoutStore) {
+	s.layouts = store
+}
+
+// Layout loads the saved tree width and query height for a profile. A missing
+// or unreadable state file returns the zero value; the TUI applies defaults.
+func (s *Service) Layout(ctx context.Context, profile string) domain.LayoutSettings {
+	if s.layouts == nil {
+		return domain.LayoutSettings{}
+	}
+	settings, err := s.layouts.Load(ctx, profile)
+	if err != nil {
+		return domain.LayoutSettings{}
+	}
+	return settings
+}
+
+// SaveLayout persists the current workspace dimensions. Failures are ignored;
+// layout state is best-effort.
+func (s *Service) SaveLayout(ctx context.Context, profile string, settings domain.LayoutSettings) {
+	if s.layouts == nil {
+		return
+	}
+	_ = s.layouts.Save(ctx, profile, settings)
 }
 
 // History returns the profile's executed statements for Up/Down recall. A
