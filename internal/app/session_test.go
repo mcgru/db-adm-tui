@@ -703,3 +703,62 @@ func TestRoleMutationFailureIsAudited(t *testing.T) {
 		t.Fatalf("history = %+v", historyStore.entries)
 	}
 }
+
+type fakeRoleMatrix struct {
+	membership domain.RoleMatrix
+	privileges domain.PrivilegeMatrix
+	err        error
+	objects    []domain.ObjectRef
+}
+
+func (f *fakeRoleMatrix) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) {
+	if f.err != nil {
+		return domain.RoleMatrix{}, f.err
+	}
+	return f.membership, nil
+}
+
+func (f *fakeRoleMatrix) PrivilegeMatrix(ctx context.Context, objects []domain.ObjectRef) (domain.PrivilegeMatrix, error) {
+	f.objects = objects
+	if f.err != nil {
+		return domain.PrivilegeMatrix{}, f.err
+	}
+	return f.privileges, nil
+}
+
+func TestSessionLoadsStructuredMatrices(t *testing.T) {
+	f := newFixture(t)
+	matrix := &fakeRoleMatrix{
+		membership: domain.RoleMatrix{
+			Principals: []domain.RoleRef{{Engine: domain.EnginePostgreSQL, Name: "app_ro", Kind: domain.KindUser}},
+			Roles:      []domain.RoleRef{{Engine: domain.EnginePostgreSQL, Name: "reporting", Kind: domain.KindRole}},
+			Members:    map[string]map[string]bool{},
+		},
+		privileges: domain.PrivilegeMatrix{
+			Principals: []domain.RoleRef{{Engine: domain.EnginePostgreSQL, Name: "reporting", Kind: domain.KindRole}},
+			Cells:      map[string]map[string][]string{},
+		},
+	}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, RoleMatrix: matrix,
+	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, &fakeHistoryStore{})
+	loaded, err := session.RoleMatrix(context.Background())
+	if err != nil || len(loaded.Roles) != 1 {
+		t.Fatalf("membership = %+v, err = %v", loaded, err)
+	}
+	objects := []domain.ObjectRef{{Engine: domain.EnginePostgreSQL, Kind: domain.KindDatabase, Database: "orders", Name: "orders"}}
+	privileges, err := session.PrivilegeMatrix(context.Background(), objects)
+	if err != nil || len(matrix.objects) != 1 || matrix.objects[0].Key() != objects[0].Key() {
+		t.Fatalf("privileges = %+v, objects = %+v, err = %v", privileges, matrix.objects, err)
+	}
+}
+
+func TestSessionMatrixUnavailable(t *testing.T) {
+	f := newFixture(t)
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{},
+	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, &fakeHistoryStore{})
+	if _, err := session.RoleMatrix(context.Background()); err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("err = %v", err)
+	}
+}

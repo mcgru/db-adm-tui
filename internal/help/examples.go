@@ -394,8 +394,10 @@ Ctrl+F runs a server-side regexp in Data.
 Esc clears the filter.`,
 
 	"security": `Expand Security to see users and roles.
-Select a role and use + to grant/assign, - to revoke/remove/drop, or e to open the grant editor.
-Role changes require read-write mode.
+In read-write mode press Ctrl+X Ctrl+R to open the access matrix.
+Tab or 1/2 switches Principal x Role and Principal/Role x Object.
+Space toggles a cell, e opens native privilege details, / filters, Esc closes.
+Use + on the roles group to create a role; role + - can drop one.
 Select a principal and open Privileges for native grants and memberships.`,
 
 	"status": `The bottom line shows counts, elapsed query time, errors, and cancellation hints.

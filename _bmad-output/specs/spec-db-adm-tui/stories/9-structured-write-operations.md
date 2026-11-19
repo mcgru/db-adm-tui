@@ -1,7 +1,7 @@
 # Story 9 (v2) — Structured write operations
 
-**Status:** draft, awaiting product decisions  
-**Scope:** users, access roles/grants, and rows in the current table/collection  
+**Status:** 9b access matrix implemented; 9c users and 9a rows pending
+**Scope:** users, access roles/grants, and rows in the current table/collection
 **Depends on:** Story 6 read-write mode, Story 7 privilege inspection, Story 8 security/release
 
 ## Why this is a v2 story
@@ -141,7 +141,7 @@ Data and history. Do not implement it in the first Story 9 slice.
 
 ## Matrix UI decision (replaces the modal role editor)
 
-The role UI will be two normalized matrices, opened with the reserved
+The role UI is two normalized matrices, opened with the reserved
 `Ctrl+X Ctrl+R` chord in `r/w` mode:
 
 1. **Principal × Role** — membership. Rows are users and roles; columns are
@@ -175,18 +175,25 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
 
 ## Implementation status
 
-- **9b first slice implemented:** Native `RoleAdmin` ports and PostgreSQL,
-  MySQL/MariaDB, and MongoDB adapters; app read-write gate, history audit, and
-  TUI create/drop role, grant/revoke privileges, assign/remove role, and grant
-  editor. Tests use sqlmock, pure Mongo helpers, and TUI fakes.
-- **Pending UI rework:** the current modal grant/assign/revoke forms are
-  first-slice scaffolding and will be replaced by the two matrices above. The
-  matrix data port must expose structured memberships and privilege cells;
-  parsing rendered privilege lines is not acceptable for edits.
-- **Known 9b limitations:** MongoDB role creation is scoped to the current
-  database. Live databases are not available, so native command acceptance is
-  deferred.
-- **Next:** matrix data + TUI rework, then 9c users, then the deferred 9a rows.
+- **9b matrix slice implemented:** Native `RoleAdmin` and `RoleMatrixReader`
+  ports; PostgreSQL, MySQL/MariaDB, and MongoDB adapters; app read-write gate
+  and history audit; TUI `Ctrl+X Ctrl+R` full-pane matrix with membership and
+  privilege panels, per-panel cursor/filter, `Space` toggle, `e` multi-select
+  details, `/` filter, and `Esc` close. Role create/drop remain in the tree.
+  Tests use sqlmock, pure Mongo helpers, and TUI fakes.
+- **Matrix data is structured:** membership cells and privilege cells come from
+  native catalogs; rendered Privileges-tab text is not parsed for edits.
+  PostgreSQL reads role/ACL catalogs, MySQL reads role edges and the
+  information-schema privilege tables, and MongoDB reads `usersInfo` and
+  `rolesInfo`. Built-in MongoDB roles appear as membership columns but are not
+  editable privilege rows.
+- **Known 9b limitations:** PostgreSQL `PUBLIC` grants are read but not shown as
+  a matrix row, and unsupported native privileges (for example PostgreSQL
+  `MAINTAIN`) remain visible but are not toggleable. Membership details show
+  `WITH ADMIN OPTION`/`INHERIT` as a later enhancement rather than editing them.
+  MongoDB role creation is scoped to the current database. Live databases are
+  not available, so native command acceptance is deferred.
+- **Next:** 9c users, then the deferred 9a rows.
 
 ## Risks and constraints
 

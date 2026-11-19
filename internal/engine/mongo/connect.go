@@ -47,7 +47,7 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{client: client, password: password}
-	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live}, nil
+	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live, RoleMatrix: live}, nil
 }
 
 type connection struct {

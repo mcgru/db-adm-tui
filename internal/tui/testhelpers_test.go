@@ -61,41 +61,88 @@ type fakeConnector struct {
 	query      *fakeQueryExecutor
 	mode       *fakeModeController
 	role       *fakeRoleAdmin
+	matrix     *fakeRoleMatrix
+}
+
+type fakeRoleMatrix struct {
+	membership      domain.RoleMatrix
+	privileges      domain.PrivilegeMatrix
+	err             error
+	membershipCalls int
+	privilegeCalls  int
+	objects         []domain.ObjectRef
+}
+
+func (f *fakeRoleMatrix) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) {
+	f.membershipCalls++
+	if f.err != nil {
+		return domain.RoleMatrix{}, f.err
+	}
+	return f.membership, nil
+}
+
+func (f *fakeRoleMatrix) PrivilegeMatrix(ctx context.Context, objects []domain.ObjectRef) (domain.PrivilegeMatrix, error) {
+	f.privilegeCalls++
+	f.objects = objects
+	if f.err != nil {
+		return domain.PrivilegeMatrix{}, f.err
+	}
+	data := f.privileges
+	if len(data.Objects) == 0 {
+		data.Objects = append([]domain.ObjectRef(nil), objects...)
+	}
+	return data, nil
 }
 
 type fakeRoleAdmin struct {
-	result domain.MutationResult
-	err    error
-	calls  int
+	result     domain.MutationResult
+	err        error
+	calls      int
+	last       string
+	lastRole   domain.RoleRef
+	lastMember domain.RoleRef
+	lastGrant  domain.PrivilegeGrant
 }
 
 func (f *fakeRoleAdmin) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "CreateRole"
 	return f.result, f.err
 }
 
 func (f *fakeRoleAdmin) DropRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "DropRole"
 	return f.result, f.err
 }
 
 func (f *fakeRoleAdmin) GrantRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "GrantRole"
+	f.lastRole = membership.Role
+	f.lastMember = membership.Member
 	return f.result, f.err
 }
 
 func (f *fakeRoleAdmin) RevokeRole(ctx context.Context, membership domain.RoleMembership) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "RevokeRole"
+	f.lastRole = membership.Role
+	f.lastMember = membership.Member
 	return f.result, f.err
 }
 
 func (f *fakeRoleAdmin) GrantPrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "GrantPrivileges"
+	f.lastGrant = grant
 	return f.result, f.err
 }
 
 func (f *fakeRoleAdmin) RevokePrivileges(ctx context.Context, grant domain.PrivilegeGrant) (domain.MutationResult, error) {
 	f.calls++
+	f.last = "RevokePrivileges"
+	f.lastGrant = grant
 	return f.result, f.err
 }
 
@@ -255,6 +302,60 @@ func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]
 	return f.indexes, nil
 }
 
+func defaultFakeMatrix(engine domain.Engine) *fakeRoleMatrix {
+	if engine == domain.EngineMongoDB {
+		user := domain.RoleRef{Engine: engine, Database: "analytics", Name: "analyst@analytics", Kind: domain.KindUser}
+		role := domain.RoleRef{Engine: engine, Database: "analytics", Name: "app_role@analytics", Kind: domain.KindRole}
+		builtin := domain.RoleRef{Engine: engine, Database: "analytics", Name: "read@analytics", Kind: domain.KindRole, Builtin: true}
+		object := domain.ObjectRef{Engine: engine, Kind: domain.KindDatabase, Database: "analytics", Name: "analytics"}
+		return &fakeRoleMatrix{
+			membership: domain.RoleMatrix{
+				Principals: []domain.RoleRef{user, role},
+				Roles:      []domain.RoleRef{builtin, role},
+				Members: map[string]map[string]bool{
+					user.Key(): {builtin.Key(): true},
+				},
+			},
+			privileges: domain.PrivilegeMatrix{
+				Principals: []domain.RoleRef{role},
+				Objects:    []domain.ObjectRef{object},
+				Cells: map[string]map[string][]string{
+					role.Key(): {object.Key(): {"find", "update"}},
+				},
+			},
+		}
+	}
+	user := domain.RoleRef{Engine: engine, Name: "app_ro", Kind: domain.KindUser}
+	role := domain.RoleRef{Engine: engine, Name: "reporting", Kind: domain.KindRole}
+	other := domain.RoleRef{Engine: engine, Name: "app_role", Kind: domain.KindRole}
+	database := "orders"
+	if engine == domain.EngineMySQL {
+		database = "billing"
+	}
+	object := domain.ObjectRef{Engine: engine, Kind: domain.KindDatabase, Database: database, Name: database}
+	defaultPriv := "SELECT"
+	if engine == domain.EnginePostgreSQL {
+		defaultPriv = "CONNECT"
+	}
+	return &fakeRoleMatrix{
+		membership: domain.RoleMatrix{
+			Principals: []domain.RoleRef{user, other},
+			Roles:      []domain.RoleRef{role, other},
+			Members: map[string]map[string]bool{
+				user.Key(): {role.Key(): true},
+			},
+		},
+		privileges: domain.PrivilegeMatrix{
+			Principals: []domain.RoleRef{role, user},
+			Objects:    []domain.ObjectRef{object},
+			Cells: map[string]map[string][]string{
+				role.Key(): {object.Key(): {defaultPriv}},
+				user.Key(): {object.Key(): {defaultPriv, "UPDATE"}},
+			},
+		},
+	}
+}
+
 func defaultFakeStats(engine domain.Engine) *fakeStatsReader {
 	if engine == domain.EngineMongoDB {
 		return &fakeStatsReader{
@@ -337,10 +438,14 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if role == nil {
 		role = &fakeRoleAdmin{result: domain.MutationResult{Statement: "role change"}}
 	}
+	matrix := f.matrix
+	if matrix == nil {
+		matrix = defaultFakeMatrix(p.Engine)
+	}
 	return ports.SessionBundle{
 		Session: conn, Catalog: catalog, DataReader: data,
 		StatsReader: stats, PrivilegeReader: privileges, QueryExecutor: query,
-		ModeController: mode, RoleAdmin: role,
+		ModeController: mode, RoleAdmin: role, RoleMatrix: matrix,
 	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }

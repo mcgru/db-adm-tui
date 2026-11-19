@@ -34,6 +34,7 @@ const (
 	More            Action = "more"
 	ExactCount      Action = "exact-count"
 	ToggleMode      Action = "toggle-mode"
+	Matrix          Action = "matrix"
 	Edit            Action = "edit"
 	CaseMode        Action = "case-mode"
 	Execute         Action = "execute"
@@ -108,6 +109,7 @@ var single = map[string]Action{
 
 var chord = map[string]Action{
 	"ctrl+w": ToggleMode, "ctrl+ц": ToggleMode, "ц": ToggleMode,
+	"ctrl+r": Matrix, "ctrl+к": Matrix, "к": Matrix,
 	"ctrl+e": Edit, "ctrl+у": Edit, "у": Edit,
 	"ctrl+x": Execute, "ctrl+ч": Execute,
 	"s": ExactCount, "ы": ExactCount,

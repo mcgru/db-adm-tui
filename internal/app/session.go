@@ -488,6 +488,33 @@ func (s *Session) ResultsNext(ctx context.Context, limit int) (domain.QueryPage,
 	return page, nil
 }
 
+// RoleMatrix returns the structured membership grid.
+func (s *Session) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.RoleMatrix == nil {
+		return domain.RoleMatrix{}, domain.NewError(domain.KindConfig, "role", "role matrix is not available")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.RoleMatrix{}, err
+	}
+	return s.bundle.RoleMatrix.RoleMatrix(ctx)
+}
+
+// PrivilegeMatrix returns structured privilege cells for objects in the current
+// database/schema.
+func (s *Session) PrivilegeMatrix(ctx context.Context, objects []domain.ObjectRef) (domain.PrivilegeMatrix, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.RoleMatrix == nil {
+		return domain.PrivilegeMatrix{}, domain.NewError(domain.KindConfig, "role", "privilege matrix is not available")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.PrivilegeMatrix{}, err
+	}
+	return s.bundle.RoleMatrix.PrivilegeMatrix(ctx, objects)
+}
+
 // CreateRole creates a native role.
 func (s *Session) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
 	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {

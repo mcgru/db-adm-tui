@@ -10,8 +10,9 @@ Security node with users and roles, native access markers, a paged Data tab with
 a bounded loaded window, an inline `/` filter with match navigation, a
 server-side `Ctrl+F` regexp filter, a session-wide search case mode, object
 statistics with exact count, index/structure details, native privilege
-inspection, a query bar with Results, completion, context help, and history, and
-a read-only default with an explicit read-write switch.
+inspection, an access matrix for role membership and object privileges, a query
+bar with Results, completion, context help, and history, and a read-only default
+with an explicit read-write switch.
 
 ## Requirements
 
@@ -49,7 +50,7 @@ The tool starts on the profile picker.
 | `n` | New connection at the picker; next tree-search or filtered Data view match |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
-| `e` | Edit the selected profile at the picker; with a role selected in the tree, open the role grant editor |
+| `e` | Edit the selected profile at the picker; with a role selected in the tree, open the privilege matrix focused on that role |
 | `+` | With the roles group selected: create a role. With a role selected: grant privileges or assign the role. Requires `r/w` |
 | `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. Requires `r/w` |
 | `Space` | Select an import row, or open/expand the selected tree node |
@@ -61,6 +62,7 @@ The tool starts on the profile picker.
 | `Ctrl+X` then `Ctrl+X` | Execute the query bar statement from any workspace zone |
 | `Ctrl+X` then `s` | Compute the exact count for the selected table/collection |
 | `Ctrl+X` then `Ctrl+E` | Open the current statement in the edit modal |
+| `Ctrl+X` then `Ctrl+R` | Open the access matrix in `r/w` (membership and object privileges) |
 | `Ctrl+X` then `Ctrl+W` | Switch between read-only and read-write; read-write asks for confirmation |
 | `Ctrl+Space` | Open completion for the word at the cursor; `Esc` then `Tab` also opens it in the query bar or edit modal |
 | `Ctrl+F1` | Open offline context help for the focused element or word; `Enter` or `Ctrl+F1` again shows examples |
@@ -143,24 +145,45 @@ plus granted/active roles, and MongoDB roles and inherited privileges in their
 native terms. A failed section shows `not permitted` without hiding the other
 sections. There is no `GRANT` or `REVOKE` action in read-only mode.
 
-## Role administration (Story 9b)
+## Access matrix (Story 9b)
 
-Role changes are available only in `r/w`. In `r/o`, `+`, `-`, and the role
-editor report that read-write mode is required and point to `Ctrl+X Ctrl+W`;
-the tool never switches automatically.
+Structured role and grant changes live in a full-pane matrix opened with
+`Ctrl+X Ctrl+R`. It is available only in `r/w`; in `r/o` the tool reports that
+read-write mode is required and points to `Ctrl+X Ctrl+W` without switching
+automatically.
 
-- `roles` group + `+`: create a native role.
-- role + `+`: grant native privileges on a database/schema/table/collection,
-  or assign the role to a user/role.
-- role + `-`: revoke privileges, remove an assignment, or drop the role.
-- role + `e`: open the grant editor directly.
+The matrix has two panels:
 
-The editor keeps engine-native terms. `Space` cycles the target kind or toggles
-a privilege, `Tab`/`Shift+Tab` move between fields, `Up`/`Down` move through the
-multi-select privilege list, `Enter` applies, and `Esc` cancels. Targets and
-privilege names are validated by the engine adapter; unsupported combinations
-are rejected before execution. Successful changes are audited in the existing
-history and refresh the Security list or the current Privileges pane.
+- `1 Principal × Role` — membership. Rows are users and roles, columns are
+  native roles, and a cell is `[x]` or `[ ]`.
+- `2 Principal/Role × Object` — privileges. Rows are roles, plus users for
+  PostgreSQL and MySQL so direct grants stay visible. Columns are the current
+  database/schema scope and the tables, views, or collections loaded in the
+  tree. MongoDB shows role rows only.
+
+Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
+Each panel keeps its own cursor, scroll position, and filter. Arrows move the
+cell cursor, `Home`/`End` jump to an edge, `PageUp`/`PageDown` move a page,
+`Space` toggles the default access for the cell, `e` opens details, `/` filters
+rows and columns, and `Esc` closes the matrix (or clears an active filter
+prompt first).
+
+For a privilege cell, `Space` toggles the engine default (`CONNECT` on
+PostgreSQL databases, `USAGE` on schemas, `SELECT` on SQL tables, `find` on
+MongoDB). `e` opens the full native privilege list as a multi-select; apply the
+diff with `Enter`. Built-in MongoDB roles are read-only. Targets and privilege
+names are validated by the engine adapter, and unsupported combinations are
+rejected before execution.
+
+The current connection must hold native admin rights; the target user's login
+and password are never needed. A `not permitted` result is shown as the native
+error with a `Ctrl+D` reconnect hint. Successful changes are audited in the
+existing history and refresh the matrix.
+
+Role creation and drop remain in the tree: `roles` group + `+` creates a role,
+and role + `-` can drop one. The role menu's grant/assign entries open the
+matrix instead of a modal form; role + `e` opens the privilege panel with that
+role selected.
 
 Users (Story 9c) and row add/remove (Story 9a) are not implemented yet.
 

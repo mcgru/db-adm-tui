@@ -25,6 +25,7 @@ type Screen int
 const (
 	ScreenPicker Screen = iota
 	ScreenWorkspace
+	ScreenMatrix
 )
 
 // Focus is the workspace focus zone.
@@ -50,8 +51,8 @@ const (
 	modalMode
 	modalRoleMenu
 	modalRoleCreate
-	modalRoleForm
 	modalRoleConfirm
+	modalMatrixDetails
 )
 
 type messageLevel int
@@ -171,6 +172,7 @@ type Model struct {
 	statementInput  textinput.Model
 	statementOrigin string
 	role            roleState
+	matrix          matrixState
 	history         []string
 	historyIndex    int
 	historyDraft    string
@@ -201,6 +203,8 @@ type Model struct {
 	queryHeight    int
 	layoutKey      string
 	roleGen        uint64
+	matrixGen      uint64
+	matrixDirty    bool
 
 	connecting      bool
 	connectingKey   string
@@ -272,6 +276,7 @@ func New(svc *app.Service) Model {
 	m.query = newInput("", false)
 	m.statementInput = newInput("", false)
 	m.role = newRoleState()
+	m.matrix = newMatrixState()
 	m.editLabel = newInput("label", false)
 	m.editHost = newInput("host", false)
 	m.editPort = newInput("5432", false)
@@ -317,6 +322,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.data.endDown = 0
 		m.data.endPg = 0
 		m.resizeInputs()
+		if m.screen == ScreenMatrix {
+			m.clampMatrix()
+		}
 		if m.regions().TooSmall {
 			m.dismissModal()
 			if m.connecting {
@@ -364,6 +372,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleModeDone(msg)
 	case roleDoneMsg:
 		return m.handleRoleDone(msg)
+	case matrixMembershipMsg:
+		return m.handleMatrixMembership(msg)
+	case matrixPrivilegesMsg:
+		return m.handleMatrixPrivileges(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -384,6 +396,12 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
+	}
+	if m.screen == ScreenMatrix {
+		if m.modal == modalMatrixDetails {
+			return m.handleMatrixDetailsKey(msg)
+		}
+		return m.handleMatrixKey(msg)
 	}
 	if m.modal != modalNone {
 		m.data.endDown = 0
@@ -412,8 +430,6 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleRoleMenuKey(msg)
 	case modalRoleCreate:
 		return m.handleRoleCreateKey(msg)
-	case modalRoleForm:
-		return m.handleRoleFormKey(msg)
 	case modalRoleConfirm:
 		return m.handleRoleConfirmKey(msg)
 	}
@@ -789,6 +805,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m, m.nextTreeMatch(-1)
 		}
 		return m, m.nextMatch(-1)
+	case keymap.Matrix:
+		if m.screen == ScreenWorkspace {
+			return m.openMatrix(matrixMembership, nil)
+		}
 	case keymap.ToggleMode:
 		if m.screen != ScreenWorkspace || m.session == nil {
 			return m, nil
@@ -1224,6 +1244,9 @@ func (m Model) View() tea.View {
 		if m.screen == ScreenWorkspace {
 			base = m.viewWorkspace(regions)
 		}
+		if m.screen == ScreenMatrix {
+			base = m.viewMatrix()
+		}
 		if m.modal != modalNone {
 			content = overlayCenter(base, m.viewModal(), m.width, m.height)
 		} else {
@@ -1276,10 +1299,10 @@ func (m Model) viewModal() string {
 		return m.viewRoleMenu()
 	case modalRoleCreate:
 		return m.viewRoleCreate()
-	case modalRoleForm:
-		return m.viewRoleForm()
 	case modalRoleConfirm:
 		return m.viewRoleConfirm()
+	case modalMatrixDetails:
+		return m.viewMatrixDetails()
 	}
 	return ""
 }
@@ -1308,8 +1331,11 @@ func (m *Model) dismissModal() {
 		m.helpBody = ""
 	case modalMode:
 		m.modal = modalNone
-	case modalRoleMenu, modalRoleCreate, modalRoleForm, modalRoleConfirm:
+	case modalRoleMenu, modalRoleCreate, modalRoleConfirm:
 		m.modal = modalNone
+	case modalMatrixDetails:
+		m.modal = modalNone
+		m.matrix.details = matrixDetails{}
 	}
 }
 

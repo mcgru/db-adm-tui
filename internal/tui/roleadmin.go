@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -29,27 +28,8 @@ type roleMenuState struct {
 	selected int
 }
 
-type roleFormState struct {
-	action      roleAction
-	role        domain.RoleRef
-	focus       int
-	fieldCursor int
-	targetKind  domain.ObjectKind
-	memberKind  domain.ObjectKind
-	database    string
-	schema      string
-	table       string
-	member      string
-	choices     []string
-	chosen      map[string]bool
-	cursor      int
-	offset      int
-	err         string
-}
-
 type roleState struct {
 	menu         roleMenuState
-	form         roleFormState
 	confirm      domain.RoleRef
 	createName   string
 	createCursor int
@@ -132,8 +112,8 @@ func (m Model) startRoleEdit() (tea.Model, tea.Cmd) {
 	if !m.roleWritable() {
 		return m, nil
 	}
-	m.openRoleForm(roleGrant, roleRefFromNode(node))
-	return m, nil
+	role := roleRefFromNode(node)
+	return m.openMatrix(matrixPrivileges, &role)
 }
 
 func roleRefFromNode(node domain.Node) domain.RoleRef {
@@ -163,112 +143,6 @@ func (m Model) roleMenuItems() []string {
 	return []string{"Revoke privileges", "Remove assignment", "Drop role"}
 }
 
-func (m *Model) openRoleForm(action roleAction, role domain.RoleRef) {
-	database := role.Database
-	if database == "" {
-		database = m.currentDatabase()
-	}
-	form := roleFormState{
-		action:     action,
-		role:       role,
-		targetKind: domain.KindDatabase,
-		memberKind: domain.KindUser,
-		database:   database,
-		chosen:     map[string]bool{},
-	}
-	if action == roleAssign || action == roleUnassign {
-		form.focus = 0
-	} else {
-		kinds := domain.RoleTargetKinds(m.profileForStatus().Engine)
-		if len(kinds) > 0 {
-			form.targetKind = kinds[0]
-		}
-		form.choices = domain.RolePrivilegeChoices(m.profileForStatus().Engine, form.targetKind)
-		form.focus = 0
-	}
-	m.role.form = form
-	m.modal = modalRoleForm
-}
-
-func (m *Model) cycleRoleTargetKind(delta int) {
-	form := &m.role.form
-	kinds := domain.RoleTargetKinds(m.profileForStatus().Engine)
-	if len(kinds) == 0 {
-		return
-	}
-	index := 0
-	for i, kind := range kinds {
-		if kind == form.targetKind {
-			index = i
-			break
-		}
-	}
-	index = (index + delta + len(kinds)) % len(kinds)
-	form.targetKind = kinds[index]
-	form.choices = domain.RolePrivilegeChoices(m.profileForStatus().Engine, form.targetKind)
-	form.chosen = map[string]bool{}
-	form.cursor = 0
-	form.offset = 0
-}
-
-func (m *Model) toggleRolePrivilege() {
-	form := &m.role.form
-	if form.cursor < 0 || form.cursor >= len(form.choices) {
-		return
-	}
-	value := form.choices[form.cursor]
-	form.chosen[value] = !form.chosen[value]
-}
-
-func (m Model) roleFormFields() int {
-	if m.role.form.action == roleAssign || m.role.form.action == roleUnassign {
-		return 2
-	}
-	return 5
-}
-
-func (m *Model) moveRoleFocus(delta int) {
-	form := &m.role.form
-	form.focus = (form.focus + delta + m.roleFormFields()) % m.roleFormFields()
-	form.fieldCursor = len([]rune(m.roleFieldValue()))
-}
-
-func (m Model) roleFieldValue() string {
-	form := m.role.form
-	if form.action == roleAssign || form.action == roleUnassign {
-		if form.focus == 1 {
-			return form.member
-		}
-		return ""
-	}
-	switch form.focus {
-	case 1:
-		return form.database
-	case 2:
-		return form.schema
-	case 3:
-		return form.table
-	}
-	return ""
-}
-
-func (m *Model) setRoleFieldValue(value string) {
-	form := &m.role.form
-	switch form.focus {
-	case 1:
-		form.database = value
-	case 2:
-		form.schema = value
-	case 3:
-		form.table = value
-	}
-	if form.action == roleAssign || form.action == roleUnassign {
-		if form.focus == 1 {
-			form.member = value
-		}
-	}
-}
-
 func (m Model) handleRoleMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	action, ok := keymap.Lookup(msg.String())
 	if !ok {
@@ -294,17 +168,14 @@ func (m Model) handleRoleMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		choice := items[m.role.menu.selected]
+		role := m.role.menu.role
 		switch choice {
-		case "Grant privileges":
-			m.openRoleForm(roleGrant, m.role.menu.role)
-		case "Assign to user/role":
-			m.openRoleForm(roleAssign, m.role.menu.role)
-		case "Revoke privileges":
-			m.openRoleForm(roleRevoke, m.role.menu.role)
-		case "Remove assignment":
-			m.openRoleForm(roleUnassign, m.role.menu.role)
+		case "Grant privileges", "Revoke privileges":
+			return m.openMatrix(matrixPrivileges, &role)
+		case "Assign to user/role", "Remove assignment":
+			return m.openMatrix(matrixMembership, &role)
 		case "Drop role":
-			m.role.confirm = m.role.menu.role
+			m.role.confirm = role
 			m.modal = modalRoleConfirm
 		}
 	}
@@ -334,141 +205,6 @@ func (m Model) handleRoleCreateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleRoleFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	if action, ok := keymap.Lookup(key); ok {
-		switch action {
-		case keymap.Cancel:
-			m.modal = modalNone
-			return m, nil
-		case keymap.Tab:
-			m.moveRoleFocus(1)
-			return m, nil
-		case keymap.ShiftTab:
-			m.moveRoleFocus(-1)
-			return m, nil
-		case keymap.Confirm:
-			return m.submitRoleForm()
-		case keymap.Space:
-			if m.role.form.action != roleAssign && m.role.form.action != roleUnassign && m.role.form.focus == 0 {
-				m.cycleRoleTargetKind(1)
-				return m, nil
-			}
-			if m.role.form.action != roleAssign && m.role.form.action != roleUnassign && m.role.form.focus == 4 {
-				m.toggleRolePrivilege()
-				return m, nil
-			}
-			if (m.role.form.action == roleAssign || m.role.form.action == roleUnassign) && m.role.form.focus == 0 {
-				if m.role.form.memberKind == domain.KindUser {
-					m.role.form.memberKind = domain.KindRole
-				} else {
-					m.role.form.memberKind = domain.KindUser
-				}
-				return m, nil
-			}
-		case keymap.Up:
-			if m.role.form.action != roleAssign && m.role.form.action != roleUnassign && m.role.form.focus == 4 {
-				m.role.form.cursor--
-				if m.role.form.cursor < 0 {
-					m.role.form.cursor = len(m.role.form.choices) - 1
-				}
-				m.role.form.offset = completionWindowStart(m.role.form.offset, m.role.form.cursor, 8)
-				return m, nil
-			}
-		case keymap.Down:
-			if m.role.form.action != roleAssign && m.role.form.action != roleUnassign && m.role.form.focus == 4 {
-				m.role.form.cursor++
-				if m.role.form.cursor >= len(m.role.form.choices) {
-					m.role.form.cursor = 0
-				}
-				m.role.form.offset = completionWindowStart(m.role.form.offset, m.role.form.cursor, 8)
-				return m, nil
-			}
-		}
-	}
-	if m.role.form.action != roleAssign && m.role.form.action != roleUnassign &&
-		(m.role.form.focus == 0 || m.role.form.focus == 4) {
-		return m, nil
-	}
-	value, cursor := editFilterText(m.roleFieldValue(), m.role.form.fieldCursor, msg)
-	m.role.form.fieldCursor = cursor
-	m.setRoleFieldValue(value)
-	return m, nil
-}
-
-func (m Model) submitRoleForm() (tea.Model, tea.Cmd) {
-	form := m.role.form
-	if form.action == roleAssign || form.action == roleUnassign {
-		member := strings.TrimSpace(form.member)
-		if member == "" {
-			m.role.form.err = "enter a user or role name"
-			return m, nil
-		}
-		membership := domain.RoleMembership{
-			Role:   form.role,
-			Member: domain.RoleRef{Engine: form.role.Engine, Database: form.role.Database, Name: member, Kind: form.memberKind},
-		}
-		return m.startRoleMutation(form.action, func(session *app.Session) (domain.MutationResult, error) {
-			if form.action == roleAssign {
-				return session.GrantRole(context.Background(), membership)
-			}
-			return session.RevokeRole(context.Background(), membership)
-		})
-	}
-	target, err := m.roleTarget(form)
-	if err != nil {
-		m.role.form.err = err.Error()
-		return m, nil
-	}
-	privileges := make([]string, 0, len(form.choices))
-	for _, choice := range form.choices {
-		if form.chosen[choice] {
-			privileges = append(privileges, choice)
-		}
-	}
-	if len(privileges) == 0 {
-		m.role.form.err = "choose at least one privilege"
-		return m, nil
-	}
-	grant := domain.PrivilegeGrant{Role: form.role, Target: target, Privileges: privileges}
-	return m.startRoleMutation(form.action, func(session *app.Session) (domain.MutationResult, error) {
-		if form.action == roleGrant {
-			return session.GrantPrivileges(context.Background(), grant)
-		}
-		return session.RevokePrivileges(context.Background(), grant)
-	})
-}
-
-func (m Model) roleTarget(form roleFormState) (domain.ObjectRef, error) {
-	database := strings.TrimSpace(form.database)
-	schema := strings.TrimSpace(form.schema)
-	table := strings.TrimSpace(form.table)
-	switch form.targetKind {
-	case domain.KindDatabase:
-		if database == "" {
-			return domain.ObjectRef{}, fmt.Errorf("enter a database")
-		}
-		return domain.ObjectRef{Engine: form.role.Engine, Kind: domain.KindDatabase, Database: database, Name: database}, nil
-	case domain.KindSchema:
-		if schema == "" {
-			return domain.ObjectRef{}, fmt.Errorf("enter a schema")
-		}
-		return domain.ObjectRef{Engine: form.role.Engine, Kind: domain.KindSchema, Database: database, Schema: schema, Name: schema}, nil
-	case domain.KindTable:
-		if database == "" || table == "" {
-			return domain.ObjectRef{}, fmt.Errorf("enter a database and table")
-		}
-		return domain.ObjectRef{Engine: form.role.Engine, Kind: domain.KindTable, Database: database, Schema: schema, Name: table}, nil
-	case domain.KindCollection:
-		if database == "" || table == "" {
-			return domain.ObjectRef{}, fmt.Errorf("enter a database and collection")
-		}
-		return domain.ObjectRef{Engine: form.role.Engine, Kind: domain.KindCollection, Database: database, Name: table}, nil
-	default:
-		return domain.ObjectRef{}, fmt.Errorf("choose a target")
-	}
-}
-
 func (m Model) startRoleMutation(action roleAction, run func(*app.Session) (domain.MutationResult, error)) (tea.Model, tea.Cmd) {
 	if m.session == nil {
 		m.setMessage(levelError, "no active connection")
@@ -489,6 +225,22 @@ func (m Model) handleRoleDone(msg roleDoneMsg) (tea.Model, tea.Cmd) {
 	if msg.gen != m.roleGen {
 		return m, nil
 	}
+	if m.screen == ScreenMatrix {
+		if msg.err != nil {
+			m.matrix.busy = false
+			text := matrixErrorText(msg.err)
+			if m.matrix.details.open {
+				m.matrix.details.err = text
+				return m, nil
+			}
+			m.setMessage(levelError, text)
+			return m, nil
+		}
+		m.matrix.details = matrixDetails{}
+		m.matrixDirty = true
+		m.setMessage(levelSuccess, "change applied · "+oneLine(msg.result.Statement))
+		return m, m.reloadMatrix()
+	}
 	if msg.err != nil {
 		m.setMessage(levelError, oneLine(msg.err.Error()))
 		return m, nil
@@ -498,24 +250,37 @@ func (m Model) handleRoleDone(msg roleDoneMsg) (tea.Model, tea.Cmd) {
 	switch msg.action {
 	case roleCreate, roleDrop:
 		commands = append(commands, m.refreshPrincipalGroup(domain.KindRoles))
-	case roleGrant, roleRevoke:
-		commands = append(commands, m.refreshCurrentPrivileges())
 	case roleAssign, roleUnassign:
-		commands = append(commands, m.refreshPrincipalGroup(domain.KindUsers), m.refreshPrincipalGroup(domain.KindRoles))
+		commands = append(commands,
+			m.refreshPrincipalGroup(domain.KindUsers),
+			m.refreshPrincipalGroup(domain.KindRoles),
+			m.refreshMatrixScope())
 	default:
-		commands = append(commands, m.refreshCurrentPrivileges())
+		commands = append(commands, m.refreshMatrixScope(), m.refreshCurrentPrivileges())
 	}
 	return m, tea.Batch(commands...)
 }
 
 func (m *Model) refreshPrincipalGroup(kind domain.ObjectKind) tea.Cmd {
+	current := m.currentDatabase()
+	fallbackKey, fallbackNode := "", domain.Node{}
 	for key, node := range m.tree.nodes {
-		if node.Node.Kind == kind {
+		if node.Node.Kind != kind {
+			continue
+		}
+		if current != "" && node.Node.Ref.Database == current {
 			m.tree.setLoading(key, true)
 			return m.loadChildrenCmd(node.Node)
 		}
+		if fallbackKey == "" {
+			fallbackKey, fallbackNode = key, node.Node
+		}
 	}
-	return nil
+	if fallbackKey == "" {
+		return nil
+	}
+	m.tree.setLoading(fallbackKey, true)
+	return m.loadChildrenCmd(fallbackNode)
 }
 
 func (m *Model) refreshCurrentPrivileges() tea.Cmd {
@@ -526,6 +291,27 @@ func (m *Model) refreshCurrentPrivileges() tea.Cmd {
 	m.details.privilegesLoading = false
 	m.details.privilegesErr = ""
 	return m.ensurePrivileges()
+}
+
+// refreshMatrixScope reloads the loaded object group whose access markers can
+// change after a grant or membership edit.
+func (m *Model) refreshMatrixScope() tea.Cmd {
+	engine := m.engine()
+	database := m.currentDatabase()
+	schema := m.matrixSchema(engine)
+	for key, node := range m.tree.nodes {
+		switch {
+		case engine == domain.EnginePostgreSQL && node.Node.Kind == domain.KindSchema &&
+			node.Node.Ref.Database == database && node.Node.Ref.Schema == schema:
+			m.tree.setLoading(key, true)
+			return m.loadChildrenCmd(node.Node)
+		case engine != domain.EnginePostgreSQL && node.Node.Kind == domain.KindDatabase &&
+			node.Node.Ref.Database == database:
+			m.tree.setLoading(key, true)
+			return m.loadChildrenCmd(node.Node)
+		}
+	}
+	return nil
 }
 
 func (m Model) handleRoleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -564,7 +350,7 @@ func (m Model) viewRoleCreate() string {
 	width := modalWidth(m.width, 60)
 	inner := width - 4
 	var body []string
-	body = append(body, m.inputLine("name", m.roleInputValue(m.role.createName, true), true, inner))
+	body = append(body, m.inputLine("name", m.inlineInput(m.role.createName, m.role.createCursor), true, inner))
 	body = append(body, "", m.actionLine("Enter", "create", "Esc", "cancel"))
 	return modalBox("new role", body, width, m.styles)
 }
@@ -580,79 +366,8 @@ func (m Model) viewRoleConfirm() string {
 	return modalBox("drop role", body, width, m.styles)
 }
 
-func (m Model) viewRoleForm() string {
-	width := modalWidth(m.width, 70)
-	inner := width - 4
-	form := m.role.form
-	var body []string
-	body = append(body, m.styles.Muted.Render("role ")+m.styles.Text.Render(oneLine(form.role.Name)))
-	if form.action == roleAssign || form.action == roleUnassign {
-		kind := "user"
-		if form.memberKind == domain.KindRole {
-			kind = "role"
-		}
-		body = append(body, m.inputLine("member", m.roleInputValue(kind, form.focus == 0), form.focus == 0, inner))
-		body = append(body, m.inputLine("name", m.roleInputValue(form.member, form.focus == 1), form.focus == 1, inner))
-	} else {
-		kind := roleTargetKindLabel(form.targetKind)
-		body = append(body, m.inputLine("target", m.roleInputValue(kind+" (Space)", form.focus == 0), form.focus == 0, inner))
-		body = append(body, m.inputLine("database", m.roleInputValue(form.database, form.focus == 1), form.focus == 1, inner))
-		body = append(body, m.inputLine("schema", m.roleInputValue(form.schema, form.focus == 2), form.focus == 2, inner))
-		tableLabel := "table"
-		if form.targetKind == domain.KindCollection {
-			tableLabel = "collection"
-		}
-		body = append(body, m.inputLine(tableLabel, m.roleInputValue(form.table, form.focus == 3), form.focus == 3, inner))
-		body = append(body, "", m.styles.Header.Render("privileges · Space toggle · Up/Down move"))
-		body = append(body, m.viewRoleChoices(inner)...)
-	}
-	if form.err != "" {
-		body = append(body, m.styles.Error.Render(Truncate(form.err, inner)))
-	}
-	body = append(body, "", m.actionLine("Enter", "apply", "Tab", "next field"))
-	body = append(body, m.styles.Muted.Render("Esc cancel"))
-	return modalBox(roleActionTitle(form.action), body, width, m.styles)
-}
-
-func (m Model) viewRoleChoices(width int) []string {
-	form := m.role.form
-	if len(form.choices) == 0 {
-		return []string{m.styles.Muted.Render("no privileges for this target")}
-	}
-	start := form.offset
-	end := start + 8
-	if end > len(form.choices) {
-		end = len(form.choices)
-	}
-	if start < 0 {
-		start = 0
-	}
-	lines := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		mark := "[ ]"
-		if form.chosen[form.choices[i]] {
-			mark = "[x]"
-		}
-		line := "  " + mark + " " + form.choices[i]
-		if i == form.cursor {
-			line = "> " + mark + " " + form.choices[i]
-			lines = append(lines, m.styles.Select.Render(Pad(line, width)))
-		} else {
-			lines = append(lines, m.styles.Text.Render(line))
-		}
-	}
-	return lines
-}
-
-func (m Model) roleInputValue(value string, focused bool) string {
+func (m Model) inlineInput(value string, cursor int) string {
 	value = filterText(value)
-	if !focused {
-		return m.styles.Text.Render(value)
-	}
-	cursor := m.role.form.fieldCursor
-	if m.modal == modalRoleCreate {
-		cursor = m.role.createCursor
-	}
 	runes := []rune(value)
 	if cursor < 0 {
 		cursor = 0
@@ -663,34 +378,4 @@ func (m Model) roleInputValue(value string, focused bool) string {
 	return m.styles.Text.Render(string(runes[:cursor])) +
 		m.styles.Accent.Render("▏") +
 		m.styles.Text.Render(string(runes[cursor:]))
-}
-
-func roleTargetKindLabel(kind domain.ObjectKind) string {
-	switch kind {
-	case domain.KindDatabase:
-		return "database"
-	case domain.KindSchema:
-		return "schema"
-	case domain.KindTable:
-		return "table"
-	case domain.KindCollection:
-		return "collection"
-	default:
-		return string(kind)
-	}
-}
-
-func roleActionTitle(action roleAction) string {
-	switch action {
-	case roleGrant:
-		return "grant privileges"
-	case roleRevoke:
-		return "revoke privileges"
-	case roleAssign:
-		return "assign role"
-	case roleUnassign:
-		return "remove assignment"
-	default:
-		return "role"
-	}
 }

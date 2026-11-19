@@ -29,6 +29,11 @@ var mysqlRolePrivileges = map[domain.ObjectKind]map[string]bool{
 		"CREATE": true, "DROP": true, "ALTER": true, "INDEX": true,
 		"REFERENCES": true, "TRIGGER": true, "ALL PRIVILEGES": true,
 	},
+	domain.KindView: {
+		"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
+		"CREATE": true, "DROP": true, "ALTER": true, "INDEX": true,
+		"REFERENCES": true, "TRIGGER": true, "ALL PRIVILEGES": true,
+	},
 }
 
 func (c *connection) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
@@ -168,7 +173,7 @@ func mysqlGrantTarget(target domain.ObjectRef) (string, error) {
 			return "", domain.NewError(domain.KindConfig, "role", "the database is empty")
 		}
 		return quoteIdentifier(database) + ".*", nil
-	case domain.KindTable:
+	case domain.KindTable, domain.KindView:
 		if database == "" || target.Name == "" {
 			return "", domain.NewError(domain.KindConfig, "role", "the table is not fully qualified")
 		}

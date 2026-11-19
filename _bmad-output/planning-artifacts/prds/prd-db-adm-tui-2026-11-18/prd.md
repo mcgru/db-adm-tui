@@ -514,9 +514,9 @@ Where the engine can answer, the view distinguishes granted privileges from effe
 Privilege inspection never changes privileges in v1.
 
 **Consequences (testable):**
-- No `GRANT`, `REVOKE`, role membership change, or user creation is reachable from the view.
-- The v2 privilege matrix builds on this view and is not part of v1.
-- The native-command preview (`Ctrl+X Ctrl+R`) is deferred to v2 and is not active in v1.
+- No `GRANT`, `REVOKE`, role membership change, or user creation is reachable from the v1 view.
+- The v2 privilege matrix builds on this view and is not part of v1. It is the Story 9 access matrix: Principal × Role membership and Principal/Role × Object privileges, opened by `Ctrl+X Ctrl+R` only in read-write mode.
+- The matrix keeps native privilege names, audits every change, and shows native permission errors instead of impersonating the target user.
 - Attempting a privilege-changing statement through the query bar follows the read-only guard in §2.6.
 
 #### FR-41: Degradation and errors

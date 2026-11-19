@@ -18,6 +18,10 @@ var pgRolePrivileges = map[domain.ObjectKind]map[string]bool{
 		"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
 		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "ALL": true,
 	},
+	domain.KindView: {
+		"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
+		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "ALL": true,
+	},
 }
 
 func (c *connection) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
@@ -160,7 +164,7 @@ func pgTarget(target domain.ObjectRef) (string, error) {
 			return "", domain.NewError(domain.KindConfig, "role", "the schema is empty")
 		}
 		return "SCHEMA " + quoteIdentifier(name), nil
-	case domain.KindTable:
+	case domain.KindTable, domain.KindView:
 		if target.Schema == "" || target.Name == "" {
 			return "", domain.NewError(domain.KindConfig, "role", "the table is not fully qualified")
 		}

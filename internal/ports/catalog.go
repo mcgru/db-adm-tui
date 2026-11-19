@@ -24,4 +24,5 @@ type SessionBundle struct {
 	QueryExecutor   QueryExecutor
 	ModeController  ModeController
 	RoleAdmin       RoleAdmin
+	RoleMatrix      RoleMatrixReader
 }

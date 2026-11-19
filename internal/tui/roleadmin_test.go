@@ -26,6 +26,17 @@ func enableReadWrite(t *testing.T, m Model) Model {
 	return runCmd(t, m, cmd)
 }
 
+func openMatrix(t *testing.T, m Model) Model {
+	t.Helper()
+	m, _ = press(t, m, "ctrl+x")
+	m, cmd := press(t, m, "ctrl+r")
+	m = runCmd(t, m, cmd)
+	if m.screen != ScreenMatrix {
+		t.Fatalf("screen = %v, message=%q", m.screen, m.message)
+	}
+	return m
+}
+
 func TestRoleActionsAreBlockedInReadOnlyMode(t *testing.T) {
 	m := workspace(t)
 	m = selectRoleNode(t, m)
@@ -35,6 +46,184 @@ func TestRoleActionsAreBlockedInReadOnlyMode(t *testing.T) {
 	}
 	if !strings.Contains(m.message, "read-write mode") {
 		t.Fatalf("message = %q", m.message)
+	}
+}
+
+func TestMatrixIsBlockedInReadOnlyMode(t *testing.T) {
+	m := workspace(t)
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "ctrl+r")
+	if m.screen != ScreenWorkspace {
+		t.Fatalf("screen = %v", m.screen)
+	}
+	if !strings.Contains(m.message, "read-write mode") {
+		t.Fatalf("message = %q", m.message)
+	}
+}
+
+func TestMatrixOpensAndSwitches(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	matrix := defaultFakeMatrix(domain.EnginePostgreSQL)
+	e.connector.matrix = matrix
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	if !m.matrix.membershipLoaded || !m.matrix.privilegesLoaded {
+		t.Fatalf("matrix not loaded: %+v", m.matrix)
+	}
+	if m.matrix.active != matrixMembership {
+		t.Fatalf("active = %v", m.matrix.active)
+	}
+	view := StripANSI(m.viewMatrix())
+	for _, want := range []string{"Principal × Role", "app_ro", "reporting", "[x]"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view missing %q:\n%s", want, view)
+		}
+	}
+	m, _ = press(t, m, "2")
+	if m.matrix.active != matrixPrivileges {
+		t.Fatalf("active = %v", m.matrix.active)
+	}
+	if !strings.Contains(StripANSI(m.viewMatrix()), "Principal/Role × Object") {
+		t.Fatal("privilege matrix not shown")
+	}
+	m, _ = press(t, m, "tab")
+	if m.matrix.active != matrixMembership {
+		t.Fatalf("tab did not switch back: %v", m.matrix.active)
+	}
+}
+
+func TestRoleMenuGrantOpensPrivilegeMatrix(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = selectRoleNode(t, m)
+	m, _ = press(t, m, "+")
+	m, cmd := press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
+		t.Fatalf("screen=%v active=%v", m.screen, m.matrix.active)
+	}
+	if m.matrixRoleRows()[m.matrix.cursors[matrixPrivileges].row].Name != "reporting" {
+		t.Fatalf("selected role = %+v", m.matrixRoleRows()[m.matrix.cursors[matrixPrivileges].row])
+	}
+}
+
+func TestMongoMatrixUsesRoleRowsAndShowsBuiltinRoles(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.matrix = defaultFakeMatrix(domain.EngineMongoDB)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	wantBuiltin := false
+	for _, role := range m.matrix.membership.Roles {
+		if role.Builtin {
+			wantBuiltin = true
+		}
+	}
+	if !wantBuiltin {
+		t.Fatalf("built-in role missing: %+v", m.matrix.membership.Roles)
+	}
+	m, _ = press(t, m, "2")
+	for _, principal := range m.matrix.privileges.Principals {
+		if principal.Kind != domain.KindRole {
+			t.Fatalf("Mongo privilege row is not a role: %+v", principal)
+		}
+	}
+}
+
+func TestMatrixSpaceTogglesMembership(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `REVOKE "reporting" FROM "app_ro"`}}
+	e.connector.role = admin
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, cmd := press(t, m, "space")
+	m = runCmd(t, m, cmd)
+	if admin.calls != 1 || admin.last != "RevokeRole" {
+		t.Fatalf("calls=%d last=%q", admin.calls, admin.last)
+	}
+	if admin.lastMember.Name != "app_ro" || admin.lastRole.Name != "reporting" {
+		t.Fatalf("membership = %+v", admin.lastMember)
+	}
+	if !strings.Contains(m.message, "change applied") {
+		t.Fatalf("message = %q", m.message)
+	}
+}
+
+func TestMatrixSpaceTogglesPrivilege(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `REVOKE CONNECT ON DATABASE "orders" FROM "reporting"`}}
+	e.connector.role = admin
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "2")
+	m, cmd := press(t, m, "space")
+	m = runCmd(t, m, cmd)
+	if admin.calls != 1 || admin.last != "RevokePrivileges" {
+		t.Fatalf("calls=%d last=%q", admin.calls, admin.last)
+	}
+	if admin.lastGrant.Role.Name != "reporting" || admin.lastGrant.Target.Kind != domain.KindDatabase ||
+		len(admin.lastGrant.Privileges) != 1 || admin.lastGrant.Privileges[0] != "CONNECT" {
+		t.Fatalf("grant = %+v", admin.lastGrant)
+	}
+}
+
+func TestMatrixDetailsAppliesPrivileges(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `GRANT CREATE ON DATABASE "orders" TO "reporting"`}}
+	e.connector.role = admin
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "2")
+	m, _ = press(t, m, "e")
+	if m.modal != modalMatrixDetails {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	m, _ = press(t, m, "down")
+	m, _ = press(t, m, "space")
+	m, cmd := press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if admin.calls != 1 || admin.last != "GrantPrivileges" {
+		t.Fatalf("calls=%d last=%q", admin.calls, admin.last)
+	}
+	if len(admin.lastGrant.Privileges) != 1 || admin.lastGrant.Privileges[0] != "CREATE" {
+		t.Fatalf("grant = %+v", admin.lastGrant)
+	}
+}
+
+func TestMatrixFilterKeepsPerMatrixState(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "/")
+	m = typeString(t, m, "app_role")
+	m, _ = press(t, m, "enter")
+	if m.matrix.cursors[matrixMembership].filter != "app_role" {
+		t.Fatalf("filter = %q", m.matrix.cursors[matrixMembership].filter)
+	}
+	if got := len(m.matrixRoleRows()); got != 1 {
+		t.Fatalf("rows = %d", got)
+	}
+	m, _ = press(t, m, "2")
+	m, _ = press(t, m, "1")
+	if m.matrix.cursors[matrixMembership].filter != "app_role" {
+		t.Fatal("membership filter was not kept")
+	}
+	m, _ = press(t, m, "esc")
+	if m.screen != ScreenWorkspace {
+		t.Fatalf("screen = %v", m.screen)
 	}
 }
 
@@ -56,64 +245,11 @@ func TestRoleCreateFromRolesGroup(t *testing.T) {
 	m = typeString(t, m, "app_role")
 	m, cmd = press(t, m, "enter")
 	m = runCmd(t, m, cmd)
-	if admin.calls != 1 {
-		t.Fatalf("calls = %d", admin.calls)
+	if admin.calls != 1 || admin.last != "CreateRole" {
+		t.Fatalf("calls = %d last=%q", admin.calls, admin.last)
 	}
 	if m.modal != modalNone || !strings.Contains(m.message, "role change applied") {
 		t.Fatalf("modal=%v message=%q", m.modal, m.message)
-	}
-}
-
-func TestRoleGrantFormApplies(t *testing.T) {
-	e := newTestEnv(t)
-	seedStandard(t, e)
-	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `GRANT CONNECT ON DATABASE "orders" TO "reporting"`}}
-	e.connector.role = admin
-	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
-	m = enableReadWrite(t, m)
-	m = selectRoleNode(t, m)
-	m, _ = press(t, m, "+")
-	if m.modal != modalRoleMenu {
-		t.Fatalf("menu modal = %v", m.modal)
-	}
-	m, _ = press(t, m, "enter")
-	if m.modal != modalRoleForm {
-		t.Fatalf("form modal = %v", m.modal)
-	}
-	for i := 0; i < 4; i++ {
-		m, _ = press(t, m, "tab")
-	}
-	m, _ = press(t, m, "space")
-	m, cmd := press(t, m, "enter")
-	m = runCmd(t, m, cmd)
-	if admin.calls != 1 {
-		t.Fatalf("calls = %d", admin.calls)
-	}
-	if m.modal != modalNone {
-		t.Fatalf("modal = %v", m.modal)
-	}
-}
-
-func TestRoleAssignFormApplies(t *testing.T) {
-	e := newTestEnv(t)
-	seedStandard(t, e)
-	admin := &fakeRoleAdmin{result: domain.MutationResult{Statement: `GRANT "reporting" TO "app_ro"`}}
-	e.connector.role = admin
-	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
-	m = enableReadWrite(t, m)
-	m = selectRoleNode(t, m)
-	m, _ = press(t, m, "+")
-	m, _ = press(t, m, "down")
-	m, _ = press(t, m, "enter")
-	if m.modal != modalRoleForm {
-		t.Fatalf("form modal = %v", m.modal)
-	}
-	m, _ = press(t, m, "tab")
-	m = typeString(t, m, "app_ro")
-	m, cmd := press(t, m, "enter")
-	m = runCmd(t, m, cmd)
-	if admin.calls != 1 || m.modal != modalNone {
-		t.Fatalf("calls=%d modal=%v", admin.calls, m.modal)
 	}
 }
 
@@ -134,7 +270,7 @@ func TestRoleDropConfirmation(t *testing.T) {
 	}
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
-	if admin.calls != 1 || m.modal != modalNone {
-		t.Fatalf("calls=%d modal=%v", admin.calls, m.modal)
+	if admin.calls != 1 || admin.last != "DropRole" || m.modal != modalNone {
+		t.Fatalf("calls=%d last=%q modal=%v", admin.calls, admin.last, m.modal)
 	}
 }

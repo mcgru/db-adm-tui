@@ -209,6 +209,9 @@ func mongoPrivilegeMatches(resource bson.D, ref domain.ObjectRef) bool {
 			return false
 		}
 	}
+	if ref.Kind == domain.KindDatabase && collection != "" {
+		return false
+	}
 	return true
 }
 
