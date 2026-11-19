@@ -239,6 +239,13 @@ mongodb://analyst@127.0.0.1:57017/analytics
 | US-04 | `r/w` | `live-pg-admin` | ротация `.pgpass` при повторном создании |
 | US-05 | `r/w` | `live-pg-user` | нельзя удалить текущего пользователя |
 | US-06 | `r/w` | `live-pg-admin` | save-as-profile без переключения сессии |
+| RS-01 | `r/o` | `live-pg-admin` | Data `+`/`-` заблокированы |
+| RS-02 | `r/w` | `live-pg-admin` | insert PostgreSQL + refresh |
+| RS-03 | `r/w` | `live-pg-admin` | delete PostgreSQL + confirmation |
+| RS-04 | `r/w` | `live-maria-admin` | insert/delete MariaDB |
+| RS-05 | `r/w` | `live-mongo-admin` | insert MongoDB extended JSON |
+| RS-06 | `r/w` | `live-mongo-admin` | delete MongoDB по `_id` |
+| RS-07 | `r/w` | `live-pg-admin` | native error и history |
 | CL-01 | — | — | reset и повторный `up.sh` |
 
 ### Минимальный smoke перед релизом
@@ -247,7 +254,8 @@ mongodb://analyst@127.0.0.1:57017/analytics
 
 `RO-01`, `RO-06`, `RO-07`, `RO-09`, `RW-01`, `RW-02`, `RW-03`, `MX-01`,
 `MX-03`, `MX-04`, `MX-05`, `MX-06`, `MX-08`, `MX-09`, `MX-10`,
-`US-01`, `US-02`, `US-03`, `US-05`, `US-06`, `CL-01`.
+`US-01`, `US-02`, `US-03`, `US-05`, `US-06`, `RS-01`, `RS-02`, `RS-03`,
+`RS-05`, `RS-06`, `CL-01`.
 
 Полный план ниже покрывает остальные edge cases.
 
@@ -1056,7 +1064,174 @@ stat -c '%a %n' ~/.mongo.tmp_user_mongo-in-appdb
 - текущая сессия не переключилась на нового пользователя;
 - пароль отсутствует в профиле, history и статусе.
 
-## 7. Очистка
+## 7. Строки и документы (Story 9a)
+
+Все действия — только из вкладки Data и только в `r/w`. Results не редактируется.
+Тестовые строки используют id/`_id` `9001` и удаляются в конце каждого теста.
+
+### RS-01. Read-only gate
+
+**Профиль:** `live-pg-admin` в `r/o`.
+
+**Шаги:**
+1. Откройте `app.customers` → `Data`.
+2. Нажмите `+`.
+3. Нажмите `-`.
+
+**Ожидаемо:**
+- модальное окно не открывается;
+- сообщение содержит `read-write mode` и `Ctrl+X Ctrl+W`;
+- native-запрос не выполняется.
+
+### RS-02. PostgreSQL: insert + refresh
+
+**Профиль:** `live-pg-admin` в `r/w`.
+
+**Шаги:**
+1. `app.customers` → `Data` → `+`.
+2. Заполните:
+   - `id` = `9001`;
+   - `Tab`, `name` = `tmp_pg_row`;
+   - `Tab`, `status` = `active`;
+   - `Tab`, `balance` → `Ctrl+D` (`DEFAULT`);
+   - `Tab`, `created_at` → `Ctrl+D` (`DEFAULT`).
+3. `Enter`.
+4. Проверьте native:
+
+```sql
+SELECT id, name, status, balance, created_at
+FROM app.customers WHERE id = 9001;
+```
+
+5. Проверьте history на машине TUI:
+
+```bash
+tail -n 5 ~/.local/state/db-adm-tui/history/commands.jsonl
+```
+
+**Ожидаемо:**
+- строка создана, `balance = 0`, `created_at` заполнен;
+- Data перезагружена с offset 0 и показывает `9001`;
+- статус содержит `row inserted` и native `INSERT ...`;
+- history содержит mode `r/w`, status `ok`, affected count;
+- значения переданы параметрами, а не вклеены в SQL.
+
+### RS-03. PostgreSQL: delete + confirmation
+
+**Профиль:** `live-pg-admin` в `r/w`, строка `9001` из RS-02.
+
+**Шаги:**
+1. В `Data` найдите `tmp_pg_row` (`/` или `Ctrl+End`).
+2. Нажмите `-`.
+3. Проверьте подтверждение.
+4. `Enter` (`Enter remove`).
+5. Проверьте native count и history.
+
+**Ожидаемо:**
+- подтверждение называет профиль `live-pg-admin`, объект `public.customers` и
+  ключ `id=9001`;
+- до `Enter` native DELETE не выполняется;
+- после `Enter` строка исчезает, Data обновляется;
+- history содержит `DELETE`, mode `r/w`, status `ok`.
+
+### RS-04. MariaDB: insert/delete
+
+**Профиль:** `live-maria-admin` в `r/w`.
+
+**Шаги:**
+1. `appdb.customers` → `Data` → `+`.
+2. `id`=`9001`, `name`=`tmp_my_row`, `status`=`active`,
+   `balance` и `created_at` → `Ctrl+D`.
+3. `Enter`; проверьте native:
+
+```sql
+SELECT id, name, status, balance, created_at
+FROM appdb.customers WHERE id = 9001;
+```
+
+4. Выберите строку и нажмите `-` → `Enter`.
+5. Проверьте, что строка удалена.
+
+**Ожидаемо:**
+- insert/delete работают так же, как в PostgreSQL;
+- native default values применены;
+- Data и history обновляются после каждой операции.
+
+### RS-05. MongoDB: insert extended JSON
+
+**Профиль:** `live-mongo-admin` в `r/w`, база `appdb`.
+
+**Шаги:**
+1. `customers` → `Data` → `+`.
+2. Очистите поле и введите:
+
+```json
+{"_id":9001,"name":"tmp_mongo_row","status":"active","balance":{"$numberDecimal":"0"}}
+```
+
+3. `Enter`.
+4. Проверьте native:
+
+```js
+db.getSiblingDB("appdb").customers.findOne({_id: 9001})
+```
+
+**Ожидаемо:**
+- документ создан через `insertOne`;
+- Data перезагружена и показывает `_id=9001`;
+- status содержит `row inserted`;
+- history содержит `insertOne`, mode `r/w`, status `ok`.
+
+### RS-06. MongoDB: delete by `_id`
+
+**Профиль:** `live-mongo-admin` в `r/w`, документ `9001` из RS-05.
+
+**Шаги:**
+1. Выберите документ `9001` в Data.
+2. Нажмите `-`, проверьте подтверждение с `_id=9001`.
+3. `Enter`.
+4. Проверьте native:
+
+```js
+db.getSiblingDB("appdb").customers.findOne({_id: 9001})
+```
+
+**Ожидаемо:**
+- подтверждение называет профиль, `appdb.customers` и `_id=9001`;
+- ровно один документ удалён;
+- Data обновлена, history содержит `deleteOne`, mode `r/w`, status `ok`.
+
+### RS-07. Native error и no-key guard
+
+**Профиль:** `live-pg-admin` в `r/w`.
+
+**Шаги:**
+1. `app.customers` → `Data` → `+`.
+2. Введите id `1` (уже существует), name `tmp_dup`, status `active`,
+   остальные поля `Ctrl+D`; `Enter`.
+3. Убедитесь, что Data не изменилась и ошибка visible.
+4. Создайте native-таблицу без primary key и откройте её Data:
+
+```sql
+CREATE TABLE app.no_pk (id bigint, body text);
+INSERT INTO app.no_pk VALUES (1, 'no key');
+```
+
+5. Нажмите `-`.
+
+**Ожидаемо:**
+- duplicate key показывается native-текстом PostgreSQL, без подмены;
+- history получает статус `error`, а не `ok`;
+- для `no_pk` delete блокируется локально сообщением
+  `cannot identify a row without a primary key or _id`, native DELETE не
+  выполняется;
+- после теста удалите таблицу:
+
+```sql
+DROP TABLE app.no_pk;
+```
+
+## 8. Очистка
 
 ### CL-01. Reset и идемпотентность
 

@@ -1,6 +1,6 @@
 # Story 9 (v2) — Structured write operations
 
-**Status:** 9b access matrix and 9c users implemented; 9a rows pending
+**Status:** 9a row/document insert/delete, 9b access matrix, and 9c users implemented
 **Scope:** users, access roles/grants, and rows in the current table/collection
 **Depends on:** Story 6 read-write mode, Story 7 privilege inspection, Story 8 security/release
 
@@ -96,11 +96,28 @@ silent write.
   drops the live session.
 - After success, refresh Security and the relevant Privileges view.
 
-### 9a — Rows (deferred)
+### 9a — Rows and documents (implemented)
 
-Keep the previously prepared row/document plan: single-row insert/delete,
-SQL column form plus Mongo JSON editor, primary key/`_id` identity, refresh
-Data and history. Do not implement it in the first Story 9 slice.
+Single-row insert/delete is available from the Data tab only; Results stays
+read-only. Row updates are still out of scope for 9a and use the query bar.
+
+- `+` opens a SQL column form with `val`, `NULL`, and `DEFAULT` modes
+  (`Ctrl+N`/`Ctrl+D`); values are bound parameters and the engine performs the
+  native cast. An all-default row uses `DEFAULT VALUES` on PostgreSQL and
+  `() VALUES ()` on MySQL/MariaDB.
+- MongoDB `+` opens an extended-JSON document editor and executes `insertOne`.
+  The document is parsed with `bson.UnmarshalExtJSON` by the adapter.
+- `-` confirms the profile, object, and native key before deleting. Identity
+  comes from the Data order key: the primary key for PostgreSQL/MySQL or `_id`
+  for MongoDB. A missing stable key or an unsafe (for example binary) key blocks
+  the action locally without an engine call.
+- SQL deletes use quoted identifiers and bound key parameters; MongoDB deletes
+  use `deleteOne({_id: ...})` with ObjectID, number, bool, datetime, and
+  extended-JSON key handling.
+- Successful mutations refresh Data from offset 0 and are audited through the
+  existing history with mode, status, and affected count. Native engine errors
+  remain visible; the tool does not invent cross-engine error text.
+- Both actions require `r/w` and never switch mode automatically.
 
 
 ## UI rules
@@ -203,7 +220,12 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   append the new entry below, preserve unrelated lines, and write atomically
   with `0600` files / `0700` directories. `.mypass` and MYPASSFILE are read and
   imported like `.pgpass`.
-- **Next:** live acceptance for 9b/9c, then the deferred 9a rows.
+- **9a row slice implemented:** `RowAdmin` ports and PostgreSQL,
+  MySQL/MariaDB, and MongoDB adapters; SQL insert/delete with quoted identifiers
+  and bound values; Mongo extended-JSON insert and `_id` delete; Data-tab
+  modals, confirmation, `r/w` gate, Data refresh, and history audit. Row
+  updates and multi-row writes stay out of scope.
+- **Next:** live acceptance for 9a/9b/9c on the `live-test/` stack.
 
 ## Risks and constraints
 

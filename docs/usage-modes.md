@@ -23,7 +23,7 @@ actually possible.
 | Role/privilege matrix | blocked | yes, with native admin rights |
 | Create/drop role | blocked | yes |
 | Create/drop user | blocked | yes, with native admin rights |
-| Row/document editing | not implemented | not implemented |
+| Row/document insert/delete | blocked | yes, one row/document at a time |
 
 ## Read-only mode (`r/o`)
 
@@ -59,6 +59,16 @@ Ctrl+End     jump to the last loaded row
 
 `Ctrl+F` adds a server-side regexp filter on the focused SQL column; `Esc`
 clears the filter or releases Results.
+
+### Insert or delete one row/document
+
+Open the Data tab in `r/w`. `+` opens the insert form: SQL columns start in
+`DEFAULT` and accept `val`, `NULL`, or `DEFAULT` (`Ctrl+N`/`Ctrl+D`), while
+MongoDB uses an extended-JSON document editor. `-` deletes the selected row/document by its native primary key
+or `_id`, after a confirmation that names the profile, object, and key. The
+loaded page must have a stable key; otherwise delete is blocked locally. After
+success the Data tab refreshes and the operation is written to history. Results
+is read-only, and row updates are not part of this flow.
 
 ### Run read-only SQL
 
@@ -395,22 +405,21 @@ accounts. Reconnect with an admin profile using `Ctrl+D`.
 
 ### Audit and refresh
 
-Successful queries and role changes are recorded in the existing history with
-the mode (`r/o` or `r/w`), native statement, status, and affected count.
-Passwords are redacted. After a matrix change the matrix, Security lists, the
-current Privileges pane, and loaded access markers are refreshed.
+Successful queries, role changes, user changes, and row changes are recorded in
+the existing history with the mode (`r/o` or `r/w`), native statement, status,
+and affected count. Passwords are redacted. After a matrix change the matrix,
+Security lists, the current Privileges pane, and loaded access markers are
+refreshed; after a row change the Data tab reloads from the first page.
 
 ### What `r/w` does not do yet
 
-- Insert/update/delete table rows or MongoDB documents (Story 9a).
+- Update table rows or MongoDB documents, or write more than one row at a time;
+  use the query bar.
 - Edit `WITH ADMIN OPTION`/`INHERIT` membership attributes.
 - Change an existing user's password or edit MongoDB user roles outside the
   matrix.
 - Insert MongoDB documents through the query bar.
 - Accept multiple SQL statements in one execution.
-
-`+`/`-` on Data or a non-role tree node still reports that row changes are
-Story 9a.
 
 ## Mode troubleshooting
 

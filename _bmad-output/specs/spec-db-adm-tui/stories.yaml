@@ -128,18 +128,20 @@
   spec_checkpoint: true
   done_checkpoint: true
   invoke_dev_with: >-
-    Start with 9b roles/grants, then 9c users; keep 9a rows deferred. Both are
-    unavailable in r/o and must refuse mutations with the mode-switch hint.
-    Cover PostgreSQL, MySQL/MariaDB, and MongoDB. Keep native terms; do not
-    invent a cross-engine "user in database" model. Amend the v1 PRD/FR-40 and
-    the read-only-source invariant before coding. Use ~/.pgpass and ~/.mypass
-    with HOST:PORT:DBNAME:USER:PASSWORD lines; DBNAME "*" matches every
-    database. Use ~/.mongo.USER-in-DB files with full mongodb:// URIs. Comment
-    the old matching entry, append the new one, offer the save-as-profile
-    prompt, and audit through existing history. The two matrices
-    (Principal×Role and Principal/Role×Object) are opened by Ctrl+X Ctrl+R and
-    use structured matrix data from the adapters; native user creation/drop
-    and credential rotation are implemented; continue with the remaining row
-    work. The current account must be the admin; do not switch or impersonate
-    the target user. No live databases are available; use sqlmock and Mongo
-    seams and defer live integration.
+    Implement 9a rows, 9b roles/grants, and 9c users. All three are unavailable
+    in r/o and must refuse mutations with the mode-switch hint. Cover
+    PostgreSQL, MySQL/MariaDB, and MongoDB. Keep native terms; do not invent a
+    cross-engine "user in database" model. Amend the v1 PRD/FR-40 and the
+    read-only-source invariant before coding. Use ~/.pgpass and ~/.mypass with
+    HOST:PORT:DBNAME:USER:PASSWORD lines; DBNAME "*" matches every database.
+    Use ~/.mongo.USER-in-DB files with full mongodb:// URIs. Comment the old
+    matching entry, append the new one, offer the save-as-profile prompt, and
+    audit through existing history. The two matrices (Principal×Role and
+    Principal/Role×Object) are opened by Ctrl+X Ctrl+R and use structured
+    matrix data from the adapters. Rows support single-row insert/delete from
+    the Data tab only: a SQL column form with val/NULL/DEFAULT modes, a Mongo
+    extended-JSON editor, and primary key/_id identity; missing or unsafe keys
+    block deletion. Refresh Data and audit every successful mutation. The
+    current account must be the admin; do not switch or impersonate the target
+    user. Keep native errors and verify against the live-test stack when it is
+    available.

@@ -51,8 +51,8 @@ The tool starts on the profile picker.
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker; with a role selected in the tree, open the privilege matrix focused on that role |
-| `+` | With the roles group selected: create a role. With the users group selected: create a user. With a role selected: grant privileges or assign the role. Requires `r/w` |
-| `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. With a user selected: drop the user. Requires `r/w` |
+| `+` | Tree roles/users: create, grant, or assign. Data tab: insert a row/document. Requires `r/w` |
+| `-` | Tree roles/users: revoke, remove, or drop. Data tab: delete the selected row/document. Requires `r/w` |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
@@ -234,8 +234,8 @@ from `Security → users → user → -`; dropping the currently connected user 
 refused locally.
 
 User creation/drop is audited in history with the native statement (password
-redacted), mode, status, and affected count. Row/document add/remove remains
-Story 9a.
+redacted), mode, status, and affected count. Row/document insert and delete are
+covered under Row and document changes.
 
 ## Data browsing
 
@@ -285,7 +285,36 @@ headers, and a status line such as `loaded 100 of ~12,480` or
   `cancelled`. A failed page keeps the previous window and shows an inline
   error; `m` retries the next page. A failed first page shows
   `press Enter to load rows` and retries with `m`.
-- Sorting, editing, and export are not present in the Data tab; queries run from the query bar.
+- Inline cell editing, row updates, sorting, and export are not present in the
+  Data tab; `+`/`-` insert or delete one row/document in `r/w`. Queries run from
+  the query bar.
+
+## Row and document changes (Story 9a)
+
+Single-row insert and delete are available only from the Data tab. Results is
+read-only; row updates, inline cell editing, sorting, and export are not part of
+this slice. Both actions require `r/w`: in `r/o`, `+`/`-` report that read-write
+mode is required and point to `Ctrl+X Ctrl+W` without switching automatically.
+
+**Insert (`+`).** The SQL form mirrors the loaded grid columns. Each field is
+`val`, `NULL`, or `DEFAULT`, switched with `Ctrl+N` and `Ctrl+D`. Fields start
+in `DEFAULT`; typing switches one back to `val`. `Tab`/`Shift+Tab` moves between
+fields, `Enter` inserts, and `Esc` cancels. The statement uses quoted identifiers and bound parameters,
+and the engine casts each text value to the native column type. `DEFAULT` omits
+the column; an all-default row uses `DEFAULT VALUES` on PostgreSQL or
+`() VALUES ()` on MySQL/MariaDB. MongoDB opens an extended-JSON document editor
+instead and calls `insertOne`.
+
+**Delete (`-`).** The confirmation names the profile, object, and key
+(`id=...` or `_id=...`); `Enter remove` executes and `Esc` cancels. The row
+identity is the stable Data order key: the native primary key for PostgreSQL and
+MySQL/MariaDB, or `_id` for MongoDB. If the page has no stable key, or a key
+value cannot be represented safely, delete is blocked locally and no engine call
+is made.
+
+After a successful mutation the Data tab reloads from offset 0, the status line
+keeps the native statement, and the existing history records the mode, status,
+and affected count. Native engine errors stay visible.
 
 ## Data search and case mode
 

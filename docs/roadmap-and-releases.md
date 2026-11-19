@@ -15,9 +15,11 @@ The repository contains:
   and PostgreSQL 18 `MAINTAIN`;
 - `.mypass` import and connection-source support for MySQL/MariaDB;
 - Story 9c native user creation/drop, masked passwords, credential-file writes
-  with rotation, and save-as-profile.
+  with rotation, and save-as-profile;
+- Story 9a single-row/document insert and delete from the Data tab, with
+  primary key/`_id` identity, `r/w` gating, Data refresh, and history audit.
 
-Story 9a row/document editing is still pending.
+Row updates and multi-row writes remain out of scope for 9a; use the query bar.
 
 ## Recommended next step
 
@@ -62,12 +64,21 @@ Verify the new user flow on the `live-test/` stack:
 
 Fix anything found before treating 9c as accepted.
 
-### 3. Story 9a: rows and documents
+### 3. Live TUI acceptance for 9a
 
-Implement insert/update/delete only after a stable identity rule is defined.
-Without a primary/unique key, either block the operation or require an explicit
-full-row predicate. Reuse the existing confirmation, native error, history, and
-refresh patterns.
+Verify single-row insert/delete on the `live-test/` stack:
+
+- confirm `+`/`-` are blocked in `r/o` and reach the engine only in `r/w`;
+- insert a row on PostgreSQL and MariaDB with `val`, `NULL`, and `DEFAULT`
+  fields; verify the native row, Data refresh, and history entry;
+- insert an extended-JSON document on MongoDB and verify `insertOne`;
+- delete by primary key on SQL and by `_id` on MongoDB, checking the
+  confirmation text and that exactly one row/document disappears;
+- verify a table without a primary key blocks delete locally;
+- force a native error (duplicate key, bad cast, missing privilege) and check
+  that the engine message stays visible and no audit entry is marked `ok`.
+
+Fix anything found before treating 9a as accepted.
 
 ### 4. Release documentation
 
@@ -97,7 +108,7 @@ v1.1.0-rc.1
 | `v1.1.0-rc.1` | 9b access matrix, live fixtures, live compatibility fixes | engine probes and local stack pass; TUI live smoke still open |
 | `v1.1.0` | accepted 9b | TUI live smoke on all three engines, docs/release notes updated |
 | `v1.2.0` | 9c users and credential files | live user creation, rotation, drop, and save-as-profile checks |
-| `v1.3.0` | 9a rows/documents | live insert/update/delete on all engines |
+| `v1.3.0` | 9a rows/documents | live single-row insert/delete on all engines |
 
 If 9b is not live-accepted yet, do not tag `v1.1.0`; tag `v1.1.0-rc.1` or wait.
 
@@ -166,7 +177,7 @@ publish the two archives from `dist/` and include the release notes.
 - passwords redacted
 
 ## Known limitations
-- row/document editing: Story 9a
+- row updates and multi-row writes; use the query bar
 - MongoDB query bar stays find/aggregate/count/distinct; writes via $out/$merge
 - membership WITH ADMIN OPTION/INHERIT editing is still pending
 ```
