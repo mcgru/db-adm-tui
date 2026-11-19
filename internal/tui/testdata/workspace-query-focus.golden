@@ -2,15 +2,15 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
-│     · customers  ro      │ │ privilege inspection lands in story 7           │
-│     · invoices  rw       │ │                                                 │
-│     · audit_log  —       │ │                                                 │
-│     · customer_view  ro  │ │                                                 │
-│     · orders_seq         │ │                                                 │
-│   ▸ schemas              │ │                                                 │
-│ ▸ billing                │ │                                                 │
-│ ▸ Security               │ │                                                 │
-│                          │ │                                                 │
+│     · customers  ro      │ │ principal    app_ro                             │
+│     · invoices  rw       │ │ scope        table public.customers             │
+│     · audit_log  —       │ │ grants                                          │
+│     · customer_view  ro  │ │ SELECT on public.customers · direct             │
+│     · orders_seq         │ │ UPDATE on public.customers · via role reporting │
+│   ▸ schemas              │ │ memberships                                     │
+│ ▸ billing                │ │ role reporting · inherited                      │
+│ ▸ Security               │ │ attributes                                      │
+│                          │ │ LOGIN · NOSUPERUSER · INHERIT                   │
 │                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │

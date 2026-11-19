@@ -91,6 +91,8 @@ func (m *Model) scrollDetails(delta int) {
 		lines = detailLines(&m.details, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()), width)
 	case "Indexes":
 		lines = indexLines(&m.details, width)
+	case "Privileges":
+		lines = privilegeLines(&m.details)
 	default:
 		return
 	}

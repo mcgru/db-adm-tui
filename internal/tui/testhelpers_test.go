@@ -51,12 +51,54 @@ func (c *fakeConn) Ping(ctx context.Context) error { return nil }
 func (c *fakeConn) Close() error                   { c.closed = true; return nil }
 
 type fakeConnector struct {
-	err      error
-	password string
-	conns    []*fakeConn
-	catalog  *fakeCatalog
-	data     *fakeDataReader
-	stats    *fakeStatsReader
+	err        error
+	password   string
+	conns      []*fakeConn
+	catalog    *fakeCatalog
+	data       *fakeDataReader
+	stats      *fakeStatsReader
+	privileges *fakePrivilegeReader
+}
+
+type fakePrivilegeReader struct {
+	report domain.PrivilegeReport
+	err    error
+	ref    domain.ObjectRef
+	seen   bool
+}
+
+func (f *fakePrivilegeReader) Privileges(ctx context.Context, ref domain.ObjectRef) (domain.PrivilegeReport, error) {
+	f.ref = ref
+	f.seen = true
+	if f.err != nil {
+		return domain.PrivilegeReport{}, f.err
+	}
+	return f.report, nil
+}
+
+func defaultFakePrivileges(engine domain.Engine) *fakePrivilegeReader {
+	if engine == domain.EngineMongoDB {
+		return &fakePrivilegeReader{report: domain.PrivilegeReport{
+			Principal: "analyst@analytics",
+			Scope:     "collection analytics.customers",
+			Sections: []domain.PrivilegeSection{
+				{Title: "roles", Lines: []string{"read@analytics", "readWrite@analytics"}},
+				{Title: "privileges", Lines: []string{"find, aggregate on analytics.customers"}},
+			},
+		}}
+	}
+	return &fakePrivilegeReader{report: domain.PrivilegeReport{
+		Principal: "app_ro",
+		Scope:     "table public.customers",
+		Sections: []domain.PrivilegeSection{
+			{Title: "grants", Lines: []string{
+				"SELECT on public.customers · direct",
+				"UPDATE on public.customers · via role reporting",
+			}},
+			{Title: "memberships", Lines: []string{"role reporting · inherited"}},
+			{Title: "attributes", Lines: []string{"LOGIN · NOSUPERUSER · INHERIT"}},
+		},
+	}}
 }
 
 type fakeStatsReader struct {
@@ -165,7 +207,14 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if stats == nil {
 		stats = defaultFakeStats(p.Engine)
 	}
-	return ports.SessionBundle{Session: conn, Catalog: catalog, DataReader: data, StatsReader: stats}, nil
+	privileges := f.privileges
+	if privileges == nil {
+		privileges = defaultFakePrivileges(p.Engine)
+	}
+	return ports.SessionBundle{
+		Session: conn, Catalog: catalog, DataReader: data,
+		StatsReader: stats, PrivilegeReader: privileges,
+	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
 

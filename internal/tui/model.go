@@ -274,6 +274,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExactCount(msg)
 	case exactTickMsg:
 		return m.handleExactTick(msg)
+	case privilegesMsg:
+		return m.handlePrivileges(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:

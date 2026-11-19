@@ -114,7 +114,7 @@ func (m Model) viewMain(height, width int) string {
 	case "Indexes":
 		lines = append(lines, m.renderDetailPane(indexLines(&m.details, width-4), bodyHeight)...)
 	case "Privileges":
-		lines = append(lines, m.styles.Muted.Render("privilege inspection lands in story 7"))
+		lines = append(lines, m.renderDetailPane(privilegeLines(&m.details), bodyHeight)...)
 	default:
 		detail := detailLines(&m.details, m.currentDatabase(), m.tree.childCount(m.details.node.Ref.Key()), width-4)
 		lines = append(lines, m.renderDetailPane(detail, bodyHeight)...)

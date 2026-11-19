@@ -53,6 +53,51 @@ func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]
 	return f.indexes, nil
 }
 
+type fakePrivilegeReader struct {
+	report domain.PrivilegeReport
+	ref    domain.ObjectRef
+	seen   bool
+}
+
+func (f *fakePrivilegeReader) Privileges(ctx context.Context, ref domain.ObjectRef) (domain.PrivilegeReport, error) {
+	f.ref = ref
+	f.seen = true
+	return f.report, nil
+}
+
+func TestSessionPrivilegesRequiresAReader(t *testing.T) {
+	f := newFixture(t)
+	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}
+	session := newSession(ports.SessionBundle{Session: &fakeConn{}, Catalog: fakeCatalog{}}, profile, Credential{}, f.connector, f.resolver)
+	_, err := session.Privileges(context.Background(), domain.ObjectRef{
+		Kind: domain.KindTable, Database: "billing", Name: "invoices",
+	})
+	if err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestSessionPrivilegesReturnsTheReaderReport(t *testing.T) {
+	f := newFixture(t)
+	reader := &fakePrivilegeReader{report: domain.PrivilegeReport{
+		Principal: "billing_ro@%",
+		Scope:     "table billing.invoices",
+		Sections:  []domain.PrivilegeSection{{Title: "grants", Lines: []string{"SELECT on billing.invoices"}}},
+	}}
+	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, PrivilegeReader: reader,
+	}, profile, Credential{}, f.connector, f.resolver)
+	ref := domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"}
+	report, err := session.Privileges(context.Background(), ref)
+	if err != nil || report.Principal != "billing_ro@%" || len(report.Sections) != 1 {
+		t.Fatalf("report = %+v, %v", report, err)
+	}
+	if !reader.seen || reader.ref != ref {
+		t.Fatalf("reader ref = %+v", reader.ref)
+	}
+}
+
 func TestSessionMetadataRequiresAStatsReader(t *testing.T) {
 	f := newFixture(t)
 	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}

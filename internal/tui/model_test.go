@@ -38,7 +38,8 @@ func TestGolden(t *testing.T) {
 	m = settle(t, m, cmd)
 	assertGolden(t, "workspace-indexes.golden", m.View().Content)
 
-	m, _ = press(t, m, "3")
+	m, cmd = press(t, m, "3")
+	m = settle(t, m, cmd)
 	assertGolden(t, "workspace-privileges.golden", m.View().Content)
 
 	m, _ = press(t, m, "tab")
@@ -1471,6 +1472,57 @@ func TestStatisticsErrorKeepsStructure(t *testing.T) {
 	}
 }
 
+func TestPrivilegesTabForSecurity(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindSecurity)
+	m, cmd := press(t, m, "2")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"principal", "app_ro", "grants", "memberships", "attributes"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("security privileges %q missing:\n%s", want, view)
+		}
+	}
+	if m.details.currentTab() != "Privileges" {
+		t.Fatalf("tab = %q", m.details.currentTab())
+	}
+}
+
+func TestPrivilegesTabForUser(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindSecurity)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m = selectKind(t, m, domain.KindUsers)
+	m, cmd = press(t, m, "right")
+	m = settle(t, m, cmd)
+	m = selectKind(t, m, domain.KindUser)
+	m, cmd = press(t, m, "2")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "principal") || !strings.Contains(view, "app_ro") {
+		t.Fatalf("user privileges missing:\n%s", view)
+	}
+	if m.details.currentTab() != "Privileges" {
+		t.Fatalf("tab = %q", m.details.currentTab())
+	}
+}
+
+func TestPrivilegesTabError(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.privileges = &fakePrivilegeReader{
+		err: domain.NewError(domain.KindPermission, "privileges", "permission denied"),
+	}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = workspaceFrom(t, m)
+	m, cmd := press(t, m, "3")
+	m = settle(t, m, cmd)
+	if !strings.Contains(StripANSI(m.View().Content), "error: permission denied") {
+		t.Fatalf("privileges error missing:\n%s", StripANSI(m.View().Content))
+	}
+}
+
 func TestMongoDetailsStructureAndIndexes(t *testing.T) {
 	m, _ := dataWorkspaceWith(t, "analytics", nil)
 	m, cmd := press(t, m, "1")
@@ -1774,9 +1826,13 @@ func TestContextTabsAndPlaceholders(t *testing.T) {
 			t.Fatalf("indexes %q missing:\n%s", want, view)
 		}
 	}
-	m, _ = press(t, m, "3")
-	if !strings.Contains(StripANSI(m.View().Content), "privilege inspection lands in story 7") {
-		t.Fatal("privileges placeholder missing")
+	m, cmd = press(t, m, "3")
+	m = settle(t, m, cmd)
+	view = StripANSI(m.View().Content)
+	for _, want := range []string{"principal", "app_ro", "grants", "SELECT on public.customers"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("privileges %q missing:\n%s", want, view)
+		}
 	}
 	m, _ = press(t, m, "4")
 	if !strings.Contains(StripANSI(m.View().Content), "row-001") {

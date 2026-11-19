@@ -9,8 +9,8 @@ resolution, real open/ping/close, lazy database/schema/object navigation, a
 Security node with users and roles, native access markers, a paged Data tab with
 a bounded loaded window, an inline `/` filter with match navigation, a
 server-side `Ctrl+F` regexp filter, a session-wide search case mode, object
-statistics with exact count, and index/structure details. Query execution and
-privilege inspection land in later stories.
+statistics with exact count, index/structure details, and native privilege
+inspection. Query execution lands in a later story.
 
 ## Requirements
 
@@ -90,8 +90,9 @@ every database on one connection.
 
 Selecting a table or collection opens the context tabs and defaults to Details.
 Details shows identity, estimated count and size, exact count, and structure.
-Press `Enter` to switch to Data and load its first page. Privilege inspection
-lands in story 7.
+Press `Enter` to switch to Data and load its first page. The Privileges tab
+shows native grants, memberships, and effective checks for the selected
+context or principal.
 
 ## Object details and indexes
 
@@ -113,6 +114,13 @@ The Indexes tab has three sections: Details (name, unique, method), Statistics
 (size and engine-specific extras such as cardinality, sparse, or TTL), and
 Structure (covered columns or fields). An object with no indexes says so; a
 failed metadata read shows an error without hiding the rest of the pane.
+
+The Privileges tab reports native grants, memberships, and effective checks for
+the selected object, database/schema, Security connection, or user/role. It
+keeps PostgreSQL `has_*` checks and `requires SET ROLE`, MySQL `SHOW GRANTS`
+plus granted/active roles, and MongoDB roles and inherited privileges in their
+native terms. A failed section shows `not permitted` without hiding the other
+sections. There is no `GRANT` or `REVOKE` action.
 
 ## Data browsing
 

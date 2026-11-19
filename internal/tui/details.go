@@ -34,6 +34,11 @@ type detailsState struct {
 	indexesLoaded  bool
 	indexesLoading bool
 
+	privileges        domain.PrivilegeReport
+	privilegesErr     string
+	privilegesLoaded  bool
+	privilegesLoading bool
+
 	exactCount   int64
 	exactSet     bool
 	exactErr     string
@@ -81,6 +86,10 @@ func (d *detailsState) selectNode(node domain.Node) {
 	d.indexesErr = ""
 	d.indexesLoaded = false
 	d.indexesLoading = false
+	d.privileges = domain.PrivilegeReport{}
+	d.privilegesErr = ""
+	d.privilegesLoaded = false
+	d.privilegesLoading = false
 	d.exactCount = 0
 	d.exactSet = false
 	d.exactErr = ""
@@ -102,9 +111,10 @@ func tabsFor(kind domain.ObjectKind) []string {
 		return []string{"Details", "Indexes", "Privileges", "Data"}
 	case domain.KindView, domain.KindSequence:
 		return []string{"Details"}
-	case domain.KindDatabase, domain.KindSchema, domain.KindUser, domain.KindRole:
+	case domain.KindDatabase, domain.KindSchema, domain.KindUser, domain.KindRole,
+		domain.KindSecurity:
 		return []string{"Details", "Privileges"}
-	case domain.KindSecurity, domain.KindUsers, domain.KindRoles, domain.KindSchemas:
+	case domain.KindUsers, domain.KindRoles, domain.KindSchemas:
 		return []string{"Details"}
 	default:
 		return nil
@@ -413,6 +423,44 @@ func fitTableWidths(widths []int, width int) {
 		widths[widest]--
 		total--
 	}
+}
+
+func privilegeLines(d *detailsState) []detailLine {
+	switch {
+	case d.privilegesLoading:
+		return []detailLine{{Value: "loading privileges…", Mutable: true}}
+	case d.privilegesErr != "":
+		return []detailLine{{Value: "error: " + d.privilegesErr, Error: true}}
+	}
+	report := d.privileges
+	if report.Principal == "" && len(report.Sections) == 0 {
+		return []detailLine{{Value: "no privileges", Mutable: true}}
+	}
+	var lines []detailLine
+	if report.Principal != "" {
+		lines = append(lines, detailLine{Label: "principal", Value: report.Principal})
+	}
+	if report.Scope != "" {
+		lines = append(lines, detailLine{Label: "scope", Value: report.Scope})
+	}
+	if report.Note != "" {
+		lines = append(lines, detailLine{Value: report.Note, Mutable: true})
+	}
+	for _, section := range report.Sections {
+		lines = append(lines, detailLine{Header: true, Value: section.Title})
+		if section.Err != "" {
+			lines = append(lines, detailLine{Value: section.Err, Error: true})
+			continue
+		}
+		if len(section.Lines) == 0 {
+			lines = append(lines, detailLine{Value: "no privilege", Mutable: true})
+			continue
+		}
+		for _, line := range section.Lines {
+			lines = append(lines, detailLine{Value: line})
+		}
+	}
+	return lines
 }
 
 func formatBytes(size int64) string {

@@ -28,6 +28,13 @@ type exactTickMsg struct {
 	gen uint64
 }
 
+type privilegesMsg struct {
+	gen        uint64
+	key        string
+	privileges domain.PrivilegeReport
+	err        error
+}
+
 type structureMsg struct {
 	gen       uint64
 	key       string
@@ -49,8 +56,34 @@ func (m *Model) ensureTabInfo() tea.Cmd {
 		return tea.Batch(m.ensureStatistics(), m.ensureStructure())
 	case "Indexes":
 		return m.ensureIndexes()
+	case "Privileges":
+		return m.ensurePrivileges()
 	}
 	return nil
+}
+
+func (m *Model) ensurePrivileges() tea.Cmd {
+	if m.session == nil || !m.details.has {
+		return nil
+	}
+	d := &m.details
+	if d.privilegesLoading || d.privilegesLoaded {
+		return nil
+	}
+	d.privilegesLoading = true
+	d.privilegesErr = ""
+	gen := m.detailsGen
+	ref := d.node.Ref
+	key := ref.Key()
+	session := m.session
+	ctx := m.sessionCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return func() tea.Msg {
+		report, err := session.Privileges(ctx, ref)
+		return privilegesMsg{gen: gen, key: key, privileges: report, err: err}
+	}
 }
 
 func (m *Model) ensureStatistics() tea.Cmd {
@@ -167,6 +200,24 @@ func (m Model) handleIndexes(msg indexesMsg) (tea.Model, tea.Cmd) {
 	}
 	m.details.indexes = msg.indexes
 	m.details.indexesLoaded = true
+	return m, nil
+}
+
+func (m Model) handlePrivileges(msg privilegesMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.detailsGen {
+		return m, nil
+	}
+	if !m.details.has || m.details.node.Ref.Key() != msg.key {
+		return m, nil
+	}
+	m.details.privilegesLoading = false
+	if msg.err != nil {
+		m.details.privilegesErr = oneLine(msg.err.Error())
+		m.details.privileges = domain.PrivilegeReport{}
+		return m, nil
+	}
+	m.details.privileges = msg.privileges
+	m.details.privilegesLoaded = true
 	return m, nil
 }
 

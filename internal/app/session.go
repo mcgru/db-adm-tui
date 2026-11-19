@@ -246,6 +246,25 @@ func (s *Session) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, 
 	return s.bundle.StatsReader.ExactCount(ctx, ref)
 }
 
+// Privileges returns native grants and memberships for the selected context
+// or principal.
+func (s *Session) Privileges(ctx context.Context, ref domain.ObjectRef) (domain.PrivilegeReport, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyPrivileges(); err != nil {
+		return domain.PrivilegeReport{}, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, ref.Database); err != nil {
+		return domain.PrivilegeReport{}, err
+	}
+	if err := s.readyPrivileges(); err != nil {
+		return domain.PrivilegeReport{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, metadataTimeout)
+	defer cancel()
+	return s.bundle.PrivilegeReader.Privileges(ctx, ref)
+}
+
 func (s *Session) ready() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.Catalog == nil {
 		return domain.NewError(domain.KindConfig, "session", "no active connection")
@@ -263,6 +282,13 @@ func (s *Session) readyData() error {
 func (s *Session) readyStats() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.StatsReader == nil {
 		return domain.NewError(domain.KindConfig, "stats", "object metadata is not available")
+	}
+	return nil
+}
+
+func (s *Session) readyPrivileges() error {
+	if s.dead || s.bundle.Session == nil || s.bundle.PrivilegeReader == nil {
+		return domain.NewError(domain.KindConfig, "privileges", "privilege inspection is not available")
 	}
 	return nil
 }
