@@ -1,0 +1,30 @@
+name: dbadm-live-mariadb
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: dbadm-live-mariadb
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in mariadb/.env}
+      MARIADB_ROOT_HOST: ${MARIADB_ROOT_HOST:-%}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-appdb}
+      MARIADB_AUTO_UPGRADE: "1"
+      MARIADB_ADMIN_USER: ${MARIADB_ADMIN_USER:-mdb_admin}
+      MARIADB_ADMIN_PASSWORD: ${MARIADB_ADMIN_PASSWORD:?set MARIADB_ADMIN_PASSWORD in mariadb/.env}
+      MARIADB_APP_USER: ${MARIADB_APP_USER:-app_user}
+      MARIADB_APP_PASSWORD: ${MARIADB_APP_PASSWORD:?set MARIADB_APP_PASSWORD in mariadb/.env}
+      MARIADB_ANALYST_USER: ${MARIADB_ANALYST_USER:-analyst}
+      MARIADB_ANALYST_PASSWORD: ${MARIADB_ANALYST_PASSWORD:?set MARIADB_ANALYST_PASSWORD in mariadb/.env}
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    volumes:
+      - ./.data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s

@@ -1,0 +1,31 @@
+name: dbadm-live-postgres
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: dbadm-live-postgres
+    restart: unless-stopped
+    shm_size: 256mb
+    stop_grace_period: 60s
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in postgres/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      PG_ADMIN_USER: ${PG_ADMIN_USER:-db_admin}
+      PG_ADMIN_PASSWORD: ${PG_ADMIN_PASSWORD:?set PG_ADMIN_PASSWORD in postgres/.env}
+      PG_APP_USER: ${PG_APP_USER:-app_user}
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:?set PG_APP_PASSWORD in postgres/.env}
+      PG_ANALYST_USER: ${PG_ANALYST_USER:-analyst}
+      PG_ANALYST_PASSWORD: ${PG_ANALYST_PASSWORD:?set PG_ANALYST_PASSWORD in postgres/.env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # PostgreSQL 18 keeps the cluster under /var/lib/postgresql/18/docker.
+      - ./.data:/var/lib/postgresql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s

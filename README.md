@@ -525,6 +525,14 @@ make release
 `dist/db-adm-tui_<version>_linux_arm64.tar.gz` with stripped, statically linked
 binaries.
 
+## Live test fixtures
+
+`live-test/` contains disposable PostgreSQL 18, MariaDB 11.4, and MongoDB 8.2
+stacks with local bind mounts, seeded databases, ordinary/admin/root users, and
+an `rs0` single-node MongoDB replica set. Run `live-test/up.sh` on a Docker host;
+see `live-test/README.md` for ports, credentials, SSH tunnels, and reset/move
+instructions.
+
 ## Checks
 
 ```sh

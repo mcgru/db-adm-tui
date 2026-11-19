@@ -1,0 +1,47 @@
+name: dbadm-live-mongo
+
+services:
+  mongo:
+    image: mongo:8.2
+    container_name: dbadm-live-mongo
+    restart: unless-stopped
+    stop_grace_period: 60s
+    command:
+      - mongod
+      - --replSet
+      - ${MONGO_REPLICA_SET:-rs0}
+      - --bind_ip_all
+      - --port
+      - ${MONGO_PORT:-57017}
+      - --keyFile
+      - /etc/mongo/keyfile
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in mongo/.env}
+      MONGO_PORT: ${MONGO_PORT:-57017}
+      MONGO_REPLICA_SET: ${MONGO_REPLICA_SET:-rs0}
+      MONGO_ADMIN_USERNAME: ${MONGO_ADMIN_USERNAME:-mongo_admin}
+      MONGO_ADMIN_PASSWORD: ${MONGO_ADMIN_PASSWORD:?set MONGO_ADMIN_PASSWORD in mongo/.env}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:-app_user}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?set MONGO_APP_PASSWORD in mongo/.env}
+      MONGO_ANALYST_USERNAME: ${MONGO_ANALYST_USERNAME:-analyst}
+      MONGO_ANALYST_PASSWORD: ${MONGO_ANALYST_PASSWORD:?set MONGO_ANALYST_PASSWORD in mongo/.env}
+    ports:
+      - "${MONGO_PORT:-57017}:${MONGO_PORT:-57017}"
+    volumes:
+      - ./.data/db:/data/db
+      - ./.data/keyfile:/etc/mongo/keyfile:ro
+      - ./init:/scripts:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --port $${MONGO_PORT}
+          -u $${MONGO_INITDB_ROOT_USERNAME}
+          -p $${MONGO_INITDB_ROOT_PASSWORD}
+          --authenticationDatabase admin --quiet
+          --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
