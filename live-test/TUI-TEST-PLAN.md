@@ -233,6 +233,12 @@ mongodb://analyst@127.0.0.1:57017/analytics
 | MX-10 | `r/w` | `live-pg-user`, `live-maria-user`, `live-mongo-user` | native not permitted + `Ctrl+D` |
 | MX-11 | `r/w` | `live-pg-admin` | scope и refresh после изменения |
 | MX-12 | `r/w` | `live-mongo-admin` | built-in роли только для чтения |
+| US-01 | `r/w` | `live-pg-admin` | создание пользователя PostgreSQL + credential |
+| US-02 | `r/w` | `live-maria-admin` | создание пользователя MariaDB + credential |
+| US-03 | `r/w` | `live-mongo-admin` | создание пользователя MongoDB + credential |
+| US-04 | `r/w` | `live-pg-admin` | ротация `.pgpass` при повторном создании |
+| US-05 | `r/w` | `live-pg-user` | нельзя удалить текущего пользователя |
+| US-06 | `r/w` | `live-pg-admin` | save-as-profile без переключения сессии |
 | CL-01 | — | — | reset и повторный `up.sh` |
 
 ### Минимальный smoke перед релизом
@@ -240,7 +246,8 @@ mongodb://analyst@127.0.0.1:57017/analytics
 Если времени мало, пройдите:
 
 `RO-01`, `RO-06`, `RO-07`, `RO-09`, `RW-01`, `RW-02`, `RW-03`, `MX-01`,
-`MX-03`, `MX-04`, `MX-05`, `MX-06`, `MX-08`, `MX-09`, `MX-10`, `CL-01`.
+`MX-03`, `MX-04`, `MX-05`, `MX-06`, `MX-08`, `MX-09`, `MX-10`,
+`US-01`, `US-02`, `US-03`, `US-05`, `US-06`, `CL-01`.
 
 Полный план ниже покрывает остальные edge cases.
 
@@ -901,7 +908,155 @@ db.getSiblingDB("appdb").getRole("app_tmp_role")
 - в privileges встроенные роли не редактируются;
 - custom roles редактируются через `Space`/`e`.
 
-## 6. Очистка
+## 6. Пользователи (Story 9c)
+
+Все операции — только в `r/w`. Пароли в тестах одноразовые; после теста
+удалите созданного пользователя.
+
+### US-01. PostgreSQL: создание пользователя и credential
+
+**Профиль:** `live-pg-admin`.
+
+**Шаги:**
+1. Перейдите в `r/w`.
+2. `Security → users → +`.
+3. Введите имя `tmp_user_pg`, `Tab`, пароль `tmp_pg_secret`.
+4. `Enter`.
+5. Проверьте native:
+
+```sql
+SELECT rolname, rolcanlogin FROM pg_roles WHERE rolname = 'tmp_user_pg';
+```
+
+6. Проверьте файл credential на машине, где запущен TUI:
+
+```bash
+grep 'tmp_user_pg' ~/.pgpass
+stat -c '%a %n' ~/.pgpass
+```
+
+7. В модальном окне save-as-profile нажмите `Enter`.
+8. Удалите пользователя: `Security → users → tmp_user_pg → - → Enter`.
+
+**Ожидаемо:**
+- native-роль существует с `LOGIN`;
+- в `~/.pgpass` есть строка
+  `127.0.0.1:5432:appdb:tmp_user_pg:tmp_pg_secret`;
+- файл `0600`;
+- save-as-profile сохраняет профиль, но верхняя строка остаётся
+  `live-pg-admin`;
+- после drop native-роль исчезает;
+- в history нет пароля, только `PASSWORD '***'`.
+
+### US-02. MariaDB: создание пользователя и `.mypass`
+
+**Профиль:** `live-maria-admin`.
+
+**Шаги:**
+1. `Security → users → +`.
+2. Имя `tmp_user_my`, host `%`, пароль `tmp_my_secret`.
+3. `Enter`.
+4. Проверьте native:
+
+```sql
+SELECT User, Host FROM mysql.user WHERE User = 'tmp_user_my';
+```
+
+5. Проверьте:
+
+```bash
+grep 'tmp_user_my' ~/.mypass
+stat -c '%a %n' ~/.mypass
+```
+
+6. Удалите пользователя через `-`.
+
+**Ожидаемо:**
+- создан `tmp_user_my@%`;
+- в `~/.mypass` есть `127.0.0.1:3306:appdb:tmp_user_my:tmp_my_secret`;
+- файл `0600`;
+- после drop пользователь исчезает;
+- повторное создание того же имени даёт native duplicate error и не меняет
+  credential-файл.
+
+### US-03. MongoDB: создание пользователя и `.mongo.*`
+
+**Профиль:** `live-mongo-admin`, текущая база `appdb`.
+
+**Шаги:**
+1. `Security → users → +`.
+2. Имя `tmp_user_mongo`, пароль `tmp_mongo_secret`.
+3. `Enter`.
+4. Проверьте native:
+
+```js
+db.getSiblingDB("appdb").getUser("tmp_user_mongo")
+```
+
+5. Проверьте файл:
+
+```bash
+grep 'tmp_user_mongo' ~/.mongo.tmp_user_mongo-in-appdb
+stat -c '%a %n' ~/.mongo.tmp_user_mongo-in-appdb
+```
+
+6. Удалите пользователя через `-`.
+
+**Ожидаемо:**
+- пользователь создан в `appdb` с `roles: []`;
+- credential-файл содержит полный `mongodb://tmp_user_mongo:...@127.0.0.1:57017/appdb?...`;
+- файл `0600`;
+- после drop `getUser` возвращает `null`.
+
+### US-04. Ротация credential-файла
+
+**Профиль:** `live-pg-admin`.
+
+**Шаги:**
+1. Создайте `tmp_rotate_pg` с паролем `first_password`.
+2. Сохраните профиль или нажмите `Esc`.
+3. Удалите пользователя через `-`.
+4. Создайте пользователя с тем же именем и паролем `second_password`.
+5. Откройте `~/.pgpass` и проверьте старую строку.
+
+**Ожидаемо:**
+- старая строка закомментирована `#`;
+- новая строка находится ниже и содержит `second_password`;
+- unrelated lines не изменены;
+- файл остаётся `0600`;
+- удалите пользователя после проверки.
+
+### US-05. Удаление текущего пользователя
+
+**Профиль:** `live-pg-user` (`app_user`).
+
+**Шаги:**
+1. Перейдите в `r/w`.
+2. `Security → users → app_user → -`.
+3. Подтвердите `Enter`.
+
+**Ожидаемо:**
+- локальная ошибка `cannot drop the currently connected user`;
+- native drop не выполняется;
+- сессия остаётся открытой.
+
+### US-06. Save-as-profile без переключения
+
+**Профиль:** `live-pg-admin`.
+
+**Шаги:**
+1. Создайте `tmp_profile_pg`.
+2. В save-as-profile нажмите `Enter`.
+3. Посмотрите верхнюю строку и статус.
+4. `Ctrl+D`, найдите новый профиль в picker.
+
+**Ожидаемо:**
+- профиль `tmp_profile_pg@appdb` сохранён;
+- верхняя строка всё ещё показывает `live-pg-admin`;
+- текущая сессия не переключилась на нового пользователя;
+- пароль отсутствует в профиле, history и статусе.
+
+## 7. Очистка
 
 ### CL-01. Reset и идемпотентность
 
@@ -934,7 +1089,7 @@ cd ~/live-test
 - все три контейнера healthy;
 - после reset снова доступны исходные пользователи/роли/гранты.
 
-## 7. Форма фиксации результатов
+## 8. Форма фиксации результатов
 
 | ID | Статус | Профиль | Факт / сообщение | Артефакт |
 | --- | --- | --- | --- | --- |

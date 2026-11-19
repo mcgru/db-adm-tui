@@ -13,10 +13,11 @@ The repository contains:
   8.2 in `live-test/`;
 - live-compatibility fixes for hostless MariaDB roles, MongoDB role discovery,
   and PostgreSQL 18 `MAINTAIN`;
-- `.mypass` import and connection-source support for MySQL/MariaDB.
+- `.mypass` import and connection-source support for MySQL/MariaDB;
+- Story 9c native user creation/drop, masked passwords, credential-file writes
+  with rotation, and save-as-profile.
 
-Story 9 is not complete. Story 9c user creation and credential-file writes, and
-Story 9a row/document editing, are still pending.
+Story 9a row/document editing is still pending.
 
 ## Recommended next step
 
@@ -42,21 +43,24 @@ engine probes:
 
 Fix anything found before declaring Story 9b accepted.
 
-### 2. Story 9c: users and credential files
+### 2. Live TUI acceptance for 9c
 
-Implement create/drop native users with a masked password prompt. The password
-must never enter a profile, history, log, argv, or error text.
+Verify the new user flow on the `live-test/` stack:
 
-Credential files are the explicit v2 write exception:
+- create a user on PostgreSQL, MariaDB, and MongoDB; confirm the native account
+  exists;
+- inspect the credential files: correct five-field/URI line, old matching line
+  commented, new line below, `0600` file and `0700` directory;
+- create the same user again and verify the native duplicate error;
+- drop the created user and verify it disappears from Security and native
+  catalog;
+- confirm dropping the currently connected user is refused;
+- confirm the save-as-profile prompt stores a source-backed profile without
+  switching the active session;
+- confirm passwords never appear in picker rows, history, status messages, or
+  error text.
 
-- PostgreSQL: `~/.pgpass` or the active `PGPASSFILE`;
-- MySQL/MariaDB: `~/.mypass`;
-- MongoDB: `~/.mongo.<USER>-in-<DATABASE>` with a full URI;
-- format: `HOST:PORT:DBNAME:USER:PASSWORD`, where `DBNAME=*` matches all
-  databases;
-- comment the matching old line with `#`, append the new line, preserve
-  unrelated content, write atomically, file `0600`, directory `0700`;
-- after creation, offer save-as-profile without ever storing the password.
+Fix anything found before treating 9c as accepted.
 
 ### 3. Story 9a: rows and documents
 
@@ -92,7 +96,7 @@ v1.1.0-rc.1
 | --- | --- | --- |
 | `v1.1.0-rc.1` | 9b access matrix, live fixtures, live compatibility fixes | engine probes and local stack pass; TUI live smoke still open |
 | `v1.1.0` | accepted 9b | TUI live smoke on all three engines, docs/release notes updated |
-| `v1.2.0` | 9c users and credential files | live user creation and credential-file checks |
+| `v1.2.0` | 9c users and credential files | live user creation, rotation, drop, and save-as-profile checks |
 | `v1.3.0` | 9a rows/documents | live insert/update/delete on all engines |
 
 If 9b is not live-accepted yet, do not tag `v1.1.0`; tag `v1.1.0-rc.1` or wait.
@@ -162,7 +166,6 @@ publish the two archives from `dist/` and include the release notes.
 - passwords redacted
 
 ## Known limitations
-- users/credential files: Story 9c
 - row/document editing: Story 9a
 - MongoDB query bar stays find/aggregate/count/distinct; writes via $out/$merge
 - membership WITH ADMIN OPTION/INHERIT editing is still pending

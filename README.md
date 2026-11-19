@@ -51,8 +51,8 @@ The tool starts on the profile picker.
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker; with a role selected in the tree, open the privilege matrix focused on that role |
-| `+` | With the roles group selected: create a role. With a role selected: grant privileges or assign the role. Requires `r/w` |
-| `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. Requires `r/w` |
+| `+` | With the roles group selected: create a role. With the users group selected: create a user. With a role selected: grant privileges or assign the role. Requires `r/w` |
+| `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. With a user selected: drop the user. Requires `r/w` |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
@@ -199,7 +199,43 @@ and role + `-` can drop one. The role menu's grant/assign entries open the
 matrix instead of a modal form; role + `e` opens the privilege panel with that
 role selected.
 
-Users (Story 9c) and row add/remove (Story 9a) are not implemented yet.
+## User administration (Story 9c)
+
+User changes are available only in `r/w`. In `r/o`, `+`/`-` on the users group
+or a user report that read-write mode is required and point to
+`Ctrl+X Ctrl+W`.
+
+Create a user from `Security → users → +`:
+
+- **PostgreSQL:** enter a login role name and password. The role is created with
+  `LOGIN` and no extra grants; use the access matrix afterwards.
+- **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
+  The account is created as `'user'@'host'` with no extra grants.
+- **MongoDB:** enter a user name and password in the current database. The user
+  is created with an empty role list; use the matrix to assign roles.
+
+The password is masked in the form. It is written to the matching credential
+file only after the native account is created:
+
+- PostgreSQL: `~/.pgpass` or the active `PGPASSFILE`;
+- MySQL/MariaDB: `~/.mypass` or `MYPASSFILE`;
+- MongoDB: `~/.mongo.<USER>-in-<DATABASE>` with a full `mongodb://` URI.
+
+For PostgreSQL/MySQL, the matching old line is commented with `#` and the new
+line is inserted immediately below it. For MongoDB, the old matching URI line is
+commented and the new URI is appended. Unrelated lines are preserved. The file is
+rewritten atomically with `0600` and its directory is kept `0700`. The password
+never enters a profile, history, log, argv, or error text.
+
+After a successful create the tool offers `Save <label> as a profile?` with
+`Enter` to save and `Esc` to skip. This only writes the optional profile; it
+does not switch the active session to the new user. Dropping a user is available
+from `Security → users → user → -`; dropping the currently connected user is
+refused locally.
+
+User creation/drop is audited in history with the native statement (password
+redacted), mode, status, and affected count. Row/document add/remove remains
+Story 9a.
 
 ## Data browsing
 
@@ -521,7 +557,10 @@ non-secret fields and any matched source pointer, never the password.
 - A saved profile with no source opens a centered masked
   `Password for <profile>` modal. `Enter` connects and `Esc` returns to the
   picker. The value is never stored.
-- The source files are only read; the tool never writes them.
+- Credential files are read at connect. User creation writes/rotates the matching
+  entry, but the password never enters a profile, history, log, argv, or error
+  text. This is the v2 credential-file exception to the v1 read-only-source
+  rule.
 - The resolved password is retained in memory for the life of the session so a
   PostgreSQL database switch can reconnect; it is cleared on disconnect or
   process exit and is never written to disk.

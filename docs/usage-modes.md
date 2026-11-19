@@ -22,7 +22,7 @@ actually possible.
 | MQL `$out` / `$merge` | blocked | yes, with native permissions |
 | Role/privilege matrix | blocked | yes, with native admin rights |
 | Create/drop role | blocked | yes |
-| Create/drop user | not implemented | not implemented |
+| Create/drop user | blocked | yes, with native admin rights |
 | Row/document editing | not implemented | not implemented |
 
 ## Read-only mode (`r/o`)
@@ -253,6 +253,49 @@ Security
 Creating a role does not attach privileges or memberships. Use the matrix for
 that.
 
+### User creation and drop
+
+Users are managed from the tree:
+
+```text
+Security
+  users
+    +              create user
+    Enter          submit the form
+```
+
+The form asks for:
+
+- PostgreSQL: a login role name and password;
+- MySQL/MariaDB: a user name, host (`%` by default), and password;
+- MongoDB: a user name and password in the current database.
+
+The password field is masked. On success the native user is created first and
+the password is written to the matching source file:
+
+- PostgreSQL: `~/.pgpass` or the active `PGPASSFILE`;
+- MySQL/MariaDB: `~/.mypass` or `MYPASSFILE`;
+- MongoDB: `~/.mongo.<USER>-in-<DATABASE>`.
+
+An existing matching password-file line is commented with `#` and the new line
+is inserted below it. The file is written atomically with `0600`; the directory
+is kept `0700`. Unrelated lines are preserved. The password never appears in a
+profile, history entry, log, argv, or error message.
+
+After creation the tool offers:
+
+```text
+Save <user>@<database> as a profile? Enter save · Esc skip
+```
+
+Saving writes only the optional profile; it does not switch the active session
+to the new user. The new user starts with no grants or Mongo roles; use the
+matrices to assign them.
+
+Drop a user from `Security → users → user → -` and confirm with `Enter`. The
+currently connected user is refused locally. Native dependencies can still
+block the drop; the native error is shown unchanged.
+
 ### Membership matrix
 
 Open the matrix with `Ctrl+X Ctrl+R`; `1` selects `Principal × Role`:
@@ -359,10 +402,11 @@ current Privileges pane, and loaded access markers are refreshed.
 
 ### What `r/w` does not do yet
 
-- Create/drop users and write credential files (Story 9c).
 - Insert/update/delete table rows or MongoDB documents (Story 9a).
 - Edit `WITH ADMIN OPTION`/`INHERIT` membership attributes.
-- Edit MongoDB users or insert documents through the query bar.
+- Change an existing user's password or edit MongoDB user roles outside the
+  matrix.
+- Insert MongoDB documents through the query bar.
 - Accept multiple SQL statements in one execution.
 
 `+`/`-` on Data or a non-role tree node still reports that row changes are

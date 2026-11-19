@@ -1,6 +1,6 @@
 # Story 9 (v2) — Structured write operations
 
-**Status:** 9b access matrix implemented; 9c users and 9a rows pending
+**Status:** 9b access matrix and 9c users implemented; 9a rows pending
 **Scope:** users, access roles/grants, and rows in the current table/collection
 **Depends on:** Story 6 read-write mode, Story 7 privilege inspection, Story 8 security/release
 
@@ -193,10 +193,17 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   enhancement rather than editing them. MongoDB role creation is scoped to the
   current database. Live databases are not available in CI; the `live-test/`
   stack is the manual verification path.
-- **Credential-source groundwork:** `~/.mypass` is now read and imported with
-  the same format, wildcard, escaping, and `0600` rules as `~/.pgpass`;
-  MYPASSFILE is honored. Creating/updating user credentials remains part of 9c.
-- **Next:** 9c users, then the deferred 9a rows.
+- **9c user slice implemented:** Native `UserAdmin` ports and PostgreSQL,
+  MySQL/MariaDB, and MongoDB adapters; masked create form, host-only field for
+  MySQL, current-database scope for MongoDB, native drop confirmation, and a
+  save-as-profile prompt that does not switch the active session. Passwords are
+  redacted from audit statements and history.
+- **Credential writer implemented:** `~/.pgpass`, `~/.mypass`, and
+  `~/.mongo.<USER>-in-<DATABASE>` writes rotate the matching old entry with `#`,
+  append the new entry below, preserve unrelated lines, and write atomically
+  with `0600` files / `0700` directories. `.mypass` and MYPASSFILE are read and
+  imported like `.pgpass`.
+- **Next:** live acceptance for 9b/9c, then the deferred 9a rows.
 
 ## Risks and constraints
 

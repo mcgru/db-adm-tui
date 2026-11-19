@@ -138,7 +138,8 @@
     the old matching entry, append the new one, offer the save-as-profile
     prompt, and audit through existing history. The two matrices
     (Principal×Role and Principal/Role×Object) are opened by Ctrl+X Ctrl+R and
-    use structured matrix data from the adapters; continue with the remaining
-    user and row work. The current account must be the admin; do not switch or
-    impersonate the target user. No live databases are available; use sqlmock
-    and Mongo seams and defer live integration.
+    use structured matrix data from the adapters; native user creation/drop
+    and credential rotation are implemented; continue with the remaining row
+    work. The current account must be the admin; do not switch or impersonate
+    the target user. No live databases are available; use sqlmock and Mongo
+    seams and defer live integration.
