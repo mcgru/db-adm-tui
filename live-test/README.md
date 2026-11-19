@@ -4,6 +4,52 @@ Throwaway PostgreSQL 18, MariaDB 11.4, and MongoDB 8.2 instances for exercising
 `db-adm-tui` against real servers. Everything is local to this directory and
 uses bind mounts, not Docker named volumes.
 
+## Live server
+
+The maintained test host is:
+
+```text
+ssh jojo@uuu
+~/live-test
+```
+
+`jojo` can run Docker and Docker Compose on that host. The directory is a
+disposable test environment, not production.
+
+Update the server copy from this repository:
+
+```bash
+rsync -a --delete \
+  --exclude='.env' \
+  --exclude='.data/' \
+  live-test/ jojo@uuu:~/live-test/
+```
+
+Then start or inspect it:
+
+```bash
+ssh jojo@uuu 'cd ~/live-test && ./up.sh'
+ssh jojo@uuu 'cd ~/live-test && ./status.sh'
+```
+
+For local UI testing, forward the three ports:
+
+```bash
+ssh -N \
+  -L 5432:127.0.0.1:5432 \
+  -L 3306:127.0.0.1:3306 \
+  -L 57017:127.0.0.1:57017 \
+  jojo@uuu
+```
+
+The default Mongo replica-set member is advertised as `localhost:57017`, so
+the tunnel above matches the fixture's `.env.example`.
+
+## TUI test plan
+
+The step-by-step manual test plan, connection profiles, expected messages, and
+cleanup steps are in [`TUI-TEST-PLAN.md`](TUI-TEST-PLAN.md) (Russian).
+
 ## Quick start
 
 Requirements: Docker Engine 24+, Docker Compose v2, and `openssl` (or a

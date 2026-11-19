@@ -78,7 +78,10 @@ EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM app.customers WHERE id = 1;
 
 SHOW search_path;
-DESCRIBE app.customers;
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'app' AND table_name = 'customers'
+ORDER BY ordinal_position;
 ```
 
 Примеры для MySQL/MariaDB:
@@ -382,4 +385,6 @@ not permitted · this account cannot administer roles · Ctrl+D to reconnect wit
 | `multiple statements are not allowed` | два SQL statement за одно выполнение | выполнять по одному |
 
 Готовое окружение со всеми тремя движками, пользователями, грантами и seed-
-данными описано в [`live-test/README.md`](../live-test/README.md).
+данными описано в [`live-test/README.md`](../live-test/README.md). Пошаговый
+чек-лист ручной проверки TUI — в
+[`live-test/TUI-TEST-PLAN.md`](../live-test/TUI-TEST-PLAN.md).

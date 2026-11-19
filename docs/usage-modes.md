@@ -77,7 +77,10 @@ EXPLAIN (ANALYZE, BUFFERS)
 SELECT * FROM app.customers WHERE id = 1;
 
 SHOW search_path;
-DESCRIBE app.customers;
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'app' AND table_name = 'customers'
+ORDER BY ordinal_position;
 ```
 
 MySQL/MariaDB examples:
@@ -378,4 +381,6 @@ Story 9a.
 | `multiple statements are not allowed` | two SQL statements in one execution | execute them one at a time |
 
 For a disposable environment with all three engines, users, grants, and seed
-data, see [`live-test/README.md`](../live-test/README.md).
+data, see [`live-test/README.md`](../live-test/README.md). The step-by-step
+manual TUI checklist is
+[`live-test/TUI-TEST-PLAN.md`](../live-test/TUI-TEST-PLAN.md) (Russian).

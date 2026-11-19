@@ -82,7 +82,8 @@ Latin and Cyrillic physical key positions resolve to the same actions
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
-  MariaDB, and MongoDB fixtures.
+  MariaDB, and MongoDB fixtures. The manual TUI checklist is
+  [`live-test/TUI-TEST-PLAN.md`](live-test/TUI-TEST-PLAN.md) (Russian).
 
 ## Tree and Security
 
