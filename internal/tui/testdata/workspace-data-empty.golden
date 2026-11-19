@@ -2,7 +2,7 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
-│     · customers  ro      │ │      id   name status                           │
+│     · customers  ro      │ │      id            name          status         │
 │     · invoices  rw       │ │ ─────────────────────────────────────────────── │
 │     · audit_log  —       │ │ No rows. public.customers is empty.             │
 │     · customer_view  ro  │ │                                                 │
@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+  SQL › SELECT * FROM public.customers LIMIT 100                                
 0 rows                                  ↑↓ · m more · / filter · Ctrl+F · ` JSON

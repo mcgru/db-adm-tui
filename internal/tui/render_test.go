@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 
@@ -140,4 +141,26 @@ func TestBoxTinyDegrades(t *testing.T) {
 	if got != "bo…" {
 		t.Fatalf("tiny box = %q, want truncated body", got)
 	}
+}
+
+func FuzzSanitize(f *testing.F) {
+	for _, seed := range []string{
+		"\x1b[31mred\x1b[0m",
+		"a\u202eb\u2066c\u2069",
+		"plain\ntext\twith controls\x00\x07",
+		"你好🙂",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, input string) {
+		clean := Sanitize(input)
+		for _, r := range clean {
+			if unicode.IsControl(r) && r != '\n' && r != '\t' {
+				t.Fatalf("Sanitize left control %U in %q", r, clean)
+			}
+			if (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069) {
+				t.Fatalf("Sanitize left bidi control %U in %q", r, clean)
+			}
+		}
+	})
 }

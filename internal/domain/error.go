@@ -65,8 +65,11 @@ func KindOf(err error) ErrorKind {
 }
 
 var (
-	uriUserinfo = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://[^/@\s]*):[^@/\s]*@`)
-	passwordKV  = regexp.MustCompile(`(?i)(password|passwd|pwd)\s*=\s*[^\s&;]+`)
+	uriUserinfo      = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://[^/@\s]*):[^@/\s]*@`)
+	passwordKV       = regexp.MustCompile(`(?i)(password|passwd|pwd)\s*=\s*[^\s&;]+`)
+	passwordJSONPair = regexp.MustCompile(`(?i)("(?:password|passwd|pwd)"\s*:\s*)"(?:[^"\\]|\\.)*"`)
+	passwordLiteral  = regexp.MustCompile(`(?i)\b(password|passwd|pwd|identified\s+by)\s*(?:=|:)?\s*'(?:[^'\\]|\\.)*'`)
+	passwordDouble   = regexp.MustCompile(`(?i)(^|[^"])\b(password|passwd|pwd|identified\s+by)\s*(?:=|:)\s*"(?:[^"\\]|\\.)*"`)
 )
 
 // Redact removes URI userinfo passwords and password key/value pairs from s.
@@ -74,6 +77,22 @@ func Redact(s string) string {
 	s = uriUserinfo.ReplaceAllString(s, "$1:***@")
 	s = passwordKV.ReplaceAllString(s, "$1=***")
 	return s
+}
+
+// RedactSensitive also removes quoted password literals and JSON password
+// pairs. It is used for history, query errors, and driver error text.
+func RedactSensitive(s string) string {
+	s = Redact(s)
+	s = passwordJSONPair.ReplaceAllString(s, `$1"***"`)
+	s = passwordLiteral.ReplaceAllString(s, "$1 '***'")
+	s = passwordDouble.ReplaceAllString(s, `$1$2: "***"`)
+	return s
+}
+
+// RedactSecrets applies RedactSensitive and then removes every occurrence of a
+// known connection secret, including its URL-encoded forms.
+func RedactSecrets(s, secret string) string {
+	return RedactSecret(RedactSensitive(s), secret)
 }
 
 // RedactSecret removes every occurrence of secret from s, including its

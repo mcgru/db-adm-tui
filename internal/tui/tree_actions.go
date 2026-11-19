@@ -24,21 +24,27 @@ func (m Model) detailsPage() int {
 }
 
 func (m *Model) syncDetails() tea.Cmd {
+	if m.resultsActive {
+		return nil
+	}
 	node, ok := m.tree.selectedNode()
 	if !ok {
 		m.details.clear()
 		m.detailsGen++
 		m.exactGen++
 		m.resetData()
+		m.syncQueryPlaceholder()
 		return nil
 	}
 	if m.details.has && m.details.node.Ref.Key() == node.Ref.Key() {
 		m.details.node = node
+		m.syncQueryPlaceholder()
 		return nil
 	}
 	m.details.selectNode(node)
 	m.detailsGen++
 	m.exactGen++
+	m.syncQueryPlaceholder()
 	if node.Kind == domain.KindTable || node.Kind == domain.KindCollection {
 		m.resetDataFor(node.Ref)
 	} else {
@@ -151,6 +157,9 @@ func (m Model) expandSelected() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) openSelected() (tea.Model, tea.Cmd) {
+	if m.resultsActive {
+		m.leaveResults()
+	}
 	node, ok := m.tree.selectedNode()
 	if !ok {
 		if m.tree.rootErr != "" {

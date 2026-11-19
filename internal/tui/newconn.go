@@ -197,6 +197,22 @@ func (m Model) handlePasswordKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	if m.modal == modalNone && m.screen == ScreenWorkspace && m.focus == FocusQuery && !m.queryRunning {
+		updated, cmd := m.query.Update(msg)
+		m.query = updated
+		if m.completion.active {
+			m.refreshCompletion()
+		}
+		return m, cmd
+	}
+	if m.modal == modalStatement {
+		updated, cmd := m.statementInput.Update(msg)
+		m.statementInput = updated
+		if m.completion.active {
+			m.refreshCompletion()
+		}
+		return m, cmd
+	}
 	if m.modal == modalNone {
 		switch m.data.prompt {
 		case promptBuffer:
@@ -286,13 +302,18 @@ func (m Model) handleSaveKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) finishSave(save bool) (tea.Model, tea.Cmd) {
 	profile := m.saveProfile
 	session := m.saveSession
+	result := m.saveResult
 	m.modal = modalNone
 	m.saveProfile = domain.Profile{}
 	m.saveSession = nil
+	m.saveResult = app.ConnectResult{}
 	if session == nil {
 		return m, nil
 	}
-	m = m.openWorkspace(app.ConnectResult{Session: session, Profile: profile})
+	if result.Session == nil {
+		result = app.ConnectResult{Session: session, Profile: profile}
+	}
+	m = m.openWorkspace(result)
 	if !save {
 		m.setMessage(levelSuccess, "connected")
 		return m.loadRoot()

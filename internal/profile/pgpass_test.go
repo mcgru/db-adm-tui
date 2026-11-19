@@ -131,3 +131,23 @@ func TestParsePgpassLinesEmptyPassword(t *testing.T) {
 		t.Fatalf("entries=%+v warnings=%+v", entries, warnings)
 	}
 }
+
+func FuzzParsePgpassLines(f *testing.F) {
+	for _, seed := range []string{
+		"db1:5432:orders:app_ro:secret\n",
+		"# comment\n*\t*\t*\t*\t*\n",
+		"bad:line\n",
+		"host\\:name:5432:db:user:pass\n",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, data string) {
+		entries, warnings := ParsePgpassLines(data)
+		for _, warning := range warnings {
+			if strings.Contains(warning.Reason, "secret") {
+				t.Fatalf("warning leaked a password: %q", warning.Reason)
+			}
+		}
+		_ = entries
+	})
+}

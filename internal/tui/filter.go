@@ -184,7 +184,7 @@ func highlightMatches(text, pattern string, insensitive bool, base, match lipglo
 // openBufferFilter starts `/` over the loaded rows. It never queries.
 func (m *Model) openBufferFilter() tea.Cmd {
 	if m.screen != ScreenWorkspace || !m.dataTabActive() {
-		m.setMessage(levelInfo, "/ filters rows in the Data tab")
+		m.setMessage(levelInfo, "/ filters rows in Data or Results")
 		return nil
 	}
 	if !m.dataFocused() {
@@ -208,6 +208,10 @@ func (m *Model) openBufferFilter() tea.Cmd {
 // the base column even when a JSON subfield holds the cursor; MongoDB keeps the
 // dotted path.
 func (m *Model) openServerFilter() tea.Cmd {
+	if m.resultsActive {
+		m.setMessage(levelInfo, "Ctrl+F does not apply to query results in v1")
+		return nil
+	}
 	if m.screen != ScreenWorkspace || !m.dataTabActive() {
 		m.setMessage(levelInfo, "Ctrl+F filters a data column or field")
 		return nil

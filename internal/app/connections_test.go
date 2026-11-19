@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,7 @@ type fakeConnector struct {
 	profile  domain.Profile
 	conns    []*fakeConn
 	data     ports.DataReader
+	mode     ports.ModeController
 }
 
 func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password string) (ports.SessionBundle, error) {
@@ -37,7 +39,7 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	}
 	conn := &fakeConn{}
 	f.conns = append(f.conns, conn)
-	return ports.SessionBundle{Session: conn, Catalog: fakeCatalog{database: p.Database}, DataReader: f.data}, nil
+	return ports.SessionBundle{Session: conn, Catalog: fakeCatalog{database: p.Database}, DataReader: f.data, ModeController: f.mode}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
 
@@ -839,4 +841,21 @@ func TestSessionSwitchUsesRetainedPromptPassword(t *testing.T) {
 		t.Fatalf("switch password = %q", f.connector.password)
 	}
 	_ = result.Session.Close()
+}
+
+func TestConnectionErrorChainDoesNotRetainRawSecret(t *testing.T) {
+	p := domain.Profile{
+		Label: "prod-ro", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}
+	err := connectionError(p, errors.New("driver said hunter2"), "hunter2")
+	if strings.Contains(fmt.Sprintf("%v", err), "hunter2") {
+		t.Fatalf("formatted error leaked secret: %v", err)
+	}
+	if strings.Contains(fmt.Sprintf("%+v", err), "hunter2") {
+		t.Fatalf("expanded error leaked secret: %+v", err)
+	}
+	if strings.Contains(errors.Unwrap(err).Error(), "hunter2") {
+		t.Fatal("wrapped cause leaked secret")
+	}
 }

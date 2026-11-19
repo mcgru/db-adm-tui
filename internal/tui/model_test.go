@@ -303,19 +303,29 @@ func TestChordExecute(t *testing.T) {
 	m := workspace(t)
 	m, _ = press(t, m, "ctrl+x")
 	m, _ = press(t, m, "ctrl+x")
-	if m.message != "execute — story 5" {
+	if m.message != "enter a statement before running it" {
 		t.Fatalf("Ctrl+X Ctrl+X message = %q", m.message)
 	}
 
-	for _, final := range []string{"ц", "у"} {
-		m, _ = press(t, m, "ctrl+ч")
-		m, _ = press(t, m, final)
-		if m.pendingChord {
-			t.Fatalf("chord %q did not resolve", final)
-		}
-		if m.message != "not available in this story" {
-			t.Fatalf("chord %q message = %q", final, m.message)
-		}
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "ц")
+	if m.pendingChord {
+		t.Fatal("chord did not resolve")
+	}
+	if m.modal != modalMode {
+		t.Fatalf("toggle mode modal = %v", m.modal)
+	}
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "у")
+	if m.modal != modalStatement {
+		t.Fatalf("edit chord modal = %v", m.modal)
+	}
+	m, cmd := press(t, m, "esc")
+	m = runCmd(t, m, cmd)
+	if m.modal != modalNone {
+		t.Fatalf("statement modal did not close: %v", m.modal)
 	}
 }
 
@@ -547,7 +557,7 @@ func TestFocusCycle(t *testing.T) {
 	m, _ = press(t, m, "tab")
 	m, _ = press(t, m, "tab")
 	view := StripANSI(m.View().Content)
-	if !strings.Contains(view, "query bar · Ctrl+X chord") {
+	if !strings.Contains(view, "Enter run · Ctrl+Space complete") {
 		t.Fatal("query focus must be visible in the bottom line")
 	}
 	if !strings.Contains(view, "▸ SQL") {

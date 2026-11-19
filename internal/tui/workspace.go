@@ -35,8 +35,11 @@ func (m Model) viewTopStatus(width int) string {
 	}
 	left := m.styles.Text.Render(oneLine(p.Label)) +
 		m.styles.Muted.Render(" · "+p.Engine.DisplayName()+" · "+oneLine(database)+" · ") +
-		m.styles.ModeRO.Render("r/o")
+		m.modeBadge()
 	right := m.styles.Muted.Render(caseText + " · " + oneLine(p.User))
+	if m.elevated {
+		right += m.styles.Warning.Render(" · privileged")
+	}
 	return ComposeLR(left, right, width)
 }
 
@@ -109,6 +112,12 @@ func (m Model) viewMain(height, width int) string {
 	}
 
 	switch m.details.currentTab() {
+	case "Results":
+		if m.results.err != "" {
+			lines = append(lines, m.viewResultsError(width-4, bodyHeight)...)
+		} else {
+			lines = append(lines, m.viewData(width-4, bodyHeight)...)
+		}
 	case "Data":
 		lines = append(lines, m.viewData(width-4, bodyHeight)...)
 	case "Indexes":
@@ -120,6 +129,17 @@ func (m Model) viewMain(height, width int) string {
 		lines = append(lines, m.renderDetailPane(detail, bodyHeight)...)
 	}
 	return Box("", strings.Join(lines, "\n"), width, height, m.styles, m.focus == FocusMain)
+}
+
+func (m Model) viewResultsError(width, height int) []string {
+	lines := []string{m.styles.Error.Render(Truncate("ERROR: "+oneLine(m.results.err), width))}
+	lines = append(lines, "")
+	for _, line := range wrapText(m.results.statement, width) {
+		lines = append(lines, m.styles.Text.Render(line))
+	}
+	lines = append(lines, "", m.styles.Muted.Render(Truncate(
+		"Esc returns to "+oneLine(queryObjectName(m.resultsSaved.node))+".", width)))
+	return clipLines(lines, height)
 }
 
 func (m Model) renderDetailPane(detail []detailLine, bodyHeight int) []string {
@@ -176,25 +196,59 @@ func (m Model) renderDetailLine(line detailLine) string {
 }
 
 func (m Model) viewQuery(width int) string {
+	engine := m.profileForStatus().Engine
 	label := "SQL"
-	statement := "SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;"
-	switch m.profileForStatus().Engine {
-	case domain.EngineMongoDB:
+	if engine == domain.EngineMongoDB {
 		label = "MQL"
-		statement = "db.customers.find({ status: 'active' }).limit(100);"
-	case domain.EngineMySQL:
-		statement = "SELECT * FROM customers WHERE status = 'active' LIMIT 100;"
 	}
 	marker := "  "
 	promptStyle := m.styles.ModeRO
-	statementStyle := m.styles.Text
+	valueStyle := m.styles.Text
 	if m.focus == FocusQuery {
 		marker = m.styles.Focused.Render("▸ ")
 		promptStyle = m.styles.Focused
-		statementStyle = m.styles.Focused
+		valueStyle = m.styles.Focused
 	}
 	prompt := promptStyle.Render(label) + " " + m.styles.Accent.Render("›")
-	return Pad(marker+prompt+" "+statementStyle.Render(statement), width)
+
+	if available, hint := m.queryAvailability(); !available && strings.TrimSpace(m.query.Value()) == "" {
+		return Pad(marker+prompt+" "+m.styles.Muted.Render(Truncate(hint, width-10)), width)
+	}
+	var value string
+	switch {
+	case m.queryRunning:
+		value = m.styles.Muted.Render(Truncate(oneLine(m.query.Value()), width-10))
+	case m.focus == FocusQuery:
+		value = m.query.View()
+	case strings.TrimSpace(m.query.Value()) == "":
+		value = m.styles.Muted.Render(Truncate(queryPlaceholder(engine, m.currentQueryRef()), width-10))
+	default:
+		value = valueStyle.Render(Truncate(oneLine(m.query.Value()), width-10))
+	}
+	return Pad(marker+prompt+" "+value, width)
+}
+
+func queryPlaceholder(engine domain.Engine, ref domain.ObjectRef) string {
+	name := ""
+	schema := ""
+	switch ref.Kind {
+	case domain.KindTable, domain.KindCollection, domain.KindView:
+		name = oneLine(ref.Name)
+		schema = oneLine(ref.Schema)
+	}
+	if engine == domain.EngineMongoDB {
+		if name == "" {
+			name = "collection"
+		}
+		return "db." + name + ".find({}).limit(100)"
+	}
+	if name == "" {
+		name = "table"
+	}
+	if schema != "" {
+		name = schema + "." + name
+	}
+	return "SELECT * FROM " + name + " LIMIT 100"
 }
 
 func (m Model) viewBottom(width int) string {
@@ -208,6 +262,17 @@ func (m Model) viewBottom(width int) string {
 		left = m.message
 		style = m.messageStyle()
 	}
+	if m.queryRunning {
+		left = m.resultsSummary()
+		style = m.styles.Info
+	}
+	if m.resultsActive && m.message == "" && !m.queryRunning {
+		left = m.resultsSummary()
+		style = m.styles.Muted
+		if m.queryRunning || m.data.loading {
+			style = m.styles.Info
+		}
+	}
 	if m.pendingChord {
 		left = "Ctrl+X …"
 		style = m.styles.Accent
@@ -219,10 +284,13 @@ func (m Model) viewBottom(width int) string {
 	case FocusMain:
 		right = "1/2/3 tab · Up/Down scroll"
 	case FocusQuery:
-		right = "query bar · Ctrl+X chord"
+		right = "Enter run · Ctrl+Space complete"
 	}
-	if m.screen == ScreenWorkspace && m.dataTabActive() {
-		if m.message == "" {
+	if m.queryRunning {
+		right = "Esc cancels"
+	}
+	if m.screen == ScreenWorkspace && m.gridActive() {
+		if m.message == "" && !m.resultsActive {
 			if summary := m.dataSummary(); summary != "" {
 				left = summary
 				style = m.styles.Muted
@@ -234,6 +302,8 @@ func (m Model) viewBottom(width int) string {
 		switch m.focus {
 		case FocusMain:
 			switch {
+			case m.resultsActive:
+				right = "↑↓ · m more · / filter · Esc release"
 			case m.data.bufferPattern != "":
 				right = "n/N match · m more · Esc clear"
 			case m.data.serverFilter != nil:
@@ -242,10 +312,13 @@ func (m Model) viewBottom(width int) string {
 				right = "↑↓ · m more · / filter · Ctrl+F · ` JSON"
 			}
 		case FocusQuery:
-			right = "query bar · Ctrl+X chord"
+			right = "Enter run · Ctrl+Space complete"
 		default:
 			right = "Enter open"
 		}
+	}
+	if m.queryRunning {
+		right = "Esc cancels"
 	}
 	switch m.data.prompt {
 	case promptBuffer:

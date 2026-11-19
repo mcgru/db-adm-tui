@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -89,13 +90,14 @@ func connectOnce(ctx context.Context, p domain.Profile, password, sslmode string
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{conn: conn, db: db, password: password}
-	return ports.SessionBundle{Session: live, Catalog: newCatalog(live), DataReader: live, StatsReader: live, PrivilegeReader: live}, nil
+	return ports.SessionBundle{Session: live, Catalog: newCatalog(live), DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live}, nil
 }
 
 type connection struct {
 	conn     *sql.Conn
 	db       *sql.DB
 	password string
+	readOnly atomic.Bool
 }
 
 func (c *connection) Ping(ctx context.Context) error {
@@ -160,7 +162,7 @@ func safeError(op, password string, err error) *domain.Error {
 				kind = domain.KindConfig
 			}
 		}
-		message = domain.RedactSecret(domain.Redact(message), password)
+		message = domain.RedactSecrets(message, password)
 		// Never expose the raw driver error through Unwrap: it may repeat the
 		// DSN or password.
 		cause = errors.New(message)

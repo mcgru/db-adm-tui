@@ -136,3 +136,23 @@ func TestParseMongoBytesMalformedLineInvalidatesFile(t *testing.T) {
 		t.Fatalf("error leaked the URI: %q", mf.Err)
 	}
 }
+
+func FuzzParseMongoBytes(f *testing.F) {
+	for _, seed := range []string{
+		"mongodb://user:pass@host:27017/db\n",
+		"# comment\nmongodb://user@host/db?authSource=admin\n",
+		"mongodb+srv://user@host/db\n",
+		"not a mongo line\n",
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, data string) {
+		result := ParseMongoBytes("~/.mongo.fuzz", data)
+		if result.Entry != nil {
+			if strings.Contains(result.Entry.Selector, "password=") ||
+				strings.Contains(result.Entry.Selector, "pwd=") {
+				t.Fatalf("selector leaked a password: %q", result.Entry.Selector)
+			}
+		}
+	})
+}

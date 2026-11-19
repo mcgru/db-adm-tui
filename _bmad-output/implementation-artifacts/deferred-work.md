@@ -49,3 +49,7 @@
 - source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4b-data-search-and-case-mode.md`
   summary: MongoDB `connection.Page` does not exercise the built regexp filter in a unit test because the concrete driver client has no find seam; only the filter builder and the TUI fake are covered.
   evidence: `internal/engine/mongo/data.go` calls `Collection.Find` directly and `internal/engine/mongo` has no driver mock. PostgreSQL and MySQL have sqlmock Page tests. Close this with the live MongoDB integration suite or a small find seam.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories.yaml` (story 5 follow-up)
+  summary: Story 5b — Bracket-pair highlighting in the statement editor. Deferred for later; it is a presentation feature, not a query or guard dependency.
+  evidence: Matching `()[]{}` around the cursor needs a string/comment-aware scanner plus a custom single-line renderer for the query bar and edit modal, because `bubbles/textinput` exposes neither per-rune styling nor its horizontal scroll offset. Planned scope includes a theme token for the matched pair, an unmatched-bracket state, tests for nesting/quoting/comments, and keeping the existing editing, history, completion popup, and Esc+Tab behavior intact.

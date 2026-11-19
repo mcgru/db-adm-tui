@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +45,9 @@ const (
 	modalPassword
 	modalSave
 	modalEdit
+	modalStatement
+	modalHelp
+	modalMode
 )
 
 type messageLevel int
@@ -74,6 +78,33 @@ type connectDoneMsg struct {
 	profile domain.Profile
 	result  app.ConnectResult
 	err     error
+}
+
+type queryDoneMsg struct {
+	gen       uint64
+	statement string
+	page      domain.QueryPage
+	err       error
+}
+
+type resultsPageMsg struct {
+	gen  uint64
+	page domain.QueryPage
+	err  error
+}
+
+type queryTickMsg struct {
+	gen uint64
+}
+
+type escChordTimeoutMsg struct {
+	seq int
+}
+
+type modeDoneMsg struct {
+	gen      uint64
+	readOnly bool
+	err      error
 }
 
 type treeRootMsg struct {
@@ -131,6 +162,36 @@ type Model struct {
 	detailsGen    uint64
 	exactGen      uint64
 	restore       *restoreState
+
+	query           textinput.Model
+	statementInput  textinput.Model
+	statementOrigin string
+	history         []string
+	historyIndex    int
+	historyDraft    string
+	completion      completionState
+	helpTerm        string
+	helpBody        string
+	helpReturn      modalKind
+	helpExtended    bool
+	helpScroll      int
+
+	resultsActive  bool
+	results        resultsState
+	resultsSaved   detailsState
+	resultsData    dataState
+	resultsDataGen uint64
+	queryGen       uint64
+	resultsGen     uint64
+	queryRunning   bool
+	queryStarted   time.Time
+	escChord       bool
+	escSeq         int
+	elevated       bool
+	rootLaunch     bool
+	modeBusy       bool
+	modeGen        uint64
+	saveResult     app.ConnectResult
 
 	connecting      bool
 	connectingKey   string
@@ -191,11 +252,14 @@ func New(svc *app.Service) Model {
 		data:            newDataState(),
 		newFocus:        fieldURI,
 		caseInsensitive: true,
+		rootLaunch:      os.Geteuid() == 0,
 	}
 	m.newURI = newInput("postgres://user@host:5432/db", false)
 	m.newLabel = newInput("", false)
 	m.newPassword = newInput("", true)
 	m.passwordInput = newInput("", true)
+	m.query = newInput("", false)
+	m.statementInput = newInput("", false)
 	m.editLabel = newInput("label", false)
 	m.editHost = newInput("host", false)
 	m.editPort = newInput("5432", false)
@@ -276,6 +340,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExactTick(msg)
 	case privilegesMsg:
 		return m.handlePrivileges(msg)
+	case queryDoneMsg:
+		return m.handleQueryDone(msg)
+	case resultsPageMsg:
+		return m.handleResultsPage(msg)
+	case queryTickMsg:
+		return m.handleQueryTick(msg)
+	case escChordTimeoutMsg:
+		return m.handleEscChordTimeout(msg)
+	case modeDoneMsg:
+		return m.handleModeDone(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -314,6 +388,12 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSaveKey(msg)
 	case modalEdit:
 		return m.handleEditKey(msg)
+	case modalStatement:
+		return m.handleStatementKey(msg)
+	case modalHelp:
+		return m.handleHelpKey(msg)
+	case modalMode:
+		return m.handleModeKey(msg)
 	}
 	if m.pendingChord {
 		m.pendingChord = false
@@ -323,6 +403,24 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.apply(action)
+	}
+	if action, ok := keymap.Lookup(key); ok && action == keymap.ChordX {
+		m.chordSeq++
+		seq := m.chordSeq
+		m.pendingChord = true
+		m.escChord = false
+		m.setMessage(levelInfo, "Ctrl+X …")
+		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return chordTimeoutMsg{seq: seq}
+		})
+	}
+	if m.completion.active {
+		if next, cmd, handled := m.handleCompletionKey(msg); handled {
+			return next, cmd
+		}
+	}
+	if m.screen == ScreenWorkspace && m.modal == modalNone && m.focus == FocusQuery {
+		return m.handleQueryKey(msg)
 	}
 	if m.data.prompt != promptNone {
 		if next, cmd, handled := m.handleFilterKey(msg); handled {
@@ -334,15 +432,6 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	action, ok := keymap.Lookup(key)
 	if !ok {
 		return m, nil
-	}
-	if action == keymap.ChordX {
-		m.chordSeq++
-		seq := m.chordSeq
-		m.pendingChord = true
-		m.setMessage(levelInfo, "Ctrl+X …")
-		return m, tea.Tick(2*time.Second, func(time.Time) tea.Msg {
-			return chordTimeoutMsg{seq: seq}
-		})
 	}
 	return m.apply(action)
 }
@@ -391,14 +480,20 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.setMessage(levelInfo, "help — story 9")
 	case keymap.Tab:
 		if m.screen == ScreenWorkspace {
+			m.completion = completionState{}
 			m.focus = (m.focus + 1) % 3
+			m.syncQueryFocus()
+			m.syncQueryPlaceholder()
 			if m.focus == FocusMain {
 				return m, m.ensureData()
 			}
 		}
 	case keymap.ShiftTab:
 		if m.screen == ScreenWorkspace {
+			m.completion = completionState{}
 			m.focus = (m.focus + 2) % 3
+			m.syncQueryFocus()
+			m.syncQueryPlaceholder()
 			if m.focus == FocusMain {
 				return m, m.ensureData()
 			}
@@ -554,11 +649,17 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.disconnect()
 		}
 	case keymap.Cancel:
+		if m.queryRunning {
+			return m.cancelResults()
+		}
 		if m.details.exactLoading {
 			m.cancelExactCount()
 			return m, nil
 		}
 		if m.data.loading {
+			if m.resultsActive {
+				return m.cancelResults()
+			}
 			m.cancelDataFetch()
 			m.setMessage(levelInfo, "cancelled")
 			return m, nil
@@ -569,6 +670,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		}
 		if m.data.serverFilter != nil {
 			return m, m.clearServerFilter()
+		}
+		if m.resultsActive {
+			m.leaveResults()
+			return m, nil
 		}
 		if m.connecting {
 			m.cancelConnect()
@@ -592,7 +697,15 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.toggleJSONColumns()
 		}
 	case keymap.Execute:
-		m.setMessage(levelInfo, "execute — story 5")
+		return m.startQuery()
+	case keymap.Edit:
+		if m.screen == ScreenWorkspace {
+			m.openStatementModal()
+		}
+	case keymap.ContextHelp:
+		if m.screen == ScreenWorkspace {
+			m.openContextHelp()
+		}
 	case keymap.Space:
 		if m.screen == ScreenWorkspace && m.focus == FocusTree {
 			return m.openSelected()
@@ -603,8 +716,27 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m, m.toggleCaseMode()
 	case keymap.NextMatch:
 		return m, m.nextMatch(-1)
-	case keymap.ToggleMode, keymap.Edit,
-		keymap.Completion, keymap.ContextHelp,
+	case keymap.ToggleMode:
+		if m.screen != ScreenWorkspace || m.session == nil {
+			return m, nil
+		}
+		if m.modeBusy {
+			return m, nil
+		}
+		if m.queryRunning {
+			m.setMessage(levelInfo, "query running — Esc cancels first")
+			return m, nil
+		}
+		if m.session.ResultsOpen() {
+			m.setMessage(levelInfo, "results open — Esc to release")
+			return m, nil
+		}
+		if m.session.ReadOnly() {
+			m.openModeConfirm()
+			return m, nil
+		}
+		return m, m.startModeSwitch(true)
+	case keymap.Completion,
 		keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
 		keymap.ResizeQueryUp, keymap.ResizeQueryDown:
 		m.setMessage(levelInfo, "not available in this story")
@@ -737,6 +869,7 @@ func (m Model) handleConnectDone(msg connectDoneMsg) (tea.Model, tea.Cmd) {
 		m.closeNewModal()
 		m.saveProfile = msg.result.Profile
 		m.saveSession = msg.result.Session
+		m.saveResult = msg.result
 		m.modal = modalSave
 		m.reloadProfiles(context.Background(), msg.result.Profile.Key())
 		m.setMessage(levelSuccess, "connected")
@@ -758,6 +891,37 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.screen = ScreenWorkspace
 	m.focus = FocusTree
 	m.caseInsensitive = true
+	m.history = m.svc.History(context.Background(), result.Profile)
+	m.historyIndex = len(m.history)
+	m.historyDraft = ""
+	m.queryGen++
+	m.resultsGen++
+	m.query.SetValue("")
+	m.query.SetCursor(0)
+	m.query.Placeholder = queryPlaceholder(result.Profile.Engine, domain.ObjectRef{
+		Engine: result.Profile.Engine, Database: result.Profile.Database,
+	})
+	m.query.Blur()
+	m.resultsActive = false
+	m.queryRunning = false
+	m.modeBusy = false
+	m.modeGen++
+	m.escChord = false
+	m.completion = completionState{}
+	warnings := []string{}
+	if result.Warning != "" {
+		warnings = append(warnings, result.Warning)
+	}
+	if result.Elevated {
+		warnings = append(warnings, "This account has elevated rights. Read-only mode is a product guard, not a security boundary.")
+	}
+	if result.Profile.Engine == domain.EngineMongoDB {
+		warnings = append(warnings, "Read-only is enforced by the tool; MongoDB has no session-level read-only.")
+	}
+	if m.rootLaunch {
+		warnings = append(warnings, "The tool is running as root. Read-only mode is a product guard, not a security boundary.")
+	}
+	m.elevated = result.Elevated
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++
@@ -766,8 +930,8 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.resetData()
 	m.message = "connected"
 	m.messageLevel = levelSuccess
-	if result.Warning != "" {
-		m.setMessage(levelWarning, oneLine(result.Warning))
+	if len(warnings) > 0 {
+		m.setMessage(levelWarning, oneLine(strings.Join(warnings, " ")))
 	}
 	m.reloadProfiles(context.Background(), result.Profile.Key())
 	return m
@@ -787,6 +951,18 @@ func (m *Model) disconnect() {
 	m.treeGen++
 	m.screen = ScreenPicker
 	m.focus = FocusTree
+	m.queryGen++
+	m.resultsGen++
+	m.query.Blur()
+	m.resultsActive = false
+	m.queryRunning = false
+	m.modeBusy = false
+	m.modeGen++
+	m.elevated = false
+	m.escChord = false
+	m.completion = completionState{}
+	m.history = nil
+	m.historyIndex = 0
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++
@@ -926,6 +1102,12 @@ func (m *Model) resizeInputs() {
 	m.newLabel.SetWidth(newWidth)
 	m.newPassword.SetWidth(newWidth)
 	m.passwordInput.SetWidth(passwordWidth)
+	queryWidth := m.width - 12
+	if queryWidth < 10 {
+		queryWidth = 10
+	}
+	m.query.SetWidth(queryWidth)
+	m.statementInput.SetWidth(modalWidth(m.width, 70) - 6)
 	m.editLabel.SetWidth(newWidth)
 	m.editHost.SetWidth(newWidth)
 	m.editPort.SetWidth(newWidth)
@@ -948,6 +1130,19 @@ func (m Model) View() tea.View {
 			content = overlayCenter(base, m.viewModal(), m.width, m.height)
 		} else {
 			content = base
+		}
+		if m.completion.active && (m.modal == modalNone || m.modal == modalStatement) {
+			if popup := m.completionPopup(); popup != "" {
+				lines := strings.Split(popup, "\n")
+				popupWidth := 0
+				for _, line := range lines {
+					if w := lipgloss.Width(line); w > popupWidth {
+						popupWidth = w
+					}
+				}
+				x, y := m.completionAnchor(popupWidth, len(lines))
+				content = overlayAt(content, popup, m.width, m.height, x, y)
+			}
 		}
 	}
 	v := tea.NewView(content)
@@ -973,6 +1168,12 @@ func (m Model) viewModal() string {
 		return m.viewSave()
 	case modalEdit:
 		return m.viewEdit()
+	case modalStatement:
+		return m.viewStatement()
+	case modalHelp:
+		return m.viewHelp()
+	case modalMode:
+		return m.viewModeConfirm()
 	}
 	return ""
 }
@@ -992,6 +1193,15 @@ func (m *Model) dismissModal() {
 		m.modal = modalNone
 	case modalEdit:
 		m.closeEditModal()
+	case modalStatement:
+		m.closeStatementModal()
+	case modalHelp:
+		m.modal = modalNone
+		m.helpReturn = modalNone
+		m.helpTerm = ""
+		m.helpBody = ""
+	case modalMode:
+		m.modal = modalNone
 	}
 }
 

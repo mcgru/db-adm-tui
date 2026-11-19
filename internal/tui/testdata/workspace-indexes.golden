@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+  SQL › SELECT * FROM public.customers LIMIT 100                                
 connected · orders                                     Enter open · Right expand

@@ -3,10 +3,10 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ / active  match 1 of 2 · Esc clear              │
-│     · invoices  rw       │ │      id   name    status                        │
+│     · invoices  rw       │ │      id           name            status        │
 │     · audit_log  —       │ │ ─────────────────────────────────────────────── │
-│     · customer_view  ro  │ │   1  1    row-001 active                        │
-│     · orders_seq         │ │   4  4    row-004 active                        │
+│     · customer_view  ro  │ │   1  1            row-001         active        │
+│     · orders_seq         │ │   4  4            row-004         active        │
 │   ▸ schemas              │ │                                                 │
 │ ▸ billing                │ │                                                 │
 │ ▸ Security               │ │                                                 │
@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+  SQL › SELECT * FROM public.customers LIMIT 100                                
 loaded 5 of ~5                                    n/N match · m more · Esc clear

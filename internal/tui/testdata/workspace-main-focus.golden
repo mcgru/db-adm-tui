@@ -2,13 +2,13 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
-│     · customers  ro      │ │      id   name    status                        │
+│     · customers  ro      │ │      id           name            status        │
 │     · invoices  rw       │ │ ─────────────────────────────────────────────── │
-│     · audit_log  —       │ │   1  1    row-001 active                        │
-│     · customer_view  ro  │ │   2  2    row-002 paused                        │
-│     · orders_seq         │ │   3  3    row-003 closed                        │
-│   ▸ schemas              │ │   4  4    row-004 active                        │
-│ ▸ billing                │ │   5  5    row-005 paused                        │
+│     · audit_log  —       │ │   1  1            row-001         active        │
+│     · customer_view  ro  │ │   2  2            row-002         paused        │
+│     · orders_seq         │ │   3  3            row-003         closed        │
+│   ▸ schemas              │ │   4  4            row-004         active        │
+│ ▸ billing                │ │   5  5            row-005         paused        │
 │ ▸ Security               │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+  SQL › SELECT * FROM public.customers LIMIT 100                                
 loaded 5 of ~5                          ↑↓ · m more · / filter · Ctrl+F · ` JSON

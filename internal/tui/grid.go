@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -24,6 +25,11 @@ const (
 	dataMaxWindowRows  = 10000
 	dataMaxWindowBytes = 64 << 20
 	dataMaxColumnWidth = 32
+	// dataNaturalColumnWidth is the unclipped width used to decide whether the
+	// loaded columns fit. The renderer caps the scrolling fallback at
+	// dataMaxColumnWidth.
+	dataNaturalColumnWidth = 512
+	dataFitMinColumn       = 16
 )
 
 type dataDirection int
@@ -414,8 +420,8 @@ func gridColumnWidths(columns []domain.Column, rows []domain.Row) []int {
 				continue
 			}
 			display := row.Cells[i].Display()
-			if len(display) > dataMaxColumnWidth*8 {
-				widths[i] = dataMaxColumnWidth
+			if len(display) > dataNaturalColumnWidth*8 {
+				widths[i] = dataNaturalColumnWidth
 				continue
 			}
 			width := lipgloss.Width(oneLine(display))
@@ -428,11 +434,120 @@ func gridColumnWidths(columns []domain.Column, rows []domain.Row) []int {
 		if widths[i] < 4 {
 			widths[i] = 4
 		}
-		if widths[i] > dataMaxColumnWidth {
-			widths[i] = dataMaxColumnWidth
+		if widths[i] > dataNaturalColumnWidth {
+			widths[i] = dataNaturalColumnWidth
 		}
 	}
 	return widths
+}
+
+// fitColumnWidths uses the full pane when the loaded columns can be shown
+// together. Small column sets split the available width even when a long value
+// is wider than the pane; larger sets keep the existing capped-width scroll.
+// The returned widths plus one separator per gap sum to available in the fit
+// paths.
+func fitColumnWidths(widths []int, available int) []int {
+	n := len(widths)
+	if n == 0 {
+		return nil
+	}
+	if available < 1 {
+		available = 1
+	}
+	total := 0
+	for _, width := range widths {
+		total += width
+	}
+	gaps := n - 1
+	if total+gaps <= available {
+		return expandColumnWidths(widths, available-gaps)
+	}
+	if n*dataFitMinColumn+gaps <= available {
+		return allocateColumnWidths(widths, available-gaps)
+	}
+	fitted := make([]int, n)
+	for i, width := range widths {
+		if width > dataMaxColumnWidth {
+			width = dataMaxColumnWidth
+		}
+		if width < 4 {
+			width = 4
+		}
+		fitted[i] = width
+	}
+	return fitted
+}
+
+// expandColumnWidths keeps every natural width and spreads the spare cells
+// evenly, so a table with fewer columns does not leave a dead strip at the
+// right edge.
+func expandColumnWidths(widths []int, target int) []int {
+	n := len(widths)
+	alloc := append([]int(nil), widths...)
+	total := 0
+	for _, width := range alloc {
+		total += width
+	}
+	extra := target - total
+	if extra <= 0 {
+		return alloc
+	}
+	base := extra / n
+	remainder := extra % n
+	for i := range alloc {
+		alloc[i] += base
+		if i < remainder {
+			alloc[i]++
+		}
+	}
+	return alloc
+}
+
+// allocateColumnWidths water-fills the available cells: narrow columns keep
+// their content width and the remaining room is split among the wide ones.
+func allocateColumnWidths(widths []int, target int) []int {
+	n := len(widths)
+	order := make([]int, n)
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return widths[order[i]] < widths[order[j]]
+	})
+	alloc := make([]int, n)
+	remaining := target
+	for k, index := range order {
+		count := n - k
+		share := remaining / count
+		width := widths[index]
+		if width < 1 {
+			width = 1
+		}
+		if width <= share {
+			alloc[index] = width
+			remaining -= width
+			continue
+		}
+		base := remaining / count
+		remainder := remaining % count
+		for j := k; j < n; j++ {
+			alloc[order[j]] = base
+			if remainder > 0 {
+				alloc[order[j]]++
+				remainder--
+			}
+		}
+		break
+	}
+	return alloc
+}
+
+func fittedGridWidths(view []dataColumn, available int) []int {
+	widths := make([]int, len(view))
+	for i := range view {
+		widths[i] = view[i].width
+	}
+	return fitColumnWidths(widths, available)
 }
 
 // buildDataView projects engine columns into rendered columns. Only the
@@ -519,8 +634,8 @@ func dataColumnWidth(rows []domain.Row, column dataColumn) int {
 	width := lipgloss.Width(oneLine(column.name))
 	for _, row := range rows {
 		display := cellForColumn(row, column).Display()
-		if len(display) > dataMaxColumnWidth*8 {
-			width = dataMaxColumnWidth
+		if len(display) > dataNaturalColumnWidth*8 {
+			width = dataNaturalColumnWidth
 			break
 		}
 		if cellWidth := lipgloss.Width(oneLine(display)); cellWidth > width {
@@ -530,8 +645,8 @@ func dataColumnWidth(rows []domain.Row, column dataColumn) int {
 	if width < 4 {
 		width = 4
 	}
-	if width > dataMaxColumnWidth {
-		width = dataMaxColumnWidth
+	if width > dataNaturalColumnWidth {
+		width = dataNaturalColumnWidth
 	}
 	return width
 }
@@ -660,6 +775,19 @@ func (m *Model) nextDataPage() tea.Cmd {
 		m.setMessage(levelInfo, "select a table or collection to browse")
 		return nil
 	}
+	if m.resultsActive {
+		if m.data.loading {
+			return nil
+		}
+		if m.queryRunning {
+			return nil
+		}
+		if !m.data.hasMore {
+			m.setMessage(levelInfo, "end of data")
+			return nil
+		}
+		return m.nextResultsPage(m.data.batch)
+	}
 	d := &m.data
 	if d.loading {
 		return nil
@@ -682,6 +810,9 @@ func (m *Model) fetchAllData() tea.Cmd {
 		m.setMessage(levelInfo, "select a table or collection to browse")
 		return nil
 	}
+	if m.resultsActive {
+		return m.fetchAllResults()
+	}
 	d := &m.data
 	d.batch = dataFetchAllSize
 	if d.loading {
@@ -703,6 +834,9 @@ func (m *Model) fetchAllData() tea.Cmd {
 }
 
 func (m *Model) previousDataPage() tea.Cmd {
+	if m.resultsActive {
+		return nil
+	}
 	d := &m.data
 	if !d.loaded || d.loading || d.windowStart <= 0 {
 		return nil
@@ -921,7 +1055,12 @@ func (m *Model) cancelDataFetch() {
 }
 
 func (m Model) dataTabActive() bool {
-	return m.details.has && m.details.currentTab() == "Data"
+	return m.details.has && (m.details.currentTab() == "Data" || m.resultsActive)
+}
+
+// gridActive reports a visible row grid: the Data tab or an open Results tab.
+func (m Model) gridActive() bool {
+	return m.dataTabActive()
 }
 
 func (m Model) dataFocused() bool {
@@ -1095,14 +1234,11 @@ func (m *Model) ensureDataColumn() {
 	if len(d.view) == 0 {
 		return
 	}
-	widths := make([]int, len(d.view))
-	for i := range d.view {
-		widths[i] = d.view[i].width
-	}
 	available := m.dataInnerWidth() - d.gutter - 2
 	if available < 1 {
 		available = 1
 	}
+	widths := fittedGridWidths(d.view, available)
 	d.colOffset = visibleColumnStart(widths, d.colOffset, d.cursorCol, available)
 }
 
@@ -1195,6 +1331,9 @@ func (m Model) dataSummary() string {
 	d := m.data
 	if !d.has || !m.dataTabActive() {
 		return ""
+	}
+	if m.resultsActive {
+		return m.resultsSummary()
 	}
 	if d.loading {
 		return "loading rows…"
@@ -1308,6 +1447,9 @@ func (m Model) viewData(width, height int) []string {
 	if !d.loaded {
 		if len(lines) < height {
 			switch {
+			case m.resultsActive && m.queryRunning:
+				lines = append(lines, m.styles.Muted.Render(Truncate(
+					"running "+formatElapsed(time.Since(m.queryStarted))+" · Esc cancels", width)))
 			case d.err != "":
 				lines = append(lines, m.styles.Muted.Render(Truncate("press m to retry", width)))
 			case d.loading:
@@ -1346,6 +1488,9 @@ func (m Model) renderGrid(width, height int) []string {
 			if d.serverFilter != nil {
 				return []string{m.filteredEmptyLine(width)}
 			}
+			if m.resultsActive {
+				return []string{m.styles.Muted.Render(Truncate("0 rows.", width))}
+			}
 			name := oneLine(dataObjectName(d.ref))
 			return []string{m.styles.Muted.Render(Truncate("No rows. "+name+" is empty.", width))}
 		}
@@ -1355,10 +1500,6 @@ func (m Model) renderGrid(width, height int) []string {
 	if len(view) == 0 {
 		view = buildDataView(d.columns, d.rows, d.expandedJSON)
 	}
-	widths := make([]int, len(view))
-	for i := range view {
-		widths[i] = view[i].width
-	}
 	gutter := d.gutter
 	if gutter < 1 {
 		gutter = 3
@@ -1367,6 +1508,7 @@ func (m Model) renderGrid(width, height int) []string {
 	if available < 1 {
 		available = 1
 	}
+	widths := fittedGridWidths(view, available)
 	startCol := visibleColumnStart(widths, d.colOffset, d.cursorCol, available)
 
 	var visible []visibleColumn
@@ -1431,6 +1573,10 @@ func (m Model) renderGrid(width, height int) []string {
 		}
 		if d.serverFilter != nil {
 			lines = append(lines, m.filteredEmptyLine(width))
+			return lines
+		}
+		if m.resultsActive {
+			lines = append(lines, m.styles.Muted.Render(Truncate("0 rows.", width)))
 			return lines
 		}
 		name := oneLine(dataObjectName(d.ref))

@@ -51,14 +51,37 @@ func overlayCenter(base, modal string, width, height int) string {
 		}
 	}
 	modalHeight := len(modalLines)
+	x := (width - modalWidth) / 2
+	y := (height - modalHeight) / 2
+	return overlayAt(base, modal, width, height, x, y)
+}
+
+// overlayAt draws modal with its top-left corner at x,y. The base is stripped
+// of styling so the overlay is the only colored surface.
+func overlayAt(base, modal string, width, height, x, y int) string {
+	if width <= 0 || height <= 0 || modal == "" {
+		return base
+	}
+	modalLines := strings.Split(modal, "\n")
+	modalWidth := 0
+	for _, line := range modalLines {
+		if w := lipgloss.Width(line); w > modalWidth {
+			modalWidth = w
+		}
+	}
+	modalHeight := len(modalLines)
 	if modalWidth > width-2 {
 		modalWidth = width - 2
 	}
 	if modalHeight > height-2 {
 		modalHeight = height - 2
 	}
-	x := (width - modalWidth) / 2
-	y := (height - modalHeight) / 2
+	if x > width-modalWidth-1 {
+		x = width - modalWidth - 1
+	}
+	if y > height-modalHeight-1 {
+		y = height - modalHeight - 1
+	}
 	if x < 0 {
 		x = 0
 	}

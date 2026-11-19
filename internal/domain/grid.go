@@ -79,6 +79,24 @@ type Grid struct {
 	Rows    []Row    `json:"rows"`
 }
 
+// UniqueColumnNames makes result column names distinct by appending a
+// positional suffix. Engines may return duplicate names; the grid merge keys
+// columns by name, so duplicates must not collapse.
+func UniqueColumnNames(names []string) []string {
+	seen := make(map[string]int, len(names))
+	result := make([]string, len(names))
+	for i, name := range names {
+		count := seen[name]
+		seen[name] = count + 1
+		if count == 0 {
+			result[i] = name
+			continue
+		}
+		result[i] = name + " (" + strconv.Itoa(count+1) + ")"
+	}
+	return result
+}
+
 // ApproxBytes estimates the memory held by a grid for the loaded-window cap.
 func (g Grid) ApproxBytes() int {
 	total := 0

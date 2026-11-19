@@ -2,16 +2,22 @@ package app
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
+	"github.com/mcgru/db-adm-tui/internal/guard"
 	"github.com/mcgru/db-adm-tui/internal/ports"
 	"github.com/mcgru/db-adm-tui/internal/profile"
 )
 
 const metadataTimeout = 30 * time.Second
+
+// resultsMaxRows is the materialized result window cap.
+const resultsMaxRows = 10000
 
 // Session is the application-owned live connection. It serializes all engine
 // operations and owns the only credential copy kept in memory.
@@ -22,21 +28,37 @@ type Session struct {
 	credential Credential
 	connector  ports.Connector
 	resolver   *profile.Resolver
+	history    ports.HistoryStore
+	historyKey string
 	dead       bool
 	display    atomic.Value
 	alive      atomic.Bool
+	readOnly   atomic.Bool
+
+	queryCancelMu sync.Mutex
+	queryCancel   context.CancelFunc
+	queryCtx      context.Context
+	cursor        ports.QueryCursor
+	resultRows    int
+	resultStart   time.Time
+	resultsOpen   atomic.Bool
+	historyWarn   string
+	modeWarn      string
 }
 
-func newSession(bundle ports.SessionBundle, p domain.Profile, cred Credential, connector ports.Connector, resolver *profile.Resolver) *Session {
+func newSession(bundle ports.SessionBundle, p domain.Profile, cred Credential, connector ports.Connector, resolver *profile.Resolver, history ports.HistoryStore) *Session {
 	s := &Session{
 		bundle:     bundle,
 		profile:    p,
 		credential: cred,
 		connector:  connector,
 		resolver:   resolver,
+		history:    history,
+		historyKey: p.Key(),
 	}
 	s.display.Store(p)
 	s.alive.Store(true)
+	s.readOnly.Store(true)
 	return s
 }
 
@@ -56,6 +78,91 @@ func (s *Session) ProfileSnapshot() domain.Profile {
 // CurrentDatabase returns the database of the live connection.
 func (s *Session) CurrentDatabase() string {
 	return s.ProfileSnapshot().Database
+}
+
+// ReadOnly reports the tool's current read-only mode. Every new session starts
+// read-only, and every database switch resets it.
+func (s *Session) ReadOnly() bool {
+	if s == nil {
+		return true
+	}
+	return s.readOnly.Load()
+}
+
+// SetReadOnly applies the mode to the native session layer where supported and
+// then updates the tool mode. MongoDB has no session layer; its guard still
+// applies while read-only.
+func (s *Session) SetReadOnly(ctx context.Context, readOnly bool) error {
+	if s == nil {
+		return domain.NewError(domain.KindConfig, "mode", "no active connection")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil {
+		return domain.NewError(domain.KindConfig, "mode", "no active connection")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return err
+	}
+	if s.readOnly.Load() == readOnly {
+		return nil
+	}
+	if err := s.applyReadOnlyLocked(ctx, readOnly); err != nil {
+		return s.modeError(err)
+	}
+	return nil
+}
+
+// Elevated reports native superuser/root or server-admin rights.
+func (s *Session) Elevated(ctx context.Context) (bool, error) {
+	if s == nil {
+		return false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.ModeController == nil {
+		return false, nil
+	}
+	if err := s.readyForEngine(); err != nil {
+		return false, err
+	}
+	elevated, err := s.bundle.ModeController.Elevated(ctx)
+	if err != nil {
+		return false, s.modeError(err)
+	}
+	return elevated, nil
+}
+
+func (s *Session) applyReadOnlyLocked(ctx context.Context, readOnly bool) error {
+	if s.bundle.ModeController != nil {
+		if err := s.bundle.ModeController.SetReadOnly(ctx, readOnly); err != nil {
+			return err
+		}
+	}
+	s.readOnly.Store(readOnly)
+	return nil
+}
+
+// initializeReadOnly applies the native read-only layer even though the local
+// state already starts true, so a new connection cannot miss the second layer.
+func (s *Session) initializeReadOnly(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil {
+		return domain.NewError(domain.KindConfig, "mode", "no active connection")
+	}
+	return s.applyReadOnlyLocked(ctx, true)
+}
+
+func (s *Session) modeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := err.(*domain.Error); ok {
+		return err
+	}
+	message := domain.RedactSecret(err.Error(), s.credential.Password)
+	return domain.NewError(domain.KindEngine, "mode", message)
 }
 
 // Alive reports whether the session can still be used.
@@ -82,6 +189,8 @@ func (s *Session) closeLocked() error {
 	}
 	s.dead = true
 	s.alive.Store(false)
+	s.cancelQuery()
+	s.closeResultsLocked()
 	if s.bundle.Session == nil {
 		return nil
 	}
@@ -99,6 +208,9 @@ func (s *Session) Ping(ctx context.Context) error {
 	defer s.mu.Unlock()
 	if s.dead || s.bundle.Session == nil {
 		return domain.NewError(domain.KindConfig, "ping", "no active connection")
+	}
+	if s.cursor != nil {
+		return domain.NewError(domain.KindConfig, "ping", "results open — Esc to release")
 	}
 	return s.bundle.Session.Ping(ctx)
 }
@@ -265,9 +377,266 @@ func (s *Session) Privileges(ctx context.Context, ref domain.ObjectRef) (domain.
 	return s.bundle.PrivilegeReader.Privileges(ctx, ref)
 }
 
+// ValidateQuery applies the local guard and returns a safe reason before any
+// engine call. It never touches the connection.
+func (s *Session) ValidateQuery(statement string) error {
+	if s == nil {
+		return domain.NewError(domain.KindConfig, "query", "no active connection")
+	}
+	if strings.TrimSpace(statement) == "" {
+		return domain.NewError(domain.KindConfig, "query", "the statement is empty")
+	}
+	decision := guard.CheckSQLMode(statement, s.ReadOnly())
+	if s.ProfileSnapshot().Engine == domain.EngineMongoDB {
+		decision = guard.CheckMongoMode(statement, s.ReadOnly())
+	}
+	if !decision.Allowed {
+		return guardError(decision)
+	}
+	return nil
+}
+
+func guardError(decision guard.Decision) error {
+	message := decision.Reason
+	if decision.ModeHint {
+		message += " Ctrl+X Ctrl+W to switch."
+	}
+	return domain.NewError(domain.KindGuard, "query", message)
+}
+
+// ExecuteQuery validates and opens one forward-only query cursor, returning
+// the first page. The cursor stays open while it has more rows.
+func (s *Session) ExecuteQuery(ctx context.Context, request domain.QueryRequest, limit int) (domain.QueryPage, error) {
+	if limit <= 0 {
+		return domain.QueryPage{}, domain.NewError(domain.KindConfig, "query", "the result window is not valid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.QueryExecutor == nil {
+		return domain.QueryPage{}, domain.NewError(domain.KindConfig, "query", "query execution is not available")
+	}
+	if s.cursor != nil {
+		return domain.QueryPage{}, domain.NewError(domain.KindConfig, "query", "results open — Esc to release")
+	}
+	if err := s.validateLocked(request.Statement); err != nil {
+		return domain.QueryPage{}, err
+	}
+	queryCtx, cancel := context.WithCancel(ctx)
+	start := time.Now()
+	cursor, err := s.bundle.QueryExecutor.Query(queryCtx, request)
+	if err != nil {
+		cancel()
+		s.recordHistoryLocked(request.Statement, start, queryStatus(err))
+		return domain.QueryPage{}, s.redactQueryError(err)
+	}
+	page, err := cursor.Next(queryCtx, limit)
+	if err != nil {
+		_ = cursor.Close(context.Background())
+		cancel()
+		s.recordHistoryLocked(request.Statement, start, queryStatus(err))
+		return domain.QueryPage{}, s.redactQueryError(err)
+	}
+	page.Elapsed = time.Since(start)
+	s.queryCtx = queryCtx
+	s.resultRows = len(page.Grid.Rows)
+	s.resultStart = start
+	if page.HasMore {
+		s.cursor = cursor
+		s.setQueryCancel(cancel)
+		s.resultsOpen.Store(true)
+	} else {
+		_ = cursor.Close(context.Background())
+		cancel()
+		s.closeResultsLocked()
+	}
+	s.recordHistoryLocked(request.Statement, start, "ok")
+	return page, nil
+}
+
+// ResultsNext drains the open query cursor into the next page. The app owns
+// the 10,000-row window cap.
+func (s *Session) ResultsNext(ctx context.Context, limit int) (domain.QueryPage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cursor == nil || s.queryCtx == nil {
+		return domain.QueryPage{}, domain.NewError(domain.KindConfig, "query", "no query results are open")
+	}
+	remaining := resultsMaxRows - s.resultRows
+	if remaining <= 0 {
+		s.closeResultsLocked()
+		return domain.QueryPage{CapReached: true}, nil
+	}
+	if limit <= 0 || limit > remaining {
+		limit = remaining
+	}
+	page, err := s.cursor.Next(s.queryCtx, limit)
+	if err != nil {
+		s.closeResultsLocked()
+		return domain.QueryPage{}, s.redactQueryError(err)
+	}
+	page.Elapsed = time.Since(s.resultStart)
+	s.resultRows += len(page.Grid.Rows)
+	if page.HasMore && s.resultRows >= resultsMaxRows {
+		page.HasMore = false
+		page.CapReached = true
+		s.closeResultsLocked()
+		return page, nil
+	}
+	if !page.HasMore {
+		s.closeResultsLocked()
+	}
+	return page, nil
+}
+
+// CancelQuery interrupts a running query or paging call without waiting for
+// the serialized session lock. The cursor is cleaned up when the call returns.
+func (s *Session) CancelQuery() {
+	s.queryCancelMu.Lock()
+	cancel := s.queryCancel
+	s.queryCancel = nil
+	s.queryCancelMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// CloseResults releases the open cursor and its session lease.
+func (s *Session) CloseResults() {
+	s.cancelQuery()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeResultsLocked()
+}
+
+// ResultsOpen reports whether a query cursor still holds the session lease.
+func (s *Session) ResultsOpen() bool {
+	if s == nil {
+		return false
+	}
+	return s.resultsOpen.Load()
+}
+
+// LastWarning returns the most recent non-fatal history write failure.
+func (s *Session) LastWarning() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	warning := s.modeWarn
+	s.modeWarn = ""
+	if history := s.historyWarn; history != "" {
+		if warning != "" {
+			warning += " " + history
+		} else {
+			warning = history
+		}
+		s.historyWarn = ""
+	}
+	return warning
+}
+
+func (s *Session) validateLocked(statement string) error {
+	if strings.TrimSpace(statement) == "" {
+		return domain.NewError(domain.KindConfig, "query", "the statement is empty")
+	}
+	decision := guard.CheckSQLMode(statement, s.readOnly.Load())
+	if s.profile.Engine == domain.EngineMongoDB {
+		decision = guard.CheckMongoMode(statement, s.readOnly.Load())
+	}
+	if !decision.Allowed {
+		return guardError(decision)
+	}
+	return nil
+}
+
+func (s *Session) setQueryCancel(cancel context.CancelFunc) {
+	s.queryCancelMu.Lock()
+	s.queryCancel = cancel
+	s.queryCancelMu.Unlock()
+}
+
+func (s *Session) cancelQuery() {
+	s.queryCancelMu.Lock()
+	cancel := s.queryCancel
+	s.queryCancel = nil
+	s.queryCancelMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (s *Session) closeResultsLocked() {
+	if s.cursor != nil {
+		_ = s.cursor.Close(context.Background())
+		s.cursor = nil
+	}
+	s.cancelQuery()
+	s.queryCtx = nil
+	s.resultRows = 0
+	s.resultStart = time.Time{}
+	s.resultsOpen.Store(false)
+}
+
+func (s *Session) recordHistoryLocked(statement string, start time.Time, status string) {
+	if s.history == nil {
+		return
+	}
+	duration := time.Since(start)
+	mode := "r/o"
+	if !s.readOnly.Load() {
+		mode = "r/w"
+	}
+	entry := domain.HistoryEntry{
+		Time:       time.Now().UTC(),
+		Profile:    s.historyKey,
+		Engine:     s.profile.Engine,
+		Statement:  domain.RedactSecret(statement, s.credential.Password),
+		Mode:       mode,
+		DurationMs: duration.Milliseconds(),
+		Duration:   duration,
+		Status:     status,
+	}
+	if err := s.history.Append(context.Background(), entry); err != nil {
+		s.historyWarn = "history write failed: " + domain.RedactSecrets(err.Error(), s.credential.Password)
+	}
+}
+
+func queryStatus(err error) string {
+	if errors.Is(err, context.Canceled) || domain.KindOf(err) == domain.KindCancelled {
+		return "cancelled"
+	}
+	return "error"
+}
+
+func (s *Session) redactQueryError(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := domain.RedactSecret(err.Error(), s.credential.Password)
+	kind := domain.KindOf(err)
+	switch {
+	case errors.Is(err, context.Canceled):
+		kind = domain.KindCancelled
+		message = "cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		kind = domain.KindTimeout
+		message = "query timed out"
+	}
+	return &domain.Error{
+		Kind:    kind,
+		Op:      "query",
+		Message: message,
+	}
+}
+
 func (s *Session) ready() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.Catalog == nil {
 		return domain.NewError(domain.KindConfig, "session", "no active connection")
+	}
+	return s.readyForEngine()
+}
+
+func (s *Session) readyForEngine() error {
+	if s.cursor != nil {
+		return domain.NewError(domain.KindConfig, "session", "results open — Esc to release")
 	}
 	return nil
 }
@@ -276,21 +645,21 @@ func (s *Session) readyData() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.DataReader == nil {
 		return domain.NewError(domain.KindConfig, "data", "data browsing is not available")
 	}
-	return nil
+	return s.readyForEngine()
 }
 
 func (s *Session) readyStats() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.StatsReader == nil {
 		return domain.NewError(domain.KindConfig, "stats", "object metadata is not available")
 	}
-	return nil
+	return s.readyForEngine()
 }
 
 func (s *Session) readyPrivileges() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.PrivilegeReader == nil {
 		return domain.NewError(domain.KindConfig, "privileges", "privilege inspection is not available")
 	}
-	return nil
+	return s.readyForEngine()
 }
 
 // ensureDatabaseLocked switches the one PostgreSQL connection to db. The
@@ -337,5 +706,9 @@ func (s *Session) switchDatabaseLocked(ctx context.Context, db string) error {
 	s.credential = Credential{Password: secret, Provided: true}
 	s.display.Store(next)
 	s.alive.Store(true)
+	s.readOnly.Store(true)
+	if err := s.applyReadOnlyLocked(ctx, true); err != nil {
+		s.modeWarn = "Read-only session could not be enabled: " + s.modeError(err).Error()
+	}
 	return nil
 }

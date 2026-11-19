@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	mysqldriver "github.com/go-sql-driver/mysql"
@@ -50,7 +51,7 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{conn: conn, db: db, password: password}
-	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live}, nil
+	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live}, nil
 }
 
 func buildConfig(p domain.Profile, password string) *mysqldriver.Config {
@@ -71,6 +72,7 @@ type connection struct {
 	conn     *sql.Conn
 	db       *sql.DB
 	password string
+	readOnly atomic.Bool
 }
 
 func (c *connection) Ping(ctx context.Context) error {
@@ -112,7 +114,7 @@ func safeError(op, password string, err error) *domain.Error {
 				kind = domain.KindConfig
 			}
 		}
-		message = domain.RedactSecret(domain.Redact(message), password)
+		message = domain.RedactSecrets(message, password)
 		cause = errors.New(message)
 	}
 	return &domain.Error{Kind: kind, Op: op, Message: message, Err: cause}

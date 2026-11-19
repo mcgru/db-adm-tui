@@ -58,6 +58,80 @@ type fakeConnector struct {
 	data       *fakeDataReader
 	stats      *fakeStatsReader
 	privileges *fakePrivilegeReader
+	query      *fakeQueryExecutor
+	mode       *fakeModeController
+}
+
+type fakeModeController struct {
+	readOnly bool
+	calls    []bool
+	elevated bool
+	err      error
+}
+
+func (m *fakeModeController) SetReadOnly(ctx context.Context, readOnly bool) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.readOnly = readOnly
+	m.calls = append(m.calls, readOnly)
+	return nil
+}
+
+func (m *fakeModeController) SessionReadOnly() bool { return m.readOnly }
+
+func (m *fakeModeController) Elevated(ctx context.Context) (bool, error) {
+	return m.elevated, nil
+}
+
+type fakeQueryCursor struct {
+	pages  []domain.QueryPage
+	index  int
+	closed bool
+}
+
+func (c *fakeQueryCursor) Next(ctx context.Context, limit int) (domain.QueryPage, error) {
+	if c.index >= len(c.pages) {
+		return domain.QueryPage{}, nil
+	}
+	page := c.pages[c.index]
+	c.index++
+	return page, nil
+}
+
+func (c *fakeQueryCursor) Close(ctx context.Context) error {
+	c.closed = true
+	return nil
+}
+
+type fakeQueryExecutor struct {
+	pages   []domain.QueryPage
+	err     error
+	request domain.QueryRequest
+	cursor  *fakeQueryCursor
+}
+
+func (f *fakeQueryExecutor) Query(ctx context.Context, request domain.QueryRequest) (ports.QueryCursor, error) {
+	f.request = request
+	if f.err != nil {
+		return nil, f.err
+	}
+	f.cursor = &fakeQueryCursor{pages: f.pages}
+	return f.cursor, nil
+}
+
+type fakeHistoryStore struct {
+	entries   []domain.HistoryEntry
+	appendErr error
+}
+
+func (h *fakeHistoryStore) Load(ctx context.Context, profile string) ([]domain.HistoryEntry, error) {
+	return h.entries, nil
+}
+
+func (h *fakeHistoryStore) Append(ctx context.Context, entry domain.HistoryEntry) error {
+	h.entries = append(h.entries, entry)
+	return h.appendErr
 }
 
 type fakePrivilegeReader struct {
@@ -211,9 +285,21 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if privileges == nil {
 		privileges = defaultFakePrivileges(p.Engine)
 	}
+	query := f.query
+	if query == nil {
+		query = &fakeQueryExecutor{pages: []domain.QueryPage{{Grid: domain.Grid{
+			Columns: []domain.Column{{Name: "id"}},
+			Rows:    []domain.Row{{Cells: []domain.Cell{{Text: "1", Kind: domain.CellNumber}}}},
+		}}}}
+	}
+	mode := f.mode
+	if mode == nil {
+		mode = &fakeModeController{}
+	}
 	return ports.SessionBundle{
 		Session: conn, Catalog: catalog, DataReader: data,
-		StatsReader: stats, PrivilegeReader: privileges,
+		StatsReader: stats, PrivilegeReader: privileges, QueryExecutor: query,
+		ModeController: mode,
 	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }
@@ -551,6 +637,8 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Text: " ", Code: tea.KeySpace}
 	case "f1":
 		return tea.KeyPressMsg{Code: tea.KeyF1}
+	case "ctrl+f1":
+		return tea.KeyPressMsg{Code: tea.KeyF1, Mod: tea.ModCtrl}
 	}
 	if strings.HasPrefix(s, "ctrl+") {
 		runes := []rune(strings.TrimPrefix(s, "ctrl+"))
@@ -586,6 +674,23 @@ func typeString(t *testing.T, m Model, text string) Model {
 
 func runCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
+	return settle(t, m, cmd)
+}
+
+// runQueryCmd executes the query command from a startQuery batch without
+// waiting for the one-second elapsed-time tick.
+func runQueryCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		if len(batch) == 0 {
+			return m
+		}
+		return settle(t, m, batch[0])
+	}
 	return settle(t, m, cmd)
 }
 

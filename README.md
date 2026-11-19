@@ -9,8 +9,9 @@ resolution, real open/ping/close, lazy database/schema/object navigation, a
 Security node with users and roles, native access markers, a paged Data tab with
 a bounded loaded window, an inline `/` filter with match navigation, a
 server-side `Ctrl+F` regexp filter, a session-wide search case mode, object
-statistics with exact count, index/structure details, and native privilege
-inspection. Query execution lands in a later story.
+statistics with exact count, index/structure details, native privilege
+inspection, a query bar with Results, completion, context help, and history, and
+a read-only default with an explicit read-write switch.
 
 ## Requirements
 
@@ -32,15 +33,15 @@ The tool starts on the profile picker.
 | Key | Action |
 |---|---|
 | `Enter` | Connect, submit a form, import selected rows, expand a tree node, or open Data/details |
-| `Up` / `Down` | Move the picker, import list, tree cursor, Data row cursor, or details scroll |
-| `PgUp` / `PgDn` | Scroll the picker/import list, tree, or details; page the Data grid |
-| `Left` / `Right` | Collapse / expand the selected tree node; move the Data cell cursor |
-| `Home` / `End` | Jump to the first/last tree or import row; first/last Data column |
+| `Up` / `Down` | Move the picker, import list, tree cursor, Data/Results row cursor, or details scroll; in the query bar, recall history |
+| `PgUp` / `PgDn` | Scroll the picker/import list, tree, details, or completion; page the Data/Results grid |
+| `Left` / `Right` | Collapse / expand the selected tree node; move the Data/Results cell cursor |
+| `Home` / `End` | Jump to the first/last tree or import row; first/last Data/Results column |
 | `Ctrl+Home` / `Ctrl+End` | Jump to the first/last row of the loaded Data range |
-| `m` | Append the next Data page (Data tab focused) |
-| `Ctrl+A` | Append a full-fetch batch and grow the loaded Data range cumulatively |
-| `` ` `` | Data tab: expand/collapse the selected JSON object column into dotted subcolumns |
-| `/` or `.` | Data tab: inline literal filter over loaded rows; `n`/`N` walk matches |
+| `m` | Append the next Data/Results page |
+| `Ctrl+A` | Append a full-fetch batch (Data) or drain the result cursor up to 10,000 rows |
+| `` ` `` | Data/Results: expand/collapse the selected JSON object column into dotted subcolumns |
+| `/` or `.` | Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
 | `Ctrl+F` | Data tab: server-side regexp on the focused column or field |
 | `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
 | `n` | New connection at the picker; next match in a filtered Data view |
@@ -50,12 +51,15 @@ The tool starts on the profile picker.
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
-| `Esc` | Cancel a fetch, clear a filter, cancel an attempt, or close the current modal |
+| `Esc` | Cancel a query or fetch, clear a filter, release Results, cancel an attempt, or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+Q` | Quit (also works in the workspace) |
-| `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
+| `Ctrl+X` then `Ctrl+X` | Execute the query bar statement from any workspace zone |
 | `Ctrl+X` then `s` | Compute the exact count for the selected table/collection |
-| `Ctrl+X` then `Ctrl+E` / `Ctrl+W` | Chord stubs for edit and mode |
+| `Ctrl+X` then `Ctrl+E` | Open the current statement in the edit modal |
+| `Ctrl+X` then `Ctrl+W` | Switch between read-only and read-write; read-write asks for confirmation |
+| `Ctrl+Space` | Open completion for the word at the cursor; `Esc` then `Tab` also opens it in the query bar or edit modal |
+| `Ctrl+F1` | Open offline context help for the focused element or word; `Enter` or `Ctrl+F1` again shows examples |
 | `?` / `F1` | Help stub |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
 
@@ -170,7 +174,7 @@ headers, and a status line such as `loaded 100 of ~12,480` or
   `cancelled`. A failed page keeps the previous window and shows an inline
   error; `m` retries the next page. A failed first page shows
   `press Enter to load rows` and retries with `m`.
-- Sorting, editing, export, and query execution are not present in this story.
+- Sorting, editing, and export are not present in the Data tab; queries run from the query bar.
 
 ## Data search and case mode
 
@@ -226,6 +230,100 @@ case.
 
 All data reads are read-only and parameterized. Values never become SQL text,
 and identifiers are quoted per engine. Views and sequences have no Data tab.
+
+## Query bar and Results
+
+The bottom bar is bound to the current database and, for MongoDB, the selected
+collection. It accepts one logical statement: SQL passes through unchanged;
+MQL accepts only `find`, `aggregate`, `count`, and `distinct`, with an optional
+`db.<collection>.` prefix, and rejects arbitrary JavaScript. Multi-statement
+input, shell escapes, and write statements are blocked before an engine call
+while read-only mode is on. The mode is shown as `r/o` or `r/w` next to the
+database; `Ctrl+X Ctrl+W` switches, and enabling read-write requires
+confirmation.
+
+`Enter` runs the statement when the completion popup is closed, and
+`Ctrl+X Ctrl+X` runs it from the tree, details, Data, or query zone. While a
+query runs, the status line counts elapsed time and `Esc` cancels. A successful
+query opens a transient `Results` tab with the statement's rows; SQL keeps the
+driver column order, while MongoDB unions top-level fields (`_id` first).
+Errors keep the statement in Results and in the query bar, and `Esc` reselects
+the object and its previous tab. Columns share the full pane width when the
+loaded set fits; wide sets keep natural widths and scroll horizontally. Results use the same cursor, column scrolling,
+row selection, `/` literal filter, `n`/`N` matches, `m` paging, and `Ctrl+A`
+drain as the Data grid; `Ctrl+F` does not apply to Results in v1. The result
+cursor is forward-only and materialized up to 10,000 rows or 64 MB; `Esc`
+releases it, and other engine-backed actions report `results open — Esc to
+release` until then.
+
+`Ctrl+Space` opens completion for the word at the cursor. Suggestions combine
+dialect keywords and functions, loaded tree/database/schema/object names,
+columns or fields from the current object, and identifiers from earlier
+statements. `Up`/`Down` and `PgUp`/`PgDn` move through the popup, `Enter`
+accepts, `Esc` closes, and an empty result says `no suggestions`. Completion
+works at the beginning, middle, or end of an identifier and accepting a
+suggestion replaces the whole word. In MQL, a key immediately before `:` is
+also used as the completion term, so `$o:` offers `$or` and keeps the colon.
+The popup opens above the cursor column in the query bar and edit modal.
+In the query bar and edit modal, `Esc` then `Tab` opens the same popup without
+changing focus; `Tab` alone still moves focus, never completes. Accepting a
+Mongo array operator such as `$or`, `$and`, `$in`, or `$nin` adds `: [  ]` with
+the cursor inside unless the text after the word already has a colon/array;
+accepting a function term such as `COUNT`, `COALESCE`, `ObjectId`, or `ISODate`
+adds `()` with the cursor inside unless an opening parenthesis is already
+present.
+
+`Ctrl+X Ctrl+E` opens the current statement in a one-field edit modal with the
+cursor at the start. `Enter` executes and closes it; `Esc` cancels and leaves the
+query bar unchanged. Completion and context help work inside the modal.
+
+`Ctrl+F1` opens offline help for the word under the cursor in the query bar or
+edit modal, or for the focused tree/details/data/results element. Every
+completion term has an entry; an unknown word says `no help available`. Inside
+the help modal, `Enter` or a second `Ctrl+F1` replaces the short description
+with example-driven help. For `find`, that includes `$and`, projection, and
+chained sort/limit examples. `Up`/`Down` and `PgUp`/`PgDn` scroll long examples;
+`Esc` closes the modal.
+
+Executed statements are stored per profile at
+`$XDG_STATE_HOME/db-adm-tui/history/commands.jsonl` and `commands.log`
+(default `~/.local/state/db-adm-tui/history`), created `0600`, with `***` for
+password literals. Each format rotates at 10 MB and keeps five files total.
+`Up`/`Down` in the query bar recall them, consecutive duplicates are collapsed,
+and a history write failure warns without blocking the query. Each entry
+records the mode it ran under (`r/o` or `r/w`).
+
+## Read-only mode
+
+Every connection starts in read-only mode and resets there on reconnect or a
+PostgreSQL database switch. The mode belongs to the live session and is never
+written to a profile.
+
+While read-only, the guard blocks write and admin statements before they reach
+the engine and the status line names the reason with
+`Ctrl+X Ctrl+W to switch.` The guard is a product safeguard, not a security
+boundary: it does not change the account's native permissions, and a privileged
+user can bypass it outside the tool. PostgreSQL sets
+`default_transaction_read_only = on`; MySQL/MariaDB sets
+`SET SESSION TRANSACTION READ ONLY`. MongoDB has no session-level read-only, so
+its one-time connect notice says `Read-only is enforced by the tool; MongoDB has
+no session-level read-only.` and the guard is the only layer.
+
+`Ctrl+X Ctrl+W` asks for confirmation before enabling read-write with
+`Writes will run on <profile>`, then changes the badge to `r/w` and says
+`read-write mode on. Read-only guard is off.` Switching back to `r/o` is
+immediate and needs no confirmation. Mode changes are refused while a query
+result cursor is open; press `Esc` to release Results first.
+
+Superuser/root and server-admin accounts carry a persistent `privileged` tag in
+the top status line. A connection with elevated rights warns that read-only mode
+is a product guard, not a security boundary; the read-write confirmation repeats
+the warning. Running the tool as the OS root adds the same warning at connect.
+PostgreSQL elevated detection covers `rolsuper`, `rolcreaterole`, and
+`rolcreatedb`; MySQL/MariaDB covers root and broad server grants such as
+`SUPER`, `SYSTEM_USER`, `SYSTEM_VARIABLES_ADMIN`, `ALL PRIVILEGES ON *.*`, and
+`WITH GRANT OPTION`; MongoDB covers server-wide roles and the `anyAction`
+privilege.
 
 ## Profiles
 
@@ -334,12 +432,38 @@ non-secret fields and any matched source pointer, never the password.
 - Source-derived text, labels, filenames, and errors are sanitized of ANSI and
   control sequences before rendering.
 
+## Security and release
+
+Passwords are resolved from the source at connect time and are never written to
+profiles, history, argv, or error text. Driver errors are redacted against the
+resolved secret and against password literals such as `PASSWORD '...'`,
+`IDENTIFIED BY '...'`, URI userinfo, and JSON `password`/`pwd` pairs before they
+reach the screen or the history file. History files are `0600`; each format
+rotates at 10 MB and keeps five files total.
+
+Database content, query errors, pasted text, filenames, and profile fields are
+stripped of ANSI/control sequences and bidi overrides before rendering. The
+offline help and completion corpus lives in the binary. The release build is a
+single static Linux binary with version, commit, and build date embedded; it
+opens no listening port, runs no daemon, and makes no telemetry or update call.
+
+```sh
+./bin/db-adm-tui --version
+make release
+```
+
+`make release` writes `dist/db-adm-tui_<version>_linux_amd64.tar.gz` and
+`dist/db-adm-tui_<version>_linux_arm64.tar.gz` with stripped, statically linked
+binaries.
+
 ## Checks
 
 ```sh
 make test    # go test -race ./...
 make lint    # go vet ./...
+make verify  # reject listening/http/telemetry code in cmd and internal
 make build   # CGO_ENABLED=0 static binary in bin/
+make release # linux amd64/arm64 tarballs in dist/
 ```
 
 Golden views live in `internal/tui/testdata`. Regenerate them after an

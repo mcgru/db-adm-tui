@@ -34,9 +34,10 @@ type Credential struct {
 
 // ConnectResult is a successful connection.
 type ConnectResult struct {
-	Session *Session
-	Profile domain.Profile
-	Warning string
+	Session  *Session
+	Profile  domain.Profile
+	Warning  string
+	Elevated bool
 }
 
 // ProfileView is one picker row plus the current health of its source.
@@ -85,6 +86,7 @@ type Service struct {
 	store     ports.ProfileStore
 	resolver  *profile.Resolver
 	connector ports.Connector
+	history   ports.HistoryStore
 	now       func() time.Time
 	mu        sync.Mutex
 }
@@ -92,6 +94,31 @@ type Service struct {
 // NewService wires the profile store, credential resolver, and connector.
 func NewService(store ports.ProfileStore, resolver *profile.Resolver, connector ports.Connector) *Service {
 	return &Service{store: store, resolver: resolver, connector: connector}
+}
+
+// SetHistory wires the optional command-history store. A nil store disables
+// history without affecting queries.
+func (s *Service) SetHistory(store ports.HistoryStore) {
+	s.history = store
+}
+
+// History returns the profile's executed statements for Up/Down recall. A
+// read failure is treated as empty history; it never blocks a connection.
+func (s *Service) History(ctx context.Context, p domain.Profile) []string {
+	if s.history == nil {
+		return nil
+	}
+	entries, err := s.history.Load(ctx, p.Key())
+	if err != nil {
+		return nil
+	}
+	statements := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Statement != "" {
+			statements = append(statements, entry.Statement)
+		}
+	}
+	return statements
 }
 
 // SetClock replaces the time source. It is intended for tests.
@@ -489,13 +516,29 @@ func (s *Service) Connect(ctx context.Context, p domain.Profile, cred Credential
 	resultProfile := p
 	resultProfile.LastUsed = &now
 	result := ConnectResult{
-		Session: newSession(bundle, resultProfile, Credential{Password: secret, Provided: true}, s.connector, s.resolver),
+		Session: newSession(bundle, resultProfile, Credential{Password: secret, Provided: true}, s.connector, s.resolver, s.history),
 		Profile: resultProfile,
 	}
+	if err := result.Session.initializeReadOnly(ctx); err != nil {
+		result.Warning = joinWarning(result.Warning, "Read-only session could not be enabled: "+err.Error()+". The tool guard is still on.")
+	}
+	if elevated, err := result.Session.Elevated(ctx); err == nil {
+		result.Elevated = elevated
+	}
 	if err := s.touchLastUsed(ctx, p, now); err != nil {
-		result.Warning = fmt.Sprintf("Could not save %s. The connection is still open.", p.Label)
+		result.Warning = joinWarning(result.Warning, fmt.Sprintf("Could not save %s. The connection is still open.", p.Label))
 	}
 	return result, nil
+}
+
+func joinWarning(current, next string) string {
+	if current == "" {
+		return next
+	}
+	if next == "" {
+		return current
+	}
+	return current + " " + next
 }
 
 func (s *Service) touchLastUsed(ctx context.Context, p domain.Profile, now time.Time) error {
@@ -557,7 +600,7 @@ func connectionError(p domain.Profile, cause error, secret string) error {
 		Profile: p.Label,
 		Source:  source,
 		Message: text,
-		Err:     cause,
+		Err:     errors.New(message),
 	}
 }
 
@@ -565,7 +608,7 @@ func safeCause(cause error, secret string) string {
 	if cause == nil {
 		return "unknown error"
 	}
-	message := strings.TrimSpace(domain.RedactSecret(domain.Redact(cause.Error()), secret))
+	message := strings.TrimSpace(domain.RedactSecrets(cause.Error(), secret))
 	message = strings.TrimSuffix(message, ".")
 	if message == "" {
 		message = "unknown error"

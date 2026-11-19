@@ -4,7 +4,7 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │   ▾ public               │ │                                                 │
 │     · customers  ro      │ │ / zzz▏  0 matches · Esc clear                   │
 │     · invoices  rw       │ │ No matches for "zzz". Esc clears the filter.    │
-│     · audit_log  —       │ │      id   name    status                        │
+│     · audit_log  —       │ │      id           name            status        │
 │     · customer_view  ro  │ │ ─────────────────────────────────────────────── │
 │     · orders_seq         │ │                                                 │
 │   ▸ schemas              │ │                                                 │
@@ -20,5 +20,5 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
-  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+  SQL › SELECT * FROM public.customers LIMIT 100                                
 0 of 5 loaded                            type to filter · Enter keep · Esc clear

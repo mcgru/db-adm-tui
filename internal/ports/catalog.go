@@ -21,4 +21,6 @@ type SessionBundle struct {
 	DataReader      DataReader
 	StatsReader     StatsReader
 	PrivilegeReader PrivilegeReader
+	QueryExecutor   QueryExecutor
+	ModeController  ModeController
 }
