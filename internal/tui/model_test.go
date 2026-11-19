@@ -287,7 +287,7 @@ func TestChordStubs(t *testing.T) {
 	if m.pendingChord {
 		t.Fatal("chord should resolve")
 	}
-	if m.message != "exact count lands in the next story" {
+	if m.message != "counting exact rows… Esc cancels" {
 		t.Fatalf("chord message = %q", m.message)
 	}
 
@@ -1385,6 +1385,89 @@ func TestTreeAccessMarkerIsDimmed(t *testing.T) {
 	}
 	if !strings.Contains(raw, m.styles.Text.Render("    · invoices")) {
 		t.Fatalf("object name is not rendered with the text style:\n%q", raw)
+	}
+}
+
+func TestDetailsStatisticsAndExactCount(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
+	m, cmd := press(t, m, "1")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"Statistics", "~5 (catalog estimate)", "8.0 KB", "Ctrl+X s computes exact count", "Structure"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("statistics %q missing:\n%s", want, view)
+		}
+	}
+	m, _ = press(t, m, "ctrl+x")
+	m, cmd = press(t, m, "s")
+	m = settle(t, m, cmd)
+	view = StripANSI(m.View().Content)
+	if !strings.Contains(view, "5 exact") {
+		t.Fatalf("exact count missing:\n%s", view)
+	}
+	if m.message != "exact count 5" {
+		t.Fatalf("message = %q", m.message)
+	}
+}
+
+func TestExactCountCancelKeepsEstimate(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
+	m, cmd := press(t, m, "1")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "s")
+	if !m.details.exactLoading {
+		t.Fatal("exact count did not start")
+	}
+	m, _ = press(t, m, "esc")
+	if m.details.exactLoading || m.details.exactSet {
+		t.Fatalf("cancel loading=%v set=%v", m.details.exactLoading, m.details.exactSet)
+	}
+	if m.message != "cancelled" {
+		t.Fatalf("message = %q", m.message)
+	}
+	if !strings.Contains(StripANSI(m.View().Content), "~5 (catalog estimate)") {
+		t.Fatal("estimate did not survive cancel")
+	}
+}
+
+func TestExactCountFailureKeepsEstimate(t *testing.T) {
+	m, _ := dataWorkspaceWithReader(t, &fakeDataReader{total: 250})
+	m, cmd := press(t, m, "1")
+	m = settle(t, m, cmd)
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "s")
+	key := m.details.node.Ref.Key()
+	next, _ := m.Update(exactCountMsg{
+		gen: m.exactGen, key: key,
+		err: domain.NewError(domain.KindEngine, "count", "count failed"),
+	})
+	m = next.(Model)
+	if m.details.exactLoading || m.details.exactSet {
+		t.Fatalf("failure loading=%v set=%v", m.details.exactLoading, m.details.exactSet)
+	}
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "count failed") || !strings.Contains(view, "~5 (catalog estimate)") {
+		t.Fatalf("failure view:\n%s", view)
+	}
+}
+
+func TestStatisticsErrorKeepsStructure(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	defaults := defaultFakeStats(domain.EnginePostgreSQL)
+	e.connector.stats = &fakeStatsReader{
+		statisticsErr: domain.NewError(domain.KindPermission, "statistics", "permission denied"),
+		structure:     defaults.structure,
+		indexes:       defaults.indexes,
+	}
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m = workspaceFrom(t, m)
+	m, cmd := press(t, m, "1")
+	m = settle(t, m, cmd)
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "error: permission denied") || !strings.Contains(view, "Structure") || !strings.Contains(view, "bigint") {
+		t.Fatalf("statistics error hid structure:\n%s", view)
 	}
 }
 

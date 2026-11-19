@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -17,6 +19,11 @@ type detailsState struct {
 	tab    int
 	offset int
 
+	statistics        domain.Statistics
+	statisticsErr     string
+	statisticsLoaded  bool
+	statisticsLoading bool
+
 	structure        domain.Structure
 	structureErr     string
 	structureLoaded  bool
@@ -26,6 +33,13 @@ type detailsState struct {
 	indexesErr     string
 	indexesLoaded  bool
 	indexesLoading bool
+
+	exactCount   int64
+	exactSet     bool
+	exactErr     string
+	exactLoading bool
+	exactStarted time.Time
+	exactCancel  context.CancelFunc
 }
 
 type detailLine struct {
@@ -38,6 +52,9 @@ type detailLine struct {
 }
 
 func (d *detailsState) selectNode(node domain.Node) {
+	if d.exactCancel != nil {
+		d.exactCancel()
+	}
 	previousTab := ""
 	if d.has {
 		previousTab = d.currentTab()
@@ -52,6 +69,10 @@ func (d *detailsState) selectNode(node domain.Node) {
 		}
 	}
 	d.offset = 0
+	d.statistics = domain.Statistics{}
+	d.statisticsErr = ""
+	d.statisticsLoaded = false
+	d.statisticsLoading = false
 	d.structure = domain.Structure{}
 	d.structureErr = ""
 	d.structureLoaded = false
@@ -60,9 +81,18 @@ func (d *detailsState) selectNode(node domain.Node) {
 	d.indexesErr = ""
 	d.indexesLoaded = false
 	d.indexesLoading = false
+	d.exactCount = 0
+	d.exactSet = false
+	d.exactErr = ""
+	d.exactLoading = false
+	d.exactStarted = time.Time{}
+	d.exactCancel = nil
 }
 
 func (d *detailsState) clear() {
+	if d.exactCancel != nil {
+		d.exactCancel()
+	}
 	*d = detailsState{}
 }
 
@@ -110,7 +140,8 @@ func detailLines(d *detailsState, currentDB string, childCount, width int) []det
 		if node.Access != domain.AccessUnknown {
 			lines = append(lines, detailLine{Label: "access", Value: string(node.Access)})
 		}
-		lines = append(lines, detailLine{Value: "statistics are not available in this story", Mutable: true})
+		lines = append(lines, detailLine{Header: true, Value: "Statistics"})
+		lines = append(lines, statisticsDetailLines(d)...)
 		lines = append(lines, detailLine{}, detailLine{Header: true, Value: "Structure"})
 		lines = append(lines, structureDetailLines(d, width)...)
 		return lines
@@ -177,6 +208,45 @@ func detailLines(d *detailsState, currentDB string, childCount, width int) []det
 	default:
 		return []detailLine{{Value: "nothing selected", Mutable: true}}
 	}
+}
+
+func statisticsDetailLines(d *detailsState) []detailLine {
+	switch {
+	case d.statisticsLoading:
+		return []detailLine{{Value: "loading statistics…", Mutable: true}}
+	case d.statisticsErr != "":
+		return []detailLine{{Value: "error: " + d.statisticsErr, Error: true}}
+	}
+	stats := d.statistics
+	count := "unavailable"
+	if stats.EstimateAvailable() {
+		count = fmt.Sprintf("~%s (%s)", formatCount(stats.EstimatedTotal), stats.EstimateSource)
+	}
+	if d.exactSet {
+		count = formatCount(d.exactCount) + " exact"
+	}
+	lines := []detailLine{{Label: "count", Value: count}}
+	if stats.SizeBytes >= 0 || stats.IndexSizeBytes >= 0 {
+		lines = append(lines, detailLine{Label: "size", Value: formatBytes(stats.SizeBytes)})
+		if stats.IndexSizeBytes >= 0 {
+			lines = append(lines, detailLine{Label: "index size", Value: formatBytes(stats.IndexSizeBytes)})
+		}
+	} else {
+		lines = append(lines, detailLine{Label: "size", Value: "unavailable"})
+	}
+	switch {
+	case d.exactLoading:
+		elapsed := int(time.Since(d.exactStarted).Seconds())
+		lines = append(lines, detailLine{
+			Label: "exact",
+			Value: fmt.Sprintf("counting… %ds · Esc cancels", elapsed),
+		})
+	case d.exactErr != "":
+		lines = append(lines, detailLine{Label: "exact", Value: "error: " + d.exactErr, Error: true})
+	case !d.exactSet:
+		lines = append(lines, detailLine{Label: "exact", Value: "Ctrl+X s computes exact count", Mutable: true})
+	}
+	return lines
 }
 
 func structureDetailLines(d *detailsState, width int) []detailLine {

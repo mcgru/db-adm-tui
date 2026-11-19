@@ -6,17 +6,17 @@ prod-ro · PostgreSQL · orders · r/o                   case: insensitive · ap
 │     · invoices  rw       │ │ database     orders                             │
 │     · audit_log  —       │ │ schema       public                             │
 │     · customer_view  ro  │ │ access       ro                                 │
-│     · orders_seq         │ │ statistics are not available in this story      │
-│   ▸ schemas              │ │                                                 │
-│ ▸ billing                │ │ Structure                                       │
-│ ▸ Security               │ │ column │ type   │ null │ default                │
+│     · orders_seq         │ │ Statistics                                      │
+│   ▸ schemas              │ │ count        ~5 (catalog estimate)              │
+│ ▸ billing                │ │ size         8.0 KB                             │
+│ ▸ Security               │ │ exact        Ctrl+X s computes exact count      │
+│                          │ │                                                 │
+│                          │ │ Structure                                       │
+│                          │ │ column │ type   │ null │ default                │
 │                          │ │ ───────┼────────┼──────┼────────                │
 │                          │ │ id     │ bigint │ no   │ —                      │
 │                          │ │ name   │ text   │ yes  │ —                      │
 │                          │ │ status │ text   │ yes  │ —                      │
-│                          │ │                                                 │
-│                          │ │                                                 │
-│                          │ │                                                 │
 │                          │ │                                                 │
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘

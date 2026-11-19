@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -11,6 +12,47 @@ import (
 )
 
 var _ ports.StatsReader = (*connection)(nil)
+
+func (c *connection) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	if ref.Kind != domain.KindTable {
+		return domain.Statistics{}, domain.NewError(domain.KindConfig, "statistics", "this object has no statistics view")
+	}
+	stats := domain.Statistics{EstimatedTotal: -1, SizeBytes: -1, IndexSizeBytes: -1}
+	var tableRows, dataLength, indexLength sql.NullInt64
+	err := c.conn.QueryRowContext(ctx, `
+SELECT TABLE_ROWS, DATA_LENGTH, INDEX_LENGTH
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`, ref.Database, ref.Name).Scan(&tableRows, &dataLength, &indexLength)
+	if errors.Is(err, sql.ErrNoRows) {
+		return stats, nil
+	}
+	if err != nil {
+		return domain.Statistics{}, safeError("statistics", c.password, err)
+	}
+	if tableRows.Valid && tableRows.Int64 >= 0 {
+		stats.EstimatedTotal = tableRows.Int64
+		stats.EstimateSource = domain.EstimateCatalog
+	}
+	if dataLength.Valid || indexLength.Valid {
+		stats.SizeBytes = dataLength.Int64 + indexLength.Int64
+	}
+	if indexLength.Valid && indexLength.Int64 >= 0 {
+		stats.IndexSizeBytes = indexLength.Int64
+	}
+	return stats, nil
+}
+
+func (c *connection) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	if ref.Kind != domain.KindTable {
+		return 0, domain.NewError(domain.KindConfig, "count", "this object has no count view")
+	}
+	statement := "SELECT COUNT(*) FROM " + quoteIdentifier(ref.Database) + "." + quoteIdentifier(ref.Name)
+	var count int64
+	if err := c.conn.QueryRowContext(ctx, statement).Scan(&count); err != nil {
+		return 0, safeError("count", c.password, err)
+	}
+	return count, nil
+}
 
 func (c *connection) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
 	if ref.Kind != domain.KindTable {

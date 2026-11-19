@@ -8,8 +8,9 @@ read-only data browsing with search: profiles and import, connect-time password
 resolution, real open/ping/close, lazy database/schema/object navigation, a
 Security node with users and roles, native access markers, a paged Data tab with
 a bounded loaded window, an inline `/` filter with match navigation, a
-server-side `Ctrl+F` regexp filter, and a session-wide search case mode. Object
-statistics, query execution, and privilege inspection land in later stories.
+server-side `Ctrl+F` regexp filter, a session-wide search case mode, object
+statistics with exact count, and index/structure details. Query execution and
+privilege inspection land in later stories.
 
 ## Requirements
 
@@ -53,7 +54,8 @@ The tool starts on the profile picker.
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+Q` | Quit (also works in the workspace) |
 | `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
-| `Ctrl+X` then `s` / `Ctrl+E` / `Ctrl+W` | Chord stubs for count, edit, and mode |
+| `Ctrl+X` then `s` | Compute the exact count for the selected table/collection |
+| `Ctrl+X` then `Ctrl+E` / `Ctrl+W` | Chord stubs for edit and mode |
 | `?` / `F1` | Help stub |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
 
@@ -87,9 +89,9 @@ returns to the picker with the profile row error. MySQL/MariaDB and MongoDB see
 every database on one connection.
 
 Selecting a table or collection opens the context tabs and defaults to Details.
-Details shows identity, the statistics placeholder, and the structure. Press
-`Enter` to switch to Data and load its first page. Statistics and exact count
-are the next story; privilege inspection lands in story 7.
+Details shows identity, estimated count and size, exact count, and structure.
+Press `Enter` to switch to Data and load its first page. Privilege inspection
+lands in story 7.
 
 ## Object details and indexes
 
@@ -98,11 +100,14 @@ tabs (`1`–`4`; `[`/`]` cycle). Selecting one in the tree opens Details and loa
 its structure; `Enter` switches to Data and loads the first page. Moving the
 cursor to the next table keeps the active tab: Details reloads structure,
 Indexes reloads indexes, and Data loads a fresh 100-row page. Paging state
-(`m`, `Ctrl+A`) does not carry over to the new table. Details shows
-identity, the statistics placeholder, and a Structure table: PostgreSQL/MySQL
-list columns with type, nullability, and default; MongoDB samples the first 100
-documents and lists field paths with presence counts and percentages. Table
-cells are separated with `│` and `┼` rules.
+(`m`, `Ctrl+A`) does not carry over to the new table. Details shows identity,
+statistics, and a Structure table. Statistics shows the estimated count with
+its source or `unavailable`, the on-disk size, and the Mongo index size when
+available; `Ctrl+X s` computes the exact whole-object count and `Esc` cancels
+it. PostgreSQL/MySQL structures list columns with type, nullability, and
+default; MongoDB samples the first 100 documents and lists field paths with
+presence counts and percentages. Table cells are separated with `│` and `┼`
+rules.
 
 The Indexes tab has three sections: Details (name, unique, method), Statistics
 (size and engine-specific extras such as cardinality, sparse, or TTL), and

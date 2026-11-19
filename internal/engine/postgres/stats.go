@@ -2,12 +2,59 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/ports"
 )
 
 var _ ports.StatsReader = (*connection)(nil)
+
+func (c *connection) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	if ref.Kind != domain.KindTable {
+		return domain.Statistics{}, domain.NewError(domain.KindConfig, "statistics", "this object has no statistics view")
+	}
+	schema := ref.Schema
+	if schema == "" {
+		schema = "public"
+	}
+	stats := domain.Statistics{EstimatedTotal: -1, SizeBytes: -1, IndexSizeBytes: -1}
+	var reltuples, size int64
+	err := c.conn.QueryRowContext(ctx, `
+SELECT c.reltuples::bigint, pg_total_relation_size(c.oid)
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = $1 AND c.relname = $2`, schema, ref.Name).Scan(&reltuples, &size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return stats, nil
+	}
+	if err != nil {
+		return domain.Statistics{}, safeError("statistics", c.password, err)
+	}
+	if reltuples >= 0 {
+		stats.EstimatedTotal = reltuples
+		stats.EstimateSource = domain.EstimateCatalog
+	}
+	stats.SizeBytes = size
+	return stats, nil
+}
+
+func (c *connection) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	if ref.Kind != domain.KindTable {
+		return 0, domain.NewError(domain.KindConfig, "count", "this object has no count view")
+	}
+	schema := ref.Schema
+	if schema == "" {
+		schema = "public"
+	}
+	statement := "SELECT count(*) FROM " + quoteIdentifier(schema) + "." + quoteIdentifier(ref.Name)
+	var count int64
+	if err := c.conn.QueryRowContext(ctx, statement).Scan(&count); err != nil {
+		return 0, safeError("count", c.password, err)
+	}
+	return count, nil
+}
 
 func (c *connection) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
 	if ref.Kind != domain.KindTable {

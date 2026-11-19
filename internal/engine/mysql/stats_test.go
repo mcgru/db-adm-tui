@@ -9,6 +9,55 @@ import (
 	"github.com/mcgru/db-adm-tui/internal/domain"
 )
 
+func TestStatisticsScansEstimateAndSize(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &connection{conn: conn, db: db}
+	mock.ExpectQuery(`SELECT TABLE_ROWS`).
+		WithArgs("billing", "invoices").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_ROWS", "DATA_LENGTH", "INDEX_LENGTH"}).
+			AddRow(5, 4096, 2048))
+
+	stats, err := c.Statistics(context.Background(), domain.ObjectRef{
+		Kind: domain.KindTable, Database: "billing", Name: "invoices",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.EstimatedTotal != 5 || stats.SizeBytes != 6144 || stats.IndexSizeBytes != 2048 {
+		t.Fatalf("statistics = %+v", stats)
+	}
+}
+
+func TestExactCountQuotesIdentifiers(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &connection{conn: conn, db: db}
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `billing`\\.`invoices`").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(5)))
+
+	count, err := c.ExactCount(context.Background(), domain.ObjectRef{
+		Kind: domain.KindTable, Database: "billing", Name: "invoices",
+	})
+	if err != nil || count != 5 {
+		t.Fatalf("count = %d, %v", count, err)
+	}
+}
+
 func TestStructureScansColumns(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

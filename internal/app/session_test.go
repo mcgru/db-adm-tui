@@ -21,16 +21,30 @@ func (f *fakeDataReader) Page(ctx context.Context, query domain.DataQuery) (doma
 }
 
 type fakeStatsReader struct {
-	structure domain.Structure
-	indexes   []domain.Index
-	ref       domain.ObjectRef
-	seen      bool
+	statistics domain.Statistics
+	structure  domain.Structure
+	indexes    []domain.Index
+	exact      int64
+	ref        domain.ObjectRef
+	seen       bool
+}
+
+func (f *fakeStatsReader) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	f.ref = ref
+	f.seen = true
+	return f.statistics, nil
 }
 
 func (f *fakeStatsReader) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
 	f.ref = ref
 	f.seen = true
 	return f.structure, nil
+}
+
+func (f *fakeStatsReader) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	f.ref = ref
+	f.seen = true
+	return f.exact, nil
 }
 
 func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.Index, error) {
@@ -50,19 +64,31 @@ func TestSessionMetadataRequiresAStatsReader(t *testing.T) {
 	if _, err := session.Indexes(context.Background(), ref); err == nil || domain.KindOf(err) != domain.KindConfig {
 		t.Fatalf("indexes err = %v", err)
 	}
+	if _, err := session.Statistics(context.Background(), ref); err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("statistics err = %v", err)
+	}
+	if _, err := session.ExactCount(context.Background(), ref); err == nil || domain.KindOf(err) != domain.KindConfig {
+		t.Fatalf("exact count err = %v", err)
+	}
 }
 
 func TestSessionMetadataReturnsReaderValues(t *testing.T) {
 	f := newFixture(t)
 	reader := &fakeStatsReader{
-		structure: domain.Structure{Source: domain.StructureCatalog, Fields: []domain.StructureField{{Name: "id", Type: "bigint"}}},
-		indexes:   []domain.Index{{Name: "invoices_pkey", Columns: []string{"id"}, Unique: true}},
+		statistics: domain.Statistics{EstimatedTotal: 10, EstimateSource: domain.EstimateCatalog, SizeBytes: 4096, IndexSizeBytes: -1},
+		structure:  domain.Structure{Source: domain.StructureCatalog, Fields: []domain.StructureField{{Name: "id", Type: "bigint"}}},
+		indexes:    []domain.Index{{Name: "invoices_pkey", Columns: []string{"id"}, Unique: true}},
+		exact:      7,
 	}
 	profile := domain.Profile{Label: "billing", Engine: domain.EngineMySQL, Database: "billing"}
 	session := newSession(ports.SessionBundle{
 		Session: &fakeConn{}, Catalog: fakeCatalog{}, StatsReader: reader,
 	}, profile, Credential{}, f.connector, f.resolver)
 	ref := domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"}
+	statistics, err := session.Statistics(context.Background(), ref)
+	if err != nil || statistics.EstimatedTotal != 10 || statistics.SizeBytes != 4096 {
+		t.Fatalf("statistics = %+v, %v", statistics, err)
+	}
 	structure, err := session.Structure(context.Background(), ref)
 	if err != nil || len(structure.Fields) != 1 || structure.Fields[0].Name != "id" {
 		t.Fatalf("structure = %+v, %v", structure, err)
@@ -70,6 +96,10 @@ func TestSessionMetadataReturnsReaderValues(t *testing.T) {
 	indexes, err := session.Indexes(context.Background(), ref)
 	if err != nil || len(indexes) != 1 || indexes[0].Name != "invoices_pkey" {
 		t.Fatalf("indexes = %+v, %v", indexes, err)
+	}
+	exact, err := session.ExactCount(context.Background(), ref)
+	if err != nil || exact != 7 {
+		t.Fatalf("exact = %d, %v", exact, err)
 	}
 	if !reader.seen || reader.ref != ref {
 		t.Fatalf("reader ref = %+v", reader.ref)

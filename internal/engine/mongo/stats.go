@@ -15,6 +15,43 @@ import (
 
 var _ ports.StatsReader = (*connection)(nil)
 
+func (c *connection) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	if ref.Kind != domain.KindCollection {
+		return domain.Statistics{}, domain.NewError(domain.KindConfig, "statistics", "this object has no statistics view")
+	}
+	stats := domain.Statistics{EstimatedTotal: -1, SizeBytes: -1, IndexSizeBytes: -1}
+	if total, err := c.client.Database(ref.Database).Collection(ref.Name).EstimatedDocumentCount(ctx); err == nil && total >= 0 {
+		stats.EstimatedTotal = total
+		stats.EstimateSource = domain.EstimateCollection
+	}
+	var result struct {
+		StorageSize int64            `bson:"storageSize"`
+		IndexSizes  map[string]int64 `bson:"indexSizes"`
+	}
+	if err := c.client.Database(ref.Database).RunCommand(ctx, bson.D{{Key: "collStats", Value: ref.Name}}).Decode(&result); err == nil {
+		stats.SizeBytes = result.StorageSize
+		if len(result.IndexSizes) > 0 {
+			var total int64
+			for _, size := range result.IndexSizes {
+				total += size
+			}
+			stats.IndexSizeBytes = total
+		}
+	}
+	return stats, nil
+}
+
+func (c *connection) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	if ref.Kind != domain.KindCollection {
+		return 0, domain.NewError(domain.KindConfig, "count", "this object has no count view")
+	}
+	count, err := c.client.Database(ref.Database).Collection(ref.Name).CountDocuments(ctx, bson.D{})
+	if err != nil {
+		return 0, safeError("count", c.password, err)
+	}
+	return count, nil
+}
+
 // Structure samples the first 100 documents and reports every field path with
 // its presence count. Nested documents use dotted paths; arrays stay leaves.
 func (c *connection) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {

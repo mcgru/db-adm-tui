@@ -129,6 +129,7 @@ type Model struct {
 	treeGen       uint64
 	dataGen       uint64
 	detailsGen    uint64
+	exactGen      uint64
 	restore       *restoreState
 
 	connecting      bool
@@ -267,6 +268,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStructure(msg)
 	case indexesMsg:
 		return m.handleIndexes(msg)
+	case statisticsMsg:
+		return m.handleStatistics(msg)
+	case exactCountMsg:
+		return m.handleExactCount(msg)
+	case exactTickMsg:
+		return m.handleExactTick(msg)
 	case tea.PasteMsg:
 		return m.handlePaste(msg)
 	case tea.KeyPressMsg:
@@ -545,6 +552,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.disconnect()
 		}
 	case keymap.Cancel:
+		if m.details.exactLoading {
+			m.cancelExactCount()
+			return m, nil
+		}
 		if m.data.loading {
 			m.cancelDataFetch()
 			m.setMessage(levelInfo, "cancelled")
@@ -585,7 +596,7 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m.openSelected()
 		}
 	case keymap.ExactCount:
-		m.setMessage(levelInfo, "exact count lands in the next story")
+		return m, m.startExactCount()
 	case keymap.CaseMode:
 		return m, m.toggleCaseMode()
 	case keymap.NextMatch:
@@ -748,6 +759,7 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++
+	m.exactGen++
 	m.restore = nil
 	m.resetData()
 	m.message = "connected"
@@ -776,6 +788,7 @@ func (m *Model) disconnect() {
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++
+	m.exactGen++
 	m.restore = nil
 	m.resetData()
 	m.reloadProfiles(context.Background(), key)

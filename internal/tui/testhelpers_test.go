@@ -60,10 +60,22 @@ type fakeConnector struct {
 }
 
 type fakeStatsReader struct {
-	structure    domain.Structure
-	indexes      []domain.Index
-	structureErr error
-	indexesErr   error
+	statistics    domain.Statistics
+	structure     domain.Structure
+	indexes       []domain.Index
+	exact         int64
+	statisticsErr error
+	structureErr  error
+	indexesErr    error
+	exactErr      error
+	exactFn       func(context.Context) (int64, error)
+}
+
+func (f *fakeStatsReader) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	if f.statisticsErr != nil {
+		return domain.Statistics{}, f.statisticsErr
+	}
+	return f.statistics, nil
 }
 
 func (f *fakeStatsReader) Structure(ctx context.Context, ref domain.ObjectRef) (domain.Structure, error) {
@@ -71,6 +83,16 @@ func (f *fakeStatsReader) Structure(ctx context.Context, ref domain.ObjectRef) (
 		return domain.Structure{}, f.structureErr
 	}
 	return f.structure, nil
+}
+
+func (f *fakeStatsReader) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	if f.exactFn != nil {
+		return f.exactFn(ctx)
+	}
+	if f.exactErr != nil {
+		return 0, f.exactErr
+	}
+	return f.exact, nil
 }
 
 func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.Index, error) {
@@ -83,6 +105,11 @@ func (f *fakeStatsReader) Indexes(ctx context.Context, ref domain.ObjectRef) ([]
 func defaultFakeStats(engine domain.Engine) *fakeStatsReader {
 	if engine == domain.EngineMongoDB {
 		return &fakeStatsReader{
+			statistics: domain.Statistics{
+				EstimatedTotal: 5, EstimateSource: domain.EstimateCollection,
+				SizeBytes: 16384, IndexSizeBytes: 8192,
+			},
+			exact: 5,
 			structure: domain.Structure{
 				Source:  domain.StructureSample,
 				Sampled: 2,
@@ -99,6 +126,11 @@ func defaultFakeStats(engine domain.Engine) *fakeStatsReader {
 		}
 	}
 	return &fakeStatsReader{
+		statistics: domain.Statistics{
+			EstimatedTotal: 5, EstimateSource: domain.EstimateCatalog,
+			SizeBytes: 8192, IndexSizeBytes: -1,
+		},
+		exact: 5,
 		structure: domain.Structure{
 			Source: domain.StructureCatalog,
 			Fields: []domain.StructureField{
@@ -511,7 +543,14 @@ func runCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
 func settle(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
 	for i := 0; cmd != nil && i < 20; i++ {
-		next, nextCmd := m.Update(cmd())
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for _, child := range batch {
+				m = settle(t, m, child)
+			}
+			return m
+		}
+		next, nextCmd := m.Update(msg)
 		mm, ok := next.(Model)
 		if !ok {
 			t.Fatalf("Update returned %T", next)

@@ -211,6 +211,41 @@ func (s *Session) Indexes(ctx context.Context, ref domain.ObjectRef) ([]domain.I
 	return s.bundle.StatsReader.Indexes(ctx, ref)
 }
 
+// Statistics returns the estimated count and size metadata for one object.
+func (s *Session) Statistics(ctx context.Context, ref domain.ObjectRef) (domain.Statistics, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyStats(); err != nil {
+		return domain.Statistics{}, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, ref.Database); err != nil {
+		return domain.Statistics{}, err
+	}
+	if err := s.readyStats(); err != nil {
+		return domain.Statistics{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, metadataTimeout)
+	defer cancel()
+	return s.bundle.StatsReader.Statistics(ctx, ref)
+}
+
+// ExactCount computes the whole-object count. The caller owns cancellation;
+// an exact count has no default timeout.
+func (s *Session) ExactCount(ctx context.Context, ref domain.ObjectRef) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.readyStats(); err != nil {
+		return 0, err
+	}
+	if err := s.ensureDatabaseLocked(ctx, ref.Database); err != nil {
+		return 0, err
+	}
+	if err := s.readyStats(); err != nil {
+		return 0, err
+	}
+	return s.bundle.StatsReader.ExactCount(ctx, ref)
+}
+
 func (s *Session) ready() error {
 	if s.dead || s.bundle.Session == nil || s.bundle.Catalog == nil {
 		return domain.NewError(domain.KindConfig, "session", "no active connection")

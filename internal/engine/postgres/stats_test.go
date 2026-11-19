@@ -9,6 +9,55 @@ import (
 	"github.com/mcgru/db-adm-tui/internal/domain"
 )
 
+func TestStatisticsScansEstimateAndSize(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &connection{conn: conn, db: db}
+	mock.ExpectQuery(`SELECT c.reltuples`).
+		WithArgs("public", "customers").
+		WillReturnRows(sqlmock.NewRows([]string{"reltuples", "size"}).
+			AddRow(int64(5), int64(8192)))
+
+	stats, err := c.Statistics(context.Background(), domain.ObjectRef{
+		Kind: domain.KindTable, Database: "orders", Schema: "public", Name: "customers",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.EstimatedTotal != 5 || stats.EstimateSource != domain.EstimateCatalog || stats.SizeBytes != 8192 {
+		t.Fatalf("statistics = %+v", stats)
+	}
+}
+
+func TestExactCountQuotesIdentifiers(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &connection{conn: conn, db: db}
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "public"\."customers"`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(5)))
+
+	count, err := c.ExactCount(context.Background(), domain.ObjectRef{
+		Kind: domain.KindTable, Database: "orders", Schema: "public", Name: "customers",
+	})
+	if err != nil || count != 5 {
+		t.Fatalf("count = %d, %v", count, err)
+	}
+}
+
 func TestStructureScansColumns(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

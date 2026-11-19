@@ -25,6 +25,20 @@ type Structure struct {
 	Source  string
 }
 
+// Statistics is the object-level metadata shown above the structure. A
+// negative value means that measurement is unavailable, never zero.
+type Statistics struct {
+	EstimatedTotal int64
+	EstimateSource string
+	SizeBytes      int64
+	IndexSizeBytes int64
+}
+
+// EstimateAvailable reports whether the statistics carry a usable estimate.
+func (s Statistics) EstimateAvailable() bool {
+	return s.EstimateSource != "" && s.EstimatedTotal >= 0
+}
+
 // Index is one engine index. SizeBytes is -1 when the engine cannot expose a
 // per-index size. Stats carries engine-specific extra information such as
 // cardinality, sparse, or TTL.

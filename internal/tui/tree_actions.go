@@ -28,6 +28,7 @@ func (m *Model) syncDetails() tea.Cmd {
 	if !ok {
 		m.details.clear()
 		m.detailsGen++
+		m.exactGen++
 		m.resetData()
 		return nil
 	}
@@ -37,6 +38,7 @@ func (m *Model) syncDetails() tea.Cmd {
 	}
 	m.details.selectNode(node)
 	m.detailsGen++
+	m.exactGen++
 	if node.Kind == domain.KindTable || node.Kind == domain.KindCollection {
 		m.resetDataFor(node.Ref)
 	} else {
@@ -188,6 +190,7 @@ func (m Model) loadRoot() (tea.Model, tea.Cmd) {
 	m.tree.loadingRoot = true
 	m.details.clear()
 	m.detailsGen++
+	m.exactGen++
 	session := m.session
 	ctx := m.sessionCtx
 	if ctx == nil {
@@ -367,6 +370,7 @@ func (m Model) leaveWorkspace(err error) (tea.Model, tea.Cmd) {
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++
+	m.exactGen++
 	m.restore = nil
 	m.resetData()
 	m.reloadProfiles(context.Background(), key)
