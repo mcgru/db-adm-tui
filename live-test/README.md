@@ -45,10 +45,44 @@ ssh -N \
 The default Mongo replica-set member is advertised as `localhost:57017`, so
 the tunnel above matches the fixture's `.env.example`.
 
-## TUI test plan
+## TUI profiles and test plan
 
-The step-by-step manual test plan, connection profiles, expected messages, and
-cleanup steps are in [`TUI-TEST-PLAN.md`](TUI-TEST-PLAN.md) (Russian).
+`home/` contains a ready-to-install TUI bundle:
+
+```text
+home/.pgpass
+home/.mongo.*
+home/.config/db-adm-tui/profiles.json
+home/LIVE-TEST-CREDENTIALS.md
+```
+
+It defines all 12 profiles (root/admin/user/analyst for each engine), with
+PostgreSQL `no TLS` already enabled and MongoDB `replicaSet=rs0`/`authSource`
+coming from the local `.mongo.*` files. Passwords are kept in the credential
+files, not in `profiles.json`.
+
+On the account where the TUI will run:
+
+```bash
+cd live-test
+./install-home.sh
+```
+
+The installer backs up existing profile/credential files, copies the bundle to
+`$HOME`, and applies `0600`/`0700` permissions. On the live server:
+
+```bash
+rsync -a --delete \
+  --exclude='.env' \
+  --exclude='.data/' \
+  live-test/ jojo@uuu:~/live-test/
+ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
+```
+
+If you prefer to copy the bundle manually, copy `home/` contents to your home
+directory and run the `chmod` commands from
+[`home/LIVE-TEST-CREDENTIALS.md`](home/LIVE-TEST-CREDENTIALS.md). The full TUI
+test checklist is in [`TUI-TEST-PLAN.md`](TUI-TEST-PLAN.md) (Russian).
 
 ## Quick start
 
@@ -85,6 +119,12 @@ Each service also has its own rerunnable fixture:
 ```text
 live-test/
   up.sh / down.sh / status.sh / reset.sh
+  install-home.sh
+  home/
+    .pgpass
+    .mongo.*
+    .config/db-adm-tui/profiles.json
+    LIVE-TEST-CREDENTIALS.md
   postgres/
     docker-compose.yml
     .env.example

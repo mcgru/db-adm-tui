@@ -1,0 +1,1 @@
+mongodb://mongo_admin:mongo_admin_test_password@127.0.0.1:57017/admin?authSource=admin&replicaSet=rs0

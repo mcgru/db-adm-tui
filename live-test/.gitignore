@@ -1,3 +1,4 @@
 # Test-only data. Move these directories between test iterations.
 **/.data/
 **/.env
+*.live-test-backup-*

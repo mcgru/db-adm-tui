@@ -59,6 +59,48 @@ docker compose --env-file .env exec -T mongo \
 Пароли по умолчанию находятся в `live-test/*/.env.example`. Если на сервере
 `.env` уже изменён, берите значения из `~/live-test/*/.env`.
 
+#### Готовый пакет (рекомендуется)
+
+В `live-test/home/` уже лежат:
+
+```text
+.pgpass
+.mongo.root-in-admin
+.mongo.mongo_admin-in-admin
+.mongo.app_user-in-appdb
+.mongo.analyst-in-analytics
+.config/db-adm-tui/profiles.json
+LIVE-TEST-CREDENTIALS.md
+```
+
+`profiles.json` содержит все 12 профилей из таблицы ниже. PostgreSQL-профили
+уже с `allow_no_tls`, MongoDB-профили используют `.mongo.*` с `replicaSet=rs0`
+и правильным `authSource`.
+
+На машине, где будет запускаться TUI:
+
+```bash
+cd live-test
+./install-home.sh
+```
+
+Если TUI запускается на `jojo@uuu`, сначала обновите `live-test` на сервере,
+затем:
+
+```bash
+ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
+```
+
+Скрипт делает backup существующих файлов и выставляет права `0600/0700`.
+После этого профили уже видны в TUI; MariaDB-профили запросят пароль при
+подключении. Полный список профилей и паролей — в
+[`home/LIVE-TEST-CREDENTIALS.md`](home/LIVE-TEST-CREDENTIALS.md).
+
+Ручная настройка ниже нужна только если вы не используете готовый пакет или
+хотите собрать профили выборочно.
+
+#### Ручная настройка (fallback)
+
 #### PostgreSQL
 
 Стенд PostgreSQL работает без TLS. Новое подключение TUI по умолчанию пытается

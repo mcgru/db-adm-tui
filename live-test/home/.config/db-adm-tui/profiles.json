@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "label": "live-pg-root",
+      "engine": "postgresql",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "appdb",
+      "user": "postgres",
+      "allow_no_tls": true,
+      "source": {
+        "kind": "pgpass",
+        "path": "~/.pgpass"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-pg-admin",
+      "engine": "postgresql",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "appdb",
+      "user": "db_admin",
+      "allow_no_tls": true,
+      "source": {
+        "kind": "pgpass",
+        "path": "~/.pgpass"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-pg-user",
+      "engine": "postgresql",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "appdb",
+      "user": "app_user",
+      "allow_no_tls": true,
+      "source": {
+        "kind": "pgpass",
+        "path": "~/.pgpass"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-pg-analyst",
+      "engine": "postgresql",
+      "host": "127.0.0.1",
+      "port": 5432,
+      "database": "analytics",
+      "user": "analyst",
+      "allow_no_tls": true,
+      "source": {
+        "kind": "pgpass",
+        "path": "~/.pgpass"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-maria-root",
+      "engine": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "database": "appdb",
+      "user": "root",
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-maria-admin",
+      "engine": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "database": "appdb",
+      "user": "mdb_admin",
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-maria-user",
+      "engine": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "database": "appdb",
+      "user": "app_user",
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-maria-analyst",
+      "engine": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "database": "analytics",
+      "user": "analyst",
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-mongo-root",
+      "engine": "mongodb",
+      "host": "127.0.0.1",
+      "port": 57017,
+      "database": "admin",
+      "user": "root",
+      "source": {
+        "kind": "mongo-file",
+        "path": "~/.mongo.root-in-admin"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-mongo-admin",
+      "engine": "mongodb",
+      "host": "127.0.0.1",
+      "port": 57017,
+      "database": "admin",
+      "user": "mongo_admin",
+      "source": {
+        "kind": "mongo-file",
+        "path": "~/.mongo.mongo_admin-in-admin"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-mongo-user",
+      "engine": "mongodb",
+      "host": "127.0.0.1",
+      "port": 57017,
+      "database": "appdb",
+      "user": "app_user",
+      "source": {
+        "kind": "mongo-file",
+        "path": "~/.mongo.app_user-in-appdb"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    },
+    {
+      "label": "live-mongo-analyst",
+      "engine": "mongodb",
+      "host": "127.0.0.1",
+      "port": 57017,
+      "database": "analytics",
+      "user": "analyst",
+      "source": {
+        "kind": "mongo-file",
+        "path": "~/.mongo.analyst-in-analytics"
+      },
+      "created_at": "2026-11-19T00:00:00Z",
+      "updated_at": "2026-11-19T00:00:00Z"
+    }
+  ]
+}
