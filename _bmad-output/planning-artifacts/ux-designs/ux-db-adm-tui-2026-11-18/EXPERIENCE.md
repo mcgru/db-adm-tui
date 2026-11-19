@@ -66,7 +66,7 @@ English only in v1. Short labels and abbreviations are a width decision, not a s
 Writing rules:
 
 - **Error = what happened + what to do.** Name the profile, the source file, or the object; never the secret. `Could not connect to prod-ro: no matching line in ~/.pgpass. Press Enter to retry, or i to import.`
-- **Empty = what is empty + what to do.** `No profiles yet. Press n to create one, or i to import from ~/.pgpass or ~/.mongo.*.`
+- **Empty = what is empty + what to do.** `No profiles yet. Press n to create one, or i to import from ~/.pgpass, ~/.mypass, or ~/.mongo.*.`
 - **Confirmation = consequence + keys.** `Enable read-write mode? Writes will run on prod-ro. Enter enable · Esc cancel.`
 - **Status = state word + count.** `loaded 100 of ~12,480`, `end of data`, `exact`, `estimated`, `unavailable`.
 - Modes are `read-only` and `read-write` in sentences, `r/o` and `r/w` in the badge. `~` prefixes an estimate; `exact` follows an exact count.
@@ -115,7 +115,7 @@ Behavioral rules. Visual anatomy lives in `DESIGN.md.Components`.
 | State | Surface | Treatment |
 |---|---|---|
 | Cold launch | Profile picker | Profiles render from local storage. No spinner; if storage is slow, the empty frame with `loading profiles…` in the status line. |
-| No profiles | Profile picker | `No profiles yet. Press n to create one, or i to import from ~/.pgpass or ~/.mongo.*.` |
+| No profiles | Profile picker | `No profiles yet. Press n to create one, or i to import from ~/.pgpass, ~/.mypass, or ~/.mongo.*.` |
 | Connecting | Profile picker | Row shows `connecting…`; status line shows the target; `Esc` cancels and restores the row. |
 | Connection error | Profile picker | Error attached under the row, naming profile and source file: `Could not connect to prod-ro: no matching line in ~/.pgpass. Press Enter to retry, or i to import.` |
 | Profile storage unreadable | Profile picker | `Profile storage is unreadable. Showing no profiles.` The picker stays usable; `n` and `i` still work. |
@@ -123,7 +123,7 @@ Behavioral rules. Visual anatomy lives in `DESIGN.md.Components`.
 | Password required | New connection modal / centered password modal | New connection: a masked field inside the modal. A saved profile without a source pointer: a centered `Password for <profile>` modal with `Enter connect · Esc cancel`. Masked input; never echoed, never stored. |
 | Read-only default | Top status line | `r/o` in `{colors.readonly-mode}`. Every connection starts here and every reconnect resets to it. On MongoDB, a one-time status line adds `Read-only is enforced by the tool; MongoDB has no session-level read-only.` The badge stays `r/o`. |
 | Read-write | Top status line | `r/w` in `{colors.readwrite-mode}`; status `read-write mode on. Read-only guard is off.` Switching back is immediate and needs no confirmation. |
-| No import sources | Import modal | `No ~/.pgpass or ~/.mongo.* files found. Press n to create a connection.` |
+| No import sources | Import modal | `No ~/.pgpass, ~/.mypass, or ~/.mongo.* files found. Press n to create a connection.` |
 | Malformed import line | Import modal | The row carries a `warning` tag; valid lines still import; the summary says `1 line skipped.` |
 | Import file unreadable | Import modal | The row carries an `error` tag and the file name; other rows remain selectable. This is not the same as a malformed line. |
 | Tree cold load | Tree | Root shows `loading databases…`; the rest of the workspace shows `select a database` until the first expand. |
@@ -259,7 +259,7 @@ Widths and heights are persisted per profile. Window resize does not reset a tab
 *Source: startup, new connection, and import (FR-31–FR-36, FR-46); not a PRD journey.*
 
 1. Mcgru SSHes into `prod-db-01` and runs `db-adm-tui`. Cold start, no profiles.
-2. The picker shows `No profiles yet. Press n to create one, or i to import from ~/.pgpass or ~/.mongo.*.`
+2. The picker shows `No profiles yet. Press n to create one, or i to import from ~/.pgpass, ~/.mypass, or ~/.mongo.*.`
 3. He presses `n`. The new connection modal opens with the `uri` line focused. He types `postgres://app_ro@localhost:5432/orders` and a label, `prod-ro`.
 4. `Enter`. The tool matches the `~/.pgpass` line, reads the password at connect time, and opens the connection. The password never appears.
 5. On success: `Save prod-ro as a profile? Enter save · Esc skip.` He presses `Enter`.
