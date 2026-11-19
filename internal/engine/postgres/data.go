@@ -20,6 +20,9 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 	if query.Offset < 0 || query.Limit <= 0 {
 		return domain.DataPage{}, domain.NewError(domain.KindConfig, "data", "the page window is not valid")
 	}
+	if query.Filter != nil && strings.TrimSpace(query.Filter.Field) == "" {
+		return domain.DataPage{}, domain.NewError(domain.KindConfig, "data", "the filter field is not valid")
+	}
 
 	// A missing or failed order key still allows browsing; the UI warns that
 	// rows may repeat or skip.
@@ -28,8 +31,12 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 		orderKey = ""
 	}
 
-	statement := buildDataSelect(query.Ref, orderKey)
-	rows, err := c.conn.QueryContext(ctx, statement, query.Limit+1, query.Offset)
+	statement := buildDataSelect(query.Ref, orderKey, query.Filter)
+	args := []any{query.Limit + 1, query.Offset}
+	if query.Filter != nil {
+		args = append(args, query.Filter.Pattern)
+	}
+	rows, err := c.conn.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return domain.DataPage{}, safeError("data", c.password, err)
 	}
@@ -59,8 +66,10 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 }
 
 // buildDataSelect builds the one table window statement. Identifiers are
-// quoted; the window values remain bound parameters.
-func buildDataSelect(ref domain.ObjectRef, orderKey string) string {
+// quoted; the window values and an optional case-aware regexp filter remain
+// bound parameters. Filters target the base column, so a JSON subfield expands
+// to its parent column and the value is cast to text for native regexp matching.
+func buildDataSelect(ref domain.ObjectRef, orderKey string, filter *domain.DataFilter) string {
 	schema := ref.Schema
 	if schema == "" {
 		schema = "public"
@@ -70,6 +79,17 @@ func buildDataSelect(ref domain.ObjectRef, orderKey string) string {
 	b.WriteString(quoteIdentifier(schema))
 	b.WriteString(".")
 	b.WriteString(quoteIdentifier(ref.Name))
+	if filter != nil {
+		op := "~"
+		if filter.CaseInsensitive {
+			op = "~*"
+		}
+		b.WriteString(" WHERE CAST(")
+		b.WriteString(quoteIdentifier(filter.Field))
+		b.WriteString(" AS text) ")
+		b.WriteString(op)
+		b.WriteString(" $3")
+	}
 	if columns := splitOrderKey(orderKey); len(columns) > 0 {
 		b.WriteString(" ORDER BY ")
 		for i, column := range columns {

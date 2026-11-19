@@ -64,4 +64,7 @@ func TestSelectorStylesAreLegible(t *testing.T) {
 	if s.Select.GetForeground() == nil || s.Select.GetBackground() == nil {
 		t.Fatal("selection must carry both foreground and background")
 	}
+	if !s.Match.GetUnderline() {
+		t.Fatal("match highlight must carry a non-color attribute")
+	}
 }

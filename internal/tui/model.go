@@ -115,6 +115,10 @@ type Model struct {
 	pendingChord bool
 	chordSeq     int
 
+	// caseInsensitive is the session-wide search case mode. It starts on for
+	// every session and applies to both the buffer and server filters.
+	caseInsensitive bool
+
 	active        domain.Profile
 	session       *app.Session
 	sessionCtx    context.Context
@@ -174,17 +178,18 @@ type Model struct {
 // profiles synchronously.
 func New(svc *app.Service) Model {
 	m := Model{
-		width:     layout.MinWidth,
-		height:    layout.MinHeight,
-		screen:    ScreenPicker,
-		focus:     FocusTree,
-		styles:    theme.New(),
-		svc:       svc,
-		rowErrors: map[string]string{},
-		importSel: map[string]bool{},
-		tree:      newTree(),
-		data:      newDataState(),
-		newFocus:  fieldURI,
+		width:           layout.MinWidth,
+		height:          layout.MinHeight,
+		screen:          ScreenPicker,
+		focus:           FocusTree,
+		styles:          theme.New(),
+		svc:             svc,
+		rowErrors:       map[string]string{},
+		importSel:       map[string]bool{},
+		tree:            newTree(),
+		data:            newDataState(),
+		newFocus:        fieldURI,
+		caseInsensitive: true,
 	}
 	m.newURI = newInput("postgres://user@host:5432/db", false)
 	m.newLabel = newInput("", false)
@@ -310,6 +315,11 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.apply(action)
 	}
+	if m.data.prompt != promptNone {
+		if next, cmd, handled := m.handleFilterKey(msg); handled {
+			return next, cmd
+		}
+	}
 	m.message = ""
 	m.messageLevel = levelNone
 	action, ok := keymap.Lookup(key)
@@ -345,6 +355,12 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m.openSelected()
 		}
 	case keymap.New:
+		if m.filterKeepsNewKey() {
+			if (m.data.bufferPattern != "" || m.data.serverFilter != nil) && m.data.prompt == promptNone {
+				return m, m.nextMatch(1)
+			}
+			return m, nil
+		}
 		if m.screen == ScreenPicker && !m.connecting {
 			m.openNewModal()
 		}
@@ -534,17 +550,20 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.setMessage(levelInfo, "cancelled")
 			return m, nil
 		}
+		if m.data.bufferPattern != "" {
+			m.clearLocalFilter()
+			return m, nil
+		}
+		if m.data.serverFilter != nil {
+			return m, m.clearServerFilter()
+		}
 		if m.connecting {
 			m.cancelConnect()
 		}
 	case keymap.Search:
-		m.setMessage(levelInfo, "search lands in the next story")
+		return m, m.openBufferFilter()
 	case keymap.ServerFilter:
-		if m.dataTabActive() {
-			m.setMessage(levelInfo, "search lands in the next story")
-		} else {
-			m.setMessage(levelInfo, "not available in this story")
-		}
+		return m, m.openServerFilter()
 	case keymap.More:
 		if m.dataFocused() {
 			return m, m.nextDataPage()
@@ -567,9 +586,13 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		}
 	case keymap.ExactCount:
 		m.setMessage(levelInfo, "exact count lands in the next story")
-	case keymap.ToggleMode, keymap.Edit, keymap.CaseMode,
+	case keymap.CaseMode:
+		return m, m.toggleCaseMode()
+	case keymap.NextMatch:
+		return m, m.nextMatch(-1)
+	case keymap.ToggleMode, keymap.Edit,
 		keymap.Completion, keymap.ContextHelp,
-		keymap.NextMatch, keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
+		keymap.ResizeTreeLeft, keymap.ResizeTreeRight,
 		keymap.ResizeQueryUp, keymap.ResizeQueryDown:
 		m.setMessage(levelInfo, "not available in this story")
 	}
@@ -721,6 +744,7 @@ func (m Model) openWorkspace(result app.ConnectResult) Model {
 	m.active = result.Profile
 	m.screen = ScreenWorkspace
 	m.focus = FocusTree
+	m.caseInsensitive = true
 	m.tree.reset()
 	m.details.clear()
 	m.detailsGen++

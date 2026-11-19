@@ -637,29 +637,6 @@ func TestDataNullAndEmptyCells(t *testing.T) {
 	}
 }
 
-func TestDataSearchPlaceholdersDoNotQuery(t *testing.T) {
-	reader := &fakeDataReader{total: 5}
-	m, _ := dataWorkspaceWithReader(t, reader)
-	before := len(reader.calls)
-	m, _ = press(t, m, "/")
-	if m.message != "search lands in the next story" {
-		t.Fatalf("/ message = %q", m.message)
-	}
-	if len(reader.calls) != before {
-		t.Fatal("/ queried the database")
-	}
-	m, _ = press(t, m, "ctrl+f")
-	if m.message != "search lands in the next story" {
-		t.Fatalf("ctrl+f message = %q", m.message)
-	}
-	if len(reader.calls) != before {
-		t.Fatal("Ctrl+F queried the database")
-	}
-	if !strings.Contains(StripANSI(m.View().Content), "search lands in the next story") {
-		t.Fatal("placeholder not rendered")
-	}
-}
-
 func TestDataClearsOnNonDataObject(t *testing.T) {
 	reader := &fakeDataReader{total: 5}
 	m, _ := dataWorkspaceWithReader(t, reader)

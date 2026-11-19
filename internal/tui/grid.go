@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -90,6 +91,28 @@ type dataState struct {
 	endPg          int
 	maxRows        int
 	maxBytes       int
+
+	// Buffer filter over the loaded rows. The raw rows stay intact; matches
+	// keeps the raw-row offsets that survive the current pattern.
+	prompt                dataPrompt
+	bufferPattern         string
+	bufferCursor          int
+	bufferCaseInsensitive bool
+	matches               []int
+	matchCells            []filterMatch
+
+	// Server filter. serverCached holds the unfiltered dataState by value so
+	// Esc can restore it without a query.
+	serverPattern  string
+	serverCursor   int
+	serverField    string
+	serverFilter   *domain.DataFilter
+	serverCached   *dataState
+	filterApplying bool
+	filterRestore  *domain.DataFilter
+	filterClearing bool
+	caseApplying   bool
+	caseRestore    bool
 }
 
 func newDataState() dataState {
@@ -167,8 +190,10 @@ func (d *dataState) recount() {
 	grid := domain.Grid{Columns: d.columns, Rows: d.rows}
 	d.bytes = grid.ApproxBytes()
 	d.view = buildDataView(d.columns, d.rows, d.expandedJSON)
+	d.recomputeMatches()
 	d.gutter = gridGutter(d.windowStart + len(d.rows))
 	d.clampCursor()
+	d.focusFirstMatch()
 }
 
 func (d *dataState) clampCursor() {
@@ -179,39 +204,116 @@ func (d *dataState) clampCursor() {
 		d.colOffset = 0
 		return
 	}
-	last := d.windowStart + len(d.rows) - 1
-	if d.cursorRow < d.windowStart {
+	count := d.dataRowCount()
+	if count == 0 {
 		d.cursorRow = d.windowStart
+		d.rowOffset = d.windowStart
+		d.clampCursorColumns()
+		return
+	}
+	first := d.dataRowAt(0)
+	last := d.dataRowAt(count - 1)
+	if d.cursorRow < first {
+		d.cursorRow = first
 	}
 	if d.cursorRow > last {
 		d.cursorRow = last
 	}
-	if len(d.view) == 0 {
-		d.cursorCol = 0
-		d.colOffset = 0
-	} else {
-		if d.cursorCol < 0 {
-			d.cursorCol = 0
+	if d.dataRowPosition(d.cursorRow) < 0 {
+		next := d.dataRowPositionAtOrAfter(d.cursorRow)
+		if next >= count {
+			next = count - 1
 		}
-		if d.cursorCol >= len(d.view) {
-			d.cursorCol = len(d.view) - 1
-		}
-		if d.colOffset < 0 {
-			d.colOffset = 0
-		}
-		if d.colOffset > d.cursorCol {
-			d.colOffset = d.cursorCol
-		}
-		if d.colOffset >= len(d.view) {
-			d.colOffset = len(d.view) - 1
-		}
+		d.cursorRow = d.dataRowAt(next)
 	}
-	if d.rowOffset < d.windowStart {
-		d.rowOffset = d.windowStart
+	if d.rowOffset < first {
+		d.rowOffset = first
 	}
 	if d.rowOffset > last {
 		d.rowOffset = last
 	}
+	if d.dataRowPosition(d.rowOffset) < 0 {
+		next := d.dataRowPositionAtOrAfter(d.rowOffset)
+		if next >= count {
+			next = count - 1
+		}
+		d.rowOffset = d.dataRowAt(next)
+	}
+	d.clampCursorColumns()
+}
+
+// clampCursorColumns keeps the rendered-column cursor inside the view.
+func (d *dataState) clampCursorColumns() {
+	if len(d.view) == 0 {
+		d.cursorCol = 0
+		d.colOffset = 0
+		return
+	}
+	if d.cursorCol < 0 {
+		d.cursorCol = 0
+	}
+	if d.cursorCol >= len(d.view) {
+		d.cursorCol = len(d.view) - 1
+	}
+	if d.colOffset < 0 {
+		d.colOffset = 0
+	}
+	if d.colOffset > d.cursorCol {
+		d.colOffset = d.cursorCol
+	}
+	if d.colOffset >= len(d.view) {
+		d.colOffset = len(d.view) - 1
+	}
+}
+
+// dataRowCount is the number of rows the grid currently projects: the loaded
+// rows, or only buffer-filter matches.
+func (d dataState) dataRowCount() int {
+	if d.bufferPattern != "" {
+		return len(d.matches)
+	}
+	return len(d.rows)
+}
+
+// dataRowAt maps a projected row position to its absolute row number.
+func (d dataState) dataRowAt(position int) int {
+	if d.bufferPattern != "" {
+		return d.windowStart + d.matches[position]
+	}
+	return d.windowStart + position
+}
+
+// dataRowPosition maps an absolute row number to its projected position, or -1
+// when the row is not visible under the current filter.
+func (d dataState) dataRowPosition(absolute int) int {
+	relative := absolute - d.windowStart
+	if d.bufferPattern == "" {
+		if relative < 0 || relative >= len(d.rows) {
+			return -1
+		}
+		return relative
+	}
+	index := sort.SearchInts(d.matches, relative)
+	if index < len(d.matches) && d.matches[index] == relative {
+		return index
+	}
+	return -1
+}
+
+// dataRowPositionAtOrAfter maps an absolute row to the first projected
+// position at or after it. It may return dataRowCount when none remain.
+func (d dataState) dataRowPositionAtOrAfter(absolute int) int {
+	relative := absolute - d.windowStart
+	if d.bufferPattern == "" {
+		if relative < 0 {
+			return 0
+		}
+		if relative >= len(d.rows) {
+			return len(d.rows)
+		}
+		return relative
+	}
+	return sort.SearchInts(d.matches, relative)
 }
 
 // mergePage appends or prepends one page using the union of column names. New
@@ -635,8 +737,12 @@ func (m *Model) dataRangeStart() tea.Cmd {
 	if d.windowStart > 0 {
 		return m.beginDataFetch(0, d.windowStart, dataStart)
 	}
-	d.cursorRow = d.windowStart
-	d.rowOffset = d.windowStart
+	if count := d.dataRowCount(); count > 0 {
+		d.cursorRow = d.dataRowAt(0)
+	} else {
+		d.cursorRow = d.windowStart
+	}
+	d.rowOffset = d.cursorRow
 	m.ensureDataViewport()
 	return nil
 }
@@ -655,7 +761,11 @@ func (m *Model) dataRangeEnd() tea.Cmd {
 	if len(d.rows) == 0 {
 		return nil
 	}
-	d.cursorRow = d.windowStart + len(d.rows) - 1
+	if count := d.dataRowCount(); count > 0 {
+		d.cursorRow = d.dataRowAt(count - 1)
+	} else {
+		return nil
+	}
 	m.ensureDataViewport()
 	return nil
 }
@@ -683,8 +793,14 @@ func (m *Model) beginDataFetch(offset, limit int, direction dataDirection) tea.C
 
 	session := m.session
 	ref := m.data.ref
+	var filter *domain.DataFilter
+	if m.data.serverFilter != nil {
+		copied := *m.data.serverFilter
+		filter = &copied
+	}
 	return func() tea.Msg {
-		page, err := session.Page(ctx, domain.DataQuery{Ref: ref, Offset: offset, Limit: limit})
+		query := domain.DataQuery{Ref: ref, Offset: offset, Limit: limit, Filter: filter}
+		page, err := session.Page(ctx, query)
 		return dataPageMsg{
 			gen:       gen,
 			direction: direction,
@@ -707,6 +823,7 @@ func (m Model) handleDataPage(msg dataPageMsg) (tea.Model, tea.Cmd) {
 		if m.session != nil && !m.session.Alive() {
 			return m.leaveWorkspace(msg.err)
 		}
+		m.revertFilterOnError()
 		if domain.KindOf(msg.err) == domain.KindCancelled || errors.Is(msg.err, context.Canceled) {
 			m.setMessage(levelInfo, "cancelled")
 			return m, nil
@@ -717,6 +834,17 @@ func (m Model) handleDataPage(msg dataPageMsg) (tea.Model, tea.Cmd) {
 	}
 	m.data.err = ""
 	m.data.tooLarge = false
+	if m.data.filterApplying {
+		m.data.filterApplying = false
+		m.data.filterRestore = nil
+		m.data.prompt = promptNone
+	} else if m.data.filterClearing {
+		m.data.filterClearing = false
+		m.data.filterRestore = nil
+		m.data.serverCached = nil
+	}
+	m.data.caseApplying = false
+	m.data.caseRestore = false
 	if msg.page.OrderKeyKnown {
 		m.data.orderKnown = true
 		m.data.orderKey = msg.page.OrderKey
@@ -789,6 +917,7 @@ func (m *Model) cancelDataFetch() {
 	}
 	m.dataGen++
 	m.data.loading = false
+	m.revertFilterOnError()
 }
 
 func (m Model) dataTabActive() bool {
@@ -819,63 +948,79 @@ func (m *Model) ensureData() tea.Cmd {
 }
 
 func (m *Model) moveDataRow(delta int) tea.Cmd {
-	if !m.dataFocused() || !m.data.loaded || len(m.data.rows) == 0 {
+	if !m.dataFocused() || !m.data.loaded {
 		return nil
 	}
 	d := &m.data
-	last := d.windowStart + len(d.rows) - 1
-	target := d.cursorRow + delta
-	if target < d.windowStart {
+	count := d.dataRowCount()
+	if count == 0 {
+		return nil
+	}
+	position := d.dataRowPosition(d.cursorRow)
+	if position < 0 {
+		position = 0
+	}
+	target := position + delta
+	if target < 0 {
 		if d.windowStart > 0 {
 			return m.previousDataPage()
 		}
-		target = d.windowStart
+		target = 0
 	}
-	if target > last {
+	if target >= count {
 		if d.hasMore {
 			if delta == 1 {
 				return m.dataDownGesture()
 			}
 			return m.nextDataPage()
 		}
-		target = last
+		target = count - 1
 		m.setMessage(levelInfo, "end of data")
 	}
-	d.cursorRow = target
+	d.cursorRow = d.dataRowAt(target)
 	d.endDown = 0
 	m.ensureDataViewport()
 	return nil
 }
 
 func (m *Model) moveDataPage(delta int) tea.Cmd {
-	if !m.dataFocused() || !m.data.loaded || len(m.data.rows) == 0 {
+	if !m.dataFocused() || !m.data.loaded {
 		return nil
 	}
 	d := &m.data
-	last := d.windowStart + len(d.rows) - 1
+	count := d.dataRowCount()
+	if count == 0 {
+		return nil
+	}
+	position := d.dataRowPosition(d.cursorRow)
+	if position < 0 {
+		position = 0
+	}
 	if delta < 0 {
-		if d.cursorRow == d.windowStart && d.windowStart > 0 {
+		if position == 0 && d.windowStart > 0 {
 			return m.previousDataPage()
 		}
-		d.cursorRow -= m.dataPageRows()
-		if d.cursorRow < d.windowStart {
-			d.cursorRow = d.windowStart
+		position -= m.dataPageRows()
+		if position < 0 {
+			position = 0
 		}
+		d.cursorRow = d.dataRowAt(position)
 		d.endPg = 0
 		m.ensureDataViewport()
 		return nil
 	}
-	if d.cursorRow >= last {
+	if position >= count-1 {
 		if d.hasMore {
 			return m.dataPgDownGesture()
 		}
 		m.setMessage(levelInfo, "end of data")
 		return nil
 	}
-	d.cursorRow += m.dataPageRows()
-	if d.cursorRow > last {
-		d.cursorRow = last
+	position += m.dataPageRows()
+	if position > count-1 {
+		position = count - 1
 	}
+	d.cursorRow = d.dataRowAt(position)
 	d.endPg = 0
 	m.ensureDataViewport()
 	return nil
@@ -963,7 +1108,8 @@ func (m *Model) ensureDataColumn() {
 
 func (m *Model) ensureDataViewport() {
 	d := &m.data
-	if len(d.rows) == 0 {
+	count := d.dataRowCount()
+	if count == 0 {
 		d.rowOffset = d.windowStart
 		return
 	}
@@ -971,19 +1117,28 @@ func (m *Model) ensureDataViewport() {
 	if pageRows < 1 {
 		pageRows = 1
 	}
-	last := d.windowStart + len(d.rows) - 1
-	if d.cursorRow < d.rowOffset {
-		d.rowOffset = d.cursorRow
+	position := d.dataRowPosition(d.cursorRow)
+	if position < 0 {
+		position = 0
 	}
-	if d.cursorRow >= d.rowOffset+pageRows {
-		d.rowOffset = d.cursorRow - pageRows + 1
+	start := d.dataRowPositionAtOrAfter(d.rowOffset)
+	if start >= count {
+		start = count - 1
 	}
-	if d.rowOffset < d.windowStart {
-		d.rowOffset = d.windowStart
+	if start < 0 {
+		start = 0
 	}
-	if d.rowOffset > last {
-		d.rowOffset = last
+	last := count - 1
+	if position < start {
+		start = position
 	}
+	if position >= start+pageRows {
+		start = position - pageRows + 1
+	}
+	if start > last {
+		start = last
+	}
+	d.rowOffset = d.dataRowAt(start)
 }
 
 func (m Model) dataBodyHeight() int {
@@ -997,16 +1152,34 @@ func (m Model) dataBodyHeight() int {
 
 func (m Model) dataPageRows() int {
 	height := m.dataBodyHeight() - 2 // column header + header rule
-	if m.data.orderKnown && m.data.orderKey == "" {
-		height--
-	}
-	if m.data.err != "" {
-		height--
-	}
+	height -= m.dataHeaderLineCount()
 	if height < 1 {
 		height = 1
 	}
 	return height
+}
+
+// dataHeaderLineCount counts the non-grid lines rendered above the column
+// header, in the same order as viewData. dataPageRows uses it so the viewport
+// arithmetic stays exact.
+func (m Model) dataHeaderLineCount() int {
+	count := 0
+	if m.data.filterBarVisible() {
+		count++
+	}
+	if m.data.filterNoMatchVisible() {
+		count++
+	}
+	if m.data.serverFilter != nil {
+		count += len(m.filterBannerLines(m.dataInnerWidth()))
+	}
+	if m.data.orderKnown && m.data.orderKey == "" {
+		count++
+	}
+	if m.data.err != "" {
+		count++
+	}
+	return count
 }
 
 func (m Model) dataInnerWidth() int {
@@ -1031,6 +1204,25 @@ func (m Model) dataSummary() string {
 	}
 	if d.tooLarge {
 		return "row exceeds the 64 MB window"
+	}
+	if d.serverFilter != nil {
+		if len(d.rows) == 0 {
+			return "0 matching rows loaded"
+		}
+		var text string
+		if d.windowStart == 0 {
+			text = fmt.Sprintf("loaded %s matching rows", formatCount(int64(len(d.rows))))
+		} else {
+			text = fmt.Sprintf("matching rows %s–%s loaded",
+				formatCount(int64(d.windowStart+1)), formatCount(int64(d.windowStart+len(d.rows))))
+		}
+		if d.hasMore {
+			text += " · more available"
+		}
+		return text
+	}
+	if d.bufferPattern != "" && len(d.matches) == 0 {
+		return fmt.Sprintf("0 of %s loaded", formatCount(int64(len(d.rows))))
 	}
 	if len(d.rows) == 0 {
 		return "0 rows"
@@ -1098,6 +1290,15 @@ func (m Model) viewData(width, height int) []string {
 	if !d.has {
 		return []string{m.styles.Muted.Render("Select a table or collection to browse.")}
 	}
+	if d.filterBarVisible() {
+		lines = append(lines, m.renderFilterBar(width))
+	}
+	if d.filterNoMatchVisible() {
+		lines = append(lines, m.renderNoMatchLine(width))
+	}
+	if d.serverFilter != nil {
+		lines = append(lines, m.filterBannerLines(width)...)
+	}
 	if d.orderKnown && d.orderKey == "" {
 		lines = append(lines, m.styles.Warning.Render(Truncate("no stable order; rows may repeat or skip", width)))
 	}
@@ -1141,6 +1342,9 @@ func (m Model) renderGrid(width, height int) []string {
 		if len(d.rows) == 0 {
 			if d.tooLarge {
 				return []string{m.styles.Warning.Render(Truncate("Row exceeds the 64 MB window. Press m to retry.", width))}
+			}
+			if d.serverFilter != nil {
+				return []string{m.filteredEmptyLine(width)}
 			}
 			name := oneLine(dataObjectName(d.ref))
 			return []string{m.styles.Muted.Render(Truncate("No rows. "+name+" is empty.", width))}
@@ -1214,34 +1418,48 @@ func (m Model) renderGrid(width, height int) []string {
 	}
 
 	viewRows := height - 2
-	if len(d.rows) == 0 {
+	count := d.dataRowCount()
+	if count == 0 {
 		if d.tooLarge {
 			lines = append(lines, m.styles.Warning.Render(Truncate("Row exceeds the 64 MB window. Press m to retry.", width)))
+			return lines
+		}
+		if d.bufferPattern != "" {
+			// The filter bar carries the no-match copy; an empty grid is the
+			// honest projection of zero matching rows.
+			return lines
+		}
+		if d.serverFilter != nil {
+			lines = append(lines, m.filteredEmptyLine(width))
 			return lines
 		}
 		name := oneLine(dataObjectName(d.ref))
 		lines = append(lines, m.styles.Muted.Render(Truncate("No rows. "+name+" is empty.", width)))
 		return lines
 	}
-	startRow := d.rowOffset
-	if d.cursorRow < startRow {
-		startRow = d.cursorRow
+	start := d.dataRowPositionAtOrAfter(d.rowOffset)
+	if start >= count {
+		start = count - 1
 	}
-	if d.cursorRow >= startRow+viewRows {
-		startRow = d.cursorRow - viewRows + 1
+	if start < 0 {
+		start = 0
 	}
-	if startRow < d.windowStart {
-		startRow = d.windowStart
+	position := d.dataRowPosition(d.cursorRow)
+	if position < 0 {
+		position = 0
 	}
-	last := d.windowStart + len(d.rows) - 1
-	if startRow > last {
-		startRow = last
+	if position < start {
+		start = position
 	}
-	end := startRow + viewRows
-	if end > last+1 {
-		end = last + 1
+	if position >= start+viewRows {
+		start = position - viewRows + 1
 	}
-	for absolute := startRow; absolute < end; absolute++ {
+	end := start + viewRows
+	if end > count {
+		end = count
+	}
+	for projected := start; projected < end; projected++ {
+		absolute := d.dataRowAt(projected)
 		row := d.rows[absolute-d.windowStart]
 		lines = append(lines, m.renderGridRow(row, view, visible, gutter, absolute, width))
 	}
@@ -1260,13 +1478,17 @@ func (m Model) renderGridRow(row domain.Row, view []dataColumn, visible []visibl
 				sep = " "
 			}
 			text := cellForColumn(row, view[column.index]).Display()
-			cell := sep + Pad(Truncate(oneLine(text), column.width), column.width)
-			used += lipgloss.Width(cell)
+			base := m.styles.Select
 			if column.index == d.cursorCol {
-				b.WriteString(m.styles.Cursor.Render(cell))
-			} else {
-				b.WriteString(m.styles.Select.Render(cell))
+				base = m.styles.Cursor
 			}
+			if sep != "" {
+				b.WriteString(base.Render(sep))
+				used += lipgloss.Width(sep)
+			}
+			cell := m.renderGridCell(Truncate(oneLine(text), column.width), column.width, base)
+			used += lipgloss.Width(cell)
+			b.WriteString(cell)
 		}
 		if used < width {
 			b.WriteString(m.styles.Select.Render(strings.Repeat(" ", width-used)))
@@ -1286,7 +1508,21 @@ func (m Model) renderGridRow(row domain.Row, view []dataColumn, visible []visibl
 			style = m.styles.Muted
 		}
 		text := Truncate(oneLine(cell.Display()), column.width)
-		b.WriteString(style.Render(Pad(text, column.width)))
+		b.WriteString(m.renderGridCell(text, column.width, style))
 	}
 	return b.String()
+}
+
+// renderGridCell pads one cell and paints buffer-filter matches with the Match
+// style. Padding uses the cell's base style so selected-row fills stay intact.
+func (m Model) renderGridCell(text string, width int, base lipgloss.Style) string {
+	pattern := m.data.bufferPattern
+	if pattern == "" {
+		return base.Render(Pad(text, width))
+	}
+	rendered := highlightMatches(text, pattern, m.data.bufferCaseInsensitive, base, m.styles.Match)
+	if padding := width - lipgloss.Width(rendered); padding > 0 {
+		rendered += base.Render(strings.Repeat(" ", padding))
+	}
+	return rendered
 }

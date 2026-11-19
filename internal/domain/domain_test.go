@@ -175,6 +175,21 @@ func TestLastUsedTimestampIsNotPersistedAsSecret(t *testing.T) {
 	}
 }
 
+func TestValidMongoPath(t *testing.T) {
+	valid := []string{"email", "profile.email", "profile.email.value", " name "}
+	for _, field := range valid {
+		if !ValidMongoPath(field) {
+			t.Fatalf("ValidMongoPath(%q) = false", field)
+		}
+	}
+	invalid := []string{"", ".email", "profile..email", "$where", "profile.$x", "profile\x00name"}
+	for _, field := range invalid {
+		if ValidMongoPath(field) {
+			t.Fatalf("ValidMongoPath(%q) = true", field)
+		}
+	}
+}
+
 func TestCatalogAccessAndIdentity(t *testing.T) {
 	if AccessFrom(false, true) != AccessWrite {
 		t.Fatal("write must map to rw")

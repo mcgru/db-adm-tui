@@ -197,6 +197,17 @@ func (m Model) handlePasswordKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	if m.modal == modalNone {
+		switch m.data.prompt {
+		case promptBuffer:
+			m.data.bufferPattern, m.data.bufferCursor = insertFilterText(m.data.bufferPattern, m.data.bufferCursor, msg.Content)
+			m.updateBufferFilter()
+			return m, nil
+		case promptServer:
+			m.data.serverPattern, m.data.serverCursor = insertFilterText(m.data.serverPattern, m.data.serverCursor, msg.Content)
+			return m, nil
+		}
+	}
 	switch m.modal {
 	case modalNew:
 		if m.newBusy {

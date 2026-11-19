@@ -54,9 +54,13 @@ func (m *Model) selectTab(index int) tea.Cmd {
 		m.setMessage(levelInfo, m.details.tabNote(index))
 		return nil
 	}
+	var filterCmd tea.Cmd
+	if index != m.details.tab {
+		filterCmd = m.resetDataFilters()
+	}
 	m.details.tab = index
 	m.details.offset = 0
-	return tea.Batch(m.ensureData(), m.ensureTabInfo())
+	return tea.Batch(m.ensureData(), m.ensureTabInfo(), filterCmd)
 }
 
 func (m *Model) cycleTab(delta int) tea.Cmd {
@@ -64,9 +68,14 @@ func (m *Model) cycleTab(delta int) tea.Cmd {
 		m.setMessage(levelInfo, "select an object first")
 		return nil
 	}
-	m.details.tab = (m.details.tab + delta + len(m.details.tabs)) % len(m.details.tabs)
+	next := (m.details.tab + delta + len(m.details.tabs)) % len(m.details.tabs)
+	var filterCmd tea.Cmd
+	if next != m.details.tab {
+		filterCmd = m.resetDataFilters()
+	}
+	m.details.tab = next
 	m.details.offset = 0
-	return tea.Batch(m.ensureData(), m.ensureTabInfo())
+	return tea.Batch(m.ensureData(), m.ensureTabInfo(), filterCmd)
 }
 
 func (m *Model) scrollDetails(delta int) {

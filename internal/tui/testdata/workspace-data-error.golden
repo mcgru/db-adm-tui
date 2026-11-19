@@ -1,4 +1,4 @@
-prod-ro · PostgreSQL · orders · r/o                                       app_ro
+prod-ro · PostgreSQL · orders · r/o                   case: insensitive · app_ro
 ┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
 │ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
 │   ▾ public               │ │                                                 │
@@ -21,4 +21,4 @@ prod-ro · PostgreSQL · orders · r/o                                       app
 │                          │ │                                                 │
 └──────────────────────────┘ └─────────────────────────────────────────────────┘
   SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
-relation unavailable                                   ↑↓ rows · m more · ` JSON
+relation unavailable                    ↑↓ · m more · / filter · Ctrl+F · ` JSON

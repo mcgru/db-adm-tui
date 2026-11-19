@@ -9,17 +9,34 @@ import (
 
 func TestBuildDataSelectQuotesIdentifiersAndOrders(t *testing.T) {
 	ref := domain.ObjectRef{Kind: domain.KindTable, Schema: `we"ird`, Name: "tab le"}
-	got := buildDataSelect(ref, `id,na"me`)
+	got := buildDataSelect(ref, `id,na"me`, nil)
 	want := `SELECT * FROM "we""ird"."tab le" ORDER BY "id", "na""me" LIMIT $1 OFFSET $2`
 	if got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
-	got = buildDataSelect(domain.ObjectRef{Kind: domain.KindTable, Name: "customers"}, "")
+	got = buildDataSelect(domain.ObjectRef{Kind: domain.KindTable, Name: "customers"}, "", nil)
 	if !strings.Contains(got, `FROM "public"."customers"`) {
 		t.Fatalf("default schema missing: %q", got)
 	}
 	if strings.Contains(got, "ORDER BY") {
 		t.Fatalf("empty order key must not sort: %q", got)
+	}
+}
+
+func TestBuildDataSelectFilterUsesNativeCaseFlags(t *testing.T) {
+	ref := domain.ObjectRef{Kind: domain.KindTable, Schema: "public", Name: "customers"}
+	got := buildDataSelect(ref, "id", &domain.DataFilter{
+		Field: `em"ail`, Pattern: "^a", CaseInsensitive: true,
+	})
+	want := `SELECT * FROM "public"."customers" WHERE CAST("em""ail" AS text) ~* $3 ORDER BY "id" LIMIT $1 OFFSET $2`
+	if got != want {
+		t.Fatalf("insensitive query = %q, want %q", got, want)
+	}
+	got = buildDataSelect(ref, "id", &domain.DataFilter{
+		Field: "email", Pattern: "^a", CaseInsensitive: false,
+	})
+	if !strings.Contains(got, `CAST("email" AS text) ~ $3`) {
+		t.Fatalf("sensitive query = %q", got)
 	}
 }
 

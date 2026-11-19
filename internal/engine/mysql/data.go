@@ -20,14 +20,23 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 	if query.Offset < 0 || query.Limit <= 0 {
 		return domain.DataPage{}, domain.NewError(domain.KindConfig, "data", "the page window is not valid")
 	}
+	if query.Filter != nil && strings.TrimSpace(query.Filter.Field) == "" {
+		return domain.DataPage{}, domain.NewError(domain.KindConfig, "data", "the filter field is not valid")
+	}
 
 	orderKey, orderErr := c.OrderKey(ctx, query.Ref)
 	if orderErr != nil {
 		orderKey = ""
 	}
 
-	statement := buildDataSelect(query.Ref, orderKey)
-	rows, err := c.conn.QueryContext(ctx, statement, query.Limit+1, query.Offset)
+	statement := buildDataSelect(query.Ref, orderKey, query.Filter)
+	var args []any
+	if query.Filter != nil {
+		args = []any{query.Filter.Pattern, query.Limit + 1, query.Offset}
+	} else {
+		args = []any{query.Limit + 1, query.Offset}
+	}
+	rows, err := c.conn.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return domain.DataPage{}, safeError("data", c.password, err)
 	}
@@ -57,13 +66,27 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 }
 
 // buildDataSelect builds the one table window statement with backtick
-// identifiers and bound LIMIT/OFFSET values.
-func buildDataSelect(ref domain.ObjectRef, orderKey string) string {
+// identifiers and bound LIMIT/OFFSET values. Insensitive filters lower both
+// sides so collation cannot flip the default; the sensitive path uses the
+// native BINARY regexp form (deprecated in MySQL 8.0.18+ but still supported,
+// and required for MariaDB 10.4 compatibility).
+func buildDataSelect(ref domain.ObjectRef, orderKey string, filter *domain.DataFilter) string {
 	var b strings.Builder
 	b.WriteString("SELECT * FROM ")
 	b.WriteString(quoteIdentifier(ref.Database))
 	b.WriteString(".")
 	b.WriteString(quoteIdentifier(ref.Name))
+	if filter != nil {
+		b.WriteString(" WHERE ")
+		if filter.CaseInsensitive {
+			b.WriteString("LOWER(")
+			b.WriteString(quoteIdentifier(filter.Field))
+			b.WriteString(") REGEXP LOWER(?)")
+		} else {
+			b.WriteString(quoteIdentifier(filter.Field))
+			b.WriteString(" REGEXP BINARY ?")
+		}
+	}
 	if columns := splitOrderKey(orderKey); len(columns) > 0 {
 		b.WriteString(" ORDER BY ")
 		for i, column := range columns {

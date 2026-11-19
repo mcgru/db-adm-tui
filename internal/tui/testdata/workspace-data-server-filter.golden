@@ -1,0 +1,24 @@
+prod-ro · PostgreSQL · orders · r/o                   case: insensitive · app_ro
+┌ objects 5 ───────────────┐ ┌─────────────────────────────────────────────────┐
+│ ▾ orders                 │ │ 1 Details · 2 Indexes · 3 Privileges · 4 Data   │
+│   ▾ public               │ │                                                 │
+│     · customers  ro      │ │ Filtered by regexp on name; 5 matching rows     │
+│     · invoices  rw       │ │ loaded of ~5 total rows (table estimate)        │
+│     · audit_log  —       │ │      id   name    status                        │
+│     · customer_view  ro  │ │ ─────────────────────────────────────────────── │
+│     · orders_seq         │ │   1  1    row-001 active                        │
+│   ▸ schemas              │ │   2  2    row-002 paused                        │
+│ ▸ billing                │ │   3  3    row-003 closed                        │
+│ ▸ Security               │ │   4  4    row-004 active                        │
+│                          │ │   5  5    row-005 paused                        │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+│                          │ │                                                 │
+└──────────────────────────┘ └─────────────────────────────────────────────────┘
+  SQL › SELECT * FROM public.customers WHERE status = 'active' LIMIT 100;       
+loaded 5 matching rows                        m more · Ctrl+F regexp · Esc clear

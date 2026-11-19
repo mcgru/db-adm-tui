@@ -86,7 +86,7 @@ func New() Styles {
 		Title:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Text)).Bold(true),
 		Header:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Muted)).Bold(true),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Muted)).Bold(true),
-		Match:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Base)).Background(lipgloss.Color(Nightshift.Match)),
+		Match:       lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Base)).Background(lipgloss.Color(Nightshift.Match)).Underline(true),
 		Select:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Text)).Background(lipgloss.Color(Nightshift.Selection)).Reverse(true).Bold(true),
 		Cursor:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.Base)).Background(lipgloss.Color(Nightshift.Accent)).Bold(true),
 		ModeRO:      lipgloss.NewStyle().Foreground(lipgloss.Color(Nightshift.ReadOnly)).Bold(true),

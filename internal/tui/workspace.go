@@ -29,10 +29,14 @@ func (m Model) viewTopStatus(width int) string {
 	if database == "" {
 		database = "—"
 	}
+	caseText := "case: insensitive"
+	if !m.caseInsensitive {
+		caseText = "case: sensitive"
+	}
 	left := m.styles.Text.Render(oneLine(p.Label)) +
 		m.styles.Muted.Render(" · "+p.Engine.DisplayName()+" · "+oneLine(database)+" · ") +
 		m.styles.ModeRO.Render("r/o")
-	right := m.styles.Muted.Render(oneLine(p.User))
+	right := m.styles.Muted.Render(caseText + " · " + oneLine(p.User))
 	return ComposeLR(left, right, width)
 }
 
@@ -229,12 +233,25 @@ func (m Model) viewBottom(width int) string {
 		}
 		switch m.focus {
 		case FocusMain:
-			right = "↑↓ rows · m more · ` JSON"
+			switch {
+			case m.data.bufferPattern != "":
+				right = "n/N match · m more · Esc clear"
+			case m.data.serverFilter != nil:
+				right = "m more · Ctrl+F regexp · Esc clear"
+			default:
+				right = "↑↓ · m more · / filter · Ctrl+F · ` JSON"
+			}
 		case FocusQuery:
 			right = "query bar · Ctrl+X chord"
 		default:
 			right = "Enter open"
 		}
+	}
+	switch m.data.prompt {
+	case promptBuffer:
+		right = "type to filter · Enter keep · Esc clear"
+	case promptServer:
+		right = "regexp · Enter apply · Esc cancel"
 	}
 	return ComposeLR(style.Render(oneLine(left)), m.styles.Muted.Render(right), width)
 }

@@ -27,12 +27,16 @@ func (c *connection) Page(ctx context.Context, query domain.DataQuery) (domain.D
 	if query.Ref.Database == "" || query.Ref.Name == "" {
 		return domain.DataPage{}, domain.NewError(domain.KindConfig, "data", "the collection is not selected")
 	}
+	filter, err := buildMongoFilter(query.Filter)
+	if err != nil {
+		return domain.DataPage{}, err
+	}
 
 	opts := options.Find().
 		SetSort(bson.D{{Key: "_id", Value: 1}}).
 		SetSkip(int64(query.Offset)).
 		SetLimit(int64(query.Limit + 1))
-	cursor, err := c.client.Database(query.Ref.Database).Collection(query.Ref.Name).Find(ctx, bson.D{}, opts)
+	cursor, err := c.client.Database(query.Ref.Database).Collection(query.Ref.Name).Find(ctx, filter, opts)
 	if err != nil {
 		return domain.DataPage{}, safeError("data", c.password, err)
 	}
@@ -61,6 +65,23 @@ func (c *connection) estimate(ctx context.Context, ref domain.ObjectRef) (int64,
 		return -1, ""
 	}
 	return total, domain.EstimateCollection
+}
+
+// buildMongoFilter maps one DataFilter to the native regexp query. Field is a
+// dotted path, so a nested field filters without touching the document shape.
+// The empty filter keeps the _id-sorted page unchanged.
+func buildMongoFilter(filter *domain.DataFilter) (bson.D, error) {
+	if filter == nil {
+		return bson.D{}, nil
+	}
+	if !domain.ValidMongoPath(filter.Field) {
+		return nil, domain.NewError(domain.KindConfig, "data", "the filter field is not valid")
+	}
+	regex := bson.D{{Key: "$regex", Value: filter.Pattern}}
+	if filter.CaseInsensitive {
+		regex = append(regex, bson.E{Key: "$options", Value: "i"})
+	}
+	return bson.D{{Key: filter.Field, Value: regex}}, nil
 }
 
 // buildMongoGrid maps ordered documents to a grid with the union of top-level

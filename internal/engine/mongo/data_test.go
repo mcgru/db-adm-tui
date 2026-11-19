@@ -1,6 +1,7 @@
 package mongo
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,60 @@ import (
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 )
+
+func TestBuildMongoFilter(t *testing.T) {
+	filter, err := buildMongoFilter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(filter) != 0 {
+		t.Fatalf("nil filter = %v", filter)
+	}
+
+	filter, err = buildMongoFilter(&domain.DataFilter{
+		Field: "profile.email", Pattern: "^ali", CaseInsensitive: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := bson.D{{Key: "profile.email", Value: bson.D{
+		{Key: "$regex", Value: "^ali"},
+		{Key: "$options", Value: "i"},
+	}}}
+	if !reflect.DeepEqual(filter, want) {
+		t.Fatalf("insensitive filter = %#v, want %#v", filter, want)
+	}
+
+	filter, err = buildMongoFilter(&domain.DataFilter{
+		Field: "email", Pattern: "^ali", CaseInsensitive: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = bson.D{{Key: "email", Value: bson.D{{Key: "$regex", Value: "^ali"}}}}
+	if !reflect.DeepEqual(filter, want) {
+		t.Fatalf("sensitive filter = %#v, want %#v", filter, want)
+	}
+
+	filter, err = buildMongoFilter(&domain.DataFilter{
+		Field: " padded ", Pattern: "x",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = bson.D{{Key: " padded ", Value: bson.D{{Key: "$regex", Value: "x"}}}}
+	if !reflect.DeepEqual(filter, want) {
+		t.Fatalf("exact field filter = %#v, want %#v", filter, want)
+	}
+}
+
+func TestBuildMongoFilterRejectsInvalidField(t *testing.T) {
+	for _, field := range []string{"", ".email", "profile..email", "$where", "profile.$x"} {
+		if _, err := buildMongoFilter(&domain.DataFilter{Field: field}); domain.KindOf(err) != domain.KindConfig {
+			t.Fatalf("field %q err = %v", field, err)
+		}
+	}
+}
 
 func TestBuildMongoGridUnionsFields(t *testing.T) {
 	docs := []bson.D{

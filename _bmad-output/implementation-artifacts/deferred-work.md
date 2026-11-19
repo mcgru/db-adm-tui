@@ -45,3 +45,7 @@
 - source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`
   summary: A primary-key column name containing a comma cannot be represented in `Catalog.OrderKey`'s comma-joined string, so its stable ordering falls back to an invalid column list.
   evidence: `Catalog.OrderKey` returns a single string and the data adapters split it on commas. Normal identifiers, including quoted mixed-case names, are covered; a structured order-key list would be needed before this edge can be handled safely.
+
+- source_spec: `_bmad-output/specs/spec-db-adm-tui/stories/4b-data-search-and-case-mode.md`
+  summary: MongoDB `connection.Page` does not exercise the built regexp filter in a unit test because the concrete driver client has no find seam; only the filter builder and the TUI fake are covered.
+  evidence: `internal/engine/mongo/data.go` calls `Collection.Find` directly and `internal/engine/mongo` has no driver mock. PostgreSQL and MySQL have sqlmock Page tests. Close this with the live MongoDB integration suite or a small find seam.

@@ -103,8 +103,10 @@ func TestSessionPageReturnsTheReaderPage(t *testing.T) {
 	session := newSession(ports.SessionBundle{
 		Session: &fakeConn{}, Catalog: fakeCatalog{}, DataReader: reader,
 	}, profile, Credential{}, f.connector, f.resolver)
+	filter := &domain.DataFilter{Field: "name", Pattern: "^a", CaseInsensitive: true}
 	query := domain.DataQuery{
-		Ref: domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"}, Offset: 100, Limit: 100,
+		Ref:    domain.ObjectRef{Kind: domain.KindTable, Database: "billing", Name: "invoices"},
+		Offset: 100, Limit: 100, Filter: filter,
 	}
 	page, err := session.Page(context.Background(), query)
 	if err != nil {
@@ -112,6 +114,9 @@ func TestSessionPageReturnsTheReaderPage(t *testing.T) {
 	}
 	if !reader.seen || reader.query != query {
 		t.Fatalf("reader query = %+v, want %+v", reader.query, query)
+	}
+	if reader.query.Filter != filter || *reader.query.Filter != *filter {
+		t.Fatalf("filter = %+v, want %+v", reader.query.Filter, filter)
 	}
 	if len(page.Grid.Rows) != 1 || page.Grid.Rows[0].Cells[0].Text != "1" {
 		t.Fatalf("page = %+v", page)

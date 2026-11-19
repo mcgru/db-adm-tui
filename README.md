@@ -4,11 +4,12 @@ Terminal database administration for PostgreSQL, MongoDB, and MySQL/MariaDB,
 built to run on the database host inside a closed environment.
 
 The repository now implements the connection layer, the real catalog tree, and
-read-only data browsing: profiles and import, connect-time password resolution,
-real open/ping/close, lazy database/schema/object navigation, a Security node
-with users and roles, native access markers, and a paged Data tab with a bounded
-loaded window. Object statistics, search, query execution, and privilege
-inspection land in later stories.
+read-only data browsing with search: profiles and import, connect-time password
+resolution, real open/ping/close, lazy database/schema/object navigation, a
+Security node with users and roles, native access markers, a paged Data tab with
+a bounded loaded window, an inline `/` filter with match navigation, a
+server-side `Ctrl+F` regexp filter, and a session-wide search case mode. Object
+statistics, query execution, and privilege inspection land in later stories.
 
 ## Requirements
 
@@ -38,18 +39,21 @@ The tool starts on the profile picker.
 | `m` | Append the next Data page (Data tab focused) |
 | `Ctrl+A` | Append a full-fetch batch and grow the loaded Data range cumulatively |
 | `` ` `` | Data tab: expand/collapse the selected JSON object column into dotted subcolumns |
-| `n` | New connection (`new connection` modal) |
+| `/` or `.` | Data tab: inline literal filter over loaded rows; `n`/`N` walk matches |
+| `Ctrl+F` | Data tab: server-side regexp on the focused column or field |
+| `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
+| `n` | New connection at the picker; next match in a filtered Data view |
+| `N` | Previous match in a filtered Data view (wraps) |
 | `i` | Import from `~/.pgpass` and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker |
 | `Space` | Select an import row, or open/expand the selected tree node |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
-| `Esc` | Cancel a fetch, cancel an attempt, or close the current modal |
+| `Esc` | Cancel a fetch, clear a filter, cancel an attempt, or close the current modal |
 | `Ctrl+D` | Disconnect back to the picker |
 | `Ctrl+Q` | Quit (also works in the workspace) |
 | `Ctrl+X` then `Ctrl+X` | Execute stub (chord; `Ctrl+X …` shows for two seconds) |
-| `Ctrl+X` then `s` / `Ctrl+E` / `Ctrl+W` / `i` | Chord stubs for count, edit, mode, case |
-| `/` or `.` / `Ctrl+F` | Data-tab placeholder; search lands in the next story |
+| `Ctrl+X` then `s` / `Ctrl+E` / `Ctrl+W` | Chord stubs for count, edit, and mode |
 | `?` / `F1` | Help stub |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
 
@@ -153,9 +157,59 @@ headers, and a status line such as `loaded 100 of ~12,480` or
   `cancelled`. A failed page keeps the previous window and shows an inline
   error; `m` retries the next page. A failed first page shows
   `press Enter to load rows` and retries with `m`.
-- `/` and `Ctrl+F` only say `search lands in the next story`; they never query
-  the database. Sorting, editing, export, and query execution are not present
-  in this story.
+- Sorting, editing, export, and query execution are not present in this story.
+
+## Data search and case mode
+
+Search is read-only and never changes paging rules. Both search surfaces follow
+the session case mode, which starts **case-insensitive** and is shown in the top
+status line as `case: insensitive` or `case: sensitive`.
+
+**Buffer filter (`/`).** `/` opens a one-line filter bar over the rows already
+loaded; it matches a literal substring and never queries the database. The view
+narrows as the pattern is typed, every occurrence in the visible cells is
+highlighted with the match style (fill plus underline, so it is not color-only),
+and the bar shows `match X of N`. `Enter` closes the bar and keeps the filter;
+`Esc` clears it and restores every loaded row. An empty pattern also clears the
+filter. `n` and `N` move through matching cells with wrapping; while a filter is
+active, `n` never opens a new connection. A pattern with no match shows
+`No matches for "<pattern>". Esc clears the filter.` and `0 of N loaded`, and
+stays editable. Leading and trailing spaces are part of the pattern. While the
+bar is open, text editing wins: `m`, `PgDown`, and `Down` at the last row do not
+fetch a page. `Tab`, `Shift+Tab`, `Ctrl+D`, `F1`, and `Ctrl+X` chords still act
+globally. Filters reset on an object or tab change.
+
+**Server filter (`Ctrl+F`).** With a cell focused, `Ctrl+F` names its column or
+field (`regexp on email`) and `Enter` runs one parameterized, read-only regexp
+query. PostgreSQL uses `~`/`~*`, MySQL/MariaDB lowercases both sides for the
+insensitive default and uses `REGEXP BINARY` for the sensitive path, and MongoDB
+uses `$regex` with `$options: "i"` when insensitive. The result is paged by `m`
+and `Ctrl+A` exactly like an unfiltered window. The status line counts
+`matching rows`; the banner reads
+`Filtered by regexp on <field>; N matching rows loaded` and labels any catalog
+total as `(table estimate)` or `total unavailable`. `n`/`N` wrap through the
+loaded matching rows. SQL filters the base column even when a JSON subfield is
+focused; MongoDB filters the dotted path. An empty pattern clears an active
+filter and closes the bar. An invalid regexp or engine error keeps the previous
+view, shows the error inline, and leaves the pattern editable. `Esc` restores the
+cached unfiltered view without a query (or reloads the first page if no cache
+exists). `Ctrl+F` does not apply to Results in v1.
+
+Regexp filters run on the server and can scan the whole table: an unanchored
+`$regex`, PostgreSQL `CAST(... AS text)`, and MySQL `LOWER(...)`/`BINARY` forms
+generally cannot use an ordinary index. Expect longer scans on large tables and
+keep `Esc` ready to cancel a fetch.
+
+**Case mode (`Ctrl+X i`).** The toggle applies to both filters: an active buffer
+filter recomputes its matches immediately, and an active server filter refetches
+from offset 0. `Ctrl+X i` also works while a prompt is open. With no filter, only
+the top-status indicator changes. The mode lasts for the session and is not
+persisted.
+
+**Esc order in the Data view.** Cancel a running fetch first, then clear the
+active filter or close its prompt, then leave the tab or pane. A failed fetch
+keeps the previous rows; a failed case toggle restores the previous filter and
+case.
 
 All data reads are read-only and parameterized. Values never become SQL text,
 and identifiers are quoted per engine. Views and sequences have no Data tab.
@@ -282,5 +336,6 @@ intentional layout change:
 go test ./internal/tui -run TestGolden -update
 ```
 
-The story spec lives at
-`_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md`.
+The story specs live at
+`_bmad-output/specs/spec-db-adm-tui/stories/4-data-browsing-and-paging.md` and
+`_bmad-output/specs/spec-db-adm-tui/stories/4b-data-search-and-case-mode.md`.
