@@ -16,6 +16,7 @@ backup() {
 
 shopt -s nullglob
 backup ".pgpass"
+backup ".mypass"
 backup ".config/db-adm-tui/profiles.json"
 for source in "$SRC"/.mongo.*; do
   backup "$(basename "$source")"
@@ -25,7 +26,7 @@ mkdir -p "$DEST/.config/db-adm-tui"
 cp -a "$SRC/." "$DEST/"
 
 chmod 700 "$DEST/.config/db-adm-tui"
-chmod 600 "$DEST/.pgpass" "$DEST"/.mongo.* \
+chmod 600 "$DEST/.pgpass" "$DEST/.mypass" "$DEST"/.mongo.* \
   "$DEST/.config/db-adm-tui/profiles.json" \
   "$DEST/LIVE-TEST-CREDENTIALS.md"
 

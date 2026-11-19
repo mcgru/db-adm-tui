@@ -12,10 +12,11 @@ The repository contains:
 - a disposable live fixture stack for PostgreSQL 18, MariaDB 11.4, and MongoDB
   8.2 in `live-test/`;
 - live-compatibility fixes for hostless MariaDB roles, MongoDB role discovery,
-  and PostgreSQL 18 `MAINTAIN`.
+  and PostgreSQL 18 `MAINTAIN`;
+- `.mypass` import and connection-source support for MySQL/MariaDB.
 
-Story 9 is not complete. Story 9c users/credential files and Story 9a
-row/document editing are still pending.
+Story 9 is not complete. Story 9c user creation and credential-file writes, and
+Story 9a row/document editing, are still pending.
 
 ## Recommended next step
 

@@ -1,0 +1,4 @@
+127.0.0.1:3306:appdb:root:mariadb_root_test_password
+127.0.0.1:3306:appdb:mdb_admin:mdb_admin_test_password
+127.0.0.1:3306:appdb:app_user:mdb_app_test_password
+127.0.0.1:3306:analytics:analyst:mdb_analyst_test_password

@@ -125,6 +125,27 @@ func TestPgpassPathHonorsPGPASSFILE(t *testing.T) {
 	}
 }
 
+func TestMyPassPathHonorsMYPASSFILE(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MYPASSFILE", "~/custom.my")
+	path, err := MyPassPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join(home, "custom.my") {
+		t.Fatalf("path = %q", path)
+	}
+	t.Setenv("MYPASSFILE", "")
+	path, err = MyPassPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join(home, ".mypass") {
+		t.Fatalf("default path = %q", path)
+	}
+}
+
 func TestParsePgpassLinesEmptyPassword(t *testing.T) {
 	entries, warnings := ParsePgpassLines("db1:5432:orders:app_ro:\n")
 	if len(warnings) != 0 || len(entries) != 1 || entries[0].Password != "" {

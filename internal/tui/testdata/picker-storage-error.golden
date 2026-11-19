@@ -2,8 +2,8 @@ db-adm-tui · choose a connection                                      0 profile
                                                                                 
 Profile storage is unreadable. Showing no profiles.                             
                                                                                 
-No profiles yet. Press n to create one, or i to import from ~/.pgpass or        
-~/.mongo.*.                                                                     
+No profiles yet. Press n to create one, or i to import from ~/.pgpass,          
+~/.mypass, or ~/.mongo.*.                                                       
                                                                                 
                                                                                 
                                                                                 

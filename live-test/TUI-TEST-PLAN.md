@@ -65,6 +65,7 @@ docker compose --env-file .env exec -T mongo \
 
 ```text
 .pgpass
+.mypass
 .mongo.root-in-admin
 .mongo.mongo_admin-in-admin
 .mongo.app_user-in-appdb
@@ -74,8 +75,8 @@ LIVE-TEST-CREDENTIALS.md
 ```
 
 `profiles.json` содержит все 12 профилей из таблицы ниже. PostgreSQL-профили
-уже с `allow_no_tls`, MongoDB-профили используют `.mongo.*` с `replicaSet=rs0`
-и правильным `authSource`.
+уже с `allow_no_tls`, MariaDB-профили используют `~/.mypass`, MongoDB-профили
+используют `.mongo.*` с `replicaSet=rs0` и правильным `authSource`.
 
 На машине, где будет запускаться TUI:
 
@@ -92,8 +93,8 @@ ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
 ```
 
 Скрипт делает backup существующих файлов и выставляет права `0600/0700`.
-После этого профили уже видны в TUI; MariaDB-профили запросят пароль при
-подключении. Полный список профилей и паролей — в
+После этого профили уже видны в TUI, включая MariaDB через `~/.mypass`.
+Полный список профилей и паролей — в
 [`home/LIVE-TEST-CREDENTIALS.md`](home/LIVE-TEST-CREDENTIALS.md).
 
 Ручная настройка ниже нужна только если вы не используете готовый пакет или
@@ -145,10 +146,11 @@ PostgreSQL-профиля потребует новый источник пар�
 
 #### MariaDB
 
-TUI не поддерживает `.mypass` как источник профиля. Создайте профили через
-`n` (new connection); пароль будет запрошен один раз и не сохранится в профиле.
+TUI поддерживает `~/.mypass` в формате
+`HOST:PORT:DBNAME:USER:PASSWORD`. Готовый bundle уже содержит нужные строки;
+`install-home.sh` устанавливает файл с правами `0600`.
 
-URI:
+Если создаёте профили вручную через `n`, URI:
 
 ```text
 mysql://root@127.0.0.1:3306/appdb
@@ -157,9 +159,9 @@ mysql://app_user@127.0.0.1:3306/appdb
 mysql://analyst@127.0.0.1:3306/analytics
 ```
 
-После `Enter` введите пароль из `live-test/mariadb/.env` и сохраните профиль.
-Так как у профиля нет password source, пароль будет запрашиваться при каждом
-новом подключении — это ожидаемо.
+При наличии подходящей строки в `~/.mypass` профиль автоматически получит
+`source: ~/.mypass` и не будет запрашивать пароль. Без файла или при
+несовпадении строки TUI запросит пароль вручную.
 
 #### MongoDB
 
@@ -175,8 +177,8 @@ mongodb://analyst@127.0.0.1:57017/analytics
 ```
 
 Пароли — из `live-test/mongo/.env`. После подключения сохраните профиль.
-Как и для MariaDB, пароль будет запрашиваться при каждом новом подключении,
-если для профиля нет локального `~/.mongo.*` source.
+Если для профиля нет локального `~/.mongo.*` source, пароль будет
+запрашиваться при каждом новом подключении.
 
 #### Итоговая таблица профилей
 
@@ -186,10 +188,10 @@ mongodb://analyst@127.0.0.1:57017/analytics
 | `live-pg-admin` | PostgreSQL | импорт `PGPASSFILE` | `appdb` | `db_admin` | `db_admin_test_password` |
 | `live-pg-user` | PostgreSQL | импорт `PGPASSFILE` | `appdb` | `app_user` | `pg_app_test_password` |
 | `live-pg-analyst` | PostgreSQL | импорт `PGPASSFILE` | `analytics` | `analyst` | `pg_analyst_test_password` |
-| `live-maria-root` | MySQL/MariaDB | `n` | `appdb` | `root` | `mariadb_root_test_password` |
-| `live-maria-admin` | MySQL/MariaDB | `n` | `appdb` | `mdb_admin` | `mdb_admin_test_password` |
-| `live-maria-user` | MySQL/MariaDB | `n` | `appdb` | `app_user` | `mdb_app_test_password` |
-| `live-maria-analyst` | MySQL/MariaDB | `n` | `analytics` | `analyst` | `mdb_analyst_test_password` |
+| `live-maria-root` | MySQL/MariaDB | `~/.mypass` | `appdb` | `root` | `mariadb_root_test_password` |
+| `live-maria-admin` | MySQL/MariaDB | `~/.mypass` | `appdb` | `mdb_admin` | `mdb_admin_test_password` |
+| `live-maria-user` | MySQL/MariaDB | `~/.mypass` | `appdb` | `app_user` | `mdb_app_test_password` |
+| `live-maria-analyst` | MySQL/MariaDB | `~/.mypass` | `analytics` | `analyst` | `mdb_analyst_test_password` |
 | `live-mongo-root` | MongoDB | `n` | `admin` | `root` | `mongo_root_test_password` |
 | `live-mongo-admin` | MongoDB | `n` | `admin` | `mongo_admin` | `mongo_admin_test_password` |
 | `live-mongo-user` | MongoDB | `n` | `appdb` | `app_user` | `mongo_app_test_password` |

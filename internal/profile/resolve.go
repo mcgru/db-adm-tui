@@ -33,6 +33,7 @@ func (e *SourceError) Error() string {
 type Resolver struct {
 	home       string
 	pgpassPath string
+	mypassPath string
 }
 
 // NewResolver builds a resolver using the process environment.
@@ -45,20 +46,31 @@ func NewResolver() (*Resolver, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Resolver{home: home, pgpassPath: pgpass}, nil
+	mypass, err := MyPassPath()
+	if err != nil {
+		return nil, err
+	}
+	return &Resolver{home: home, pgpassPath: pgpass, mypassPath: mypass}, nil
 }
 
 // NewResolverAt builds a resolver for an explicit home and password file. It is
 // used by tests and by the composition root when the environment is known.
 func NewResolverAt(home, pgpassPath string) *Resolver {
-	return &Resolver{home: home, pgpassPath: pgpassPath}
+	return &Resolver{
+		home:       home,
+		pgpassPath: pgpassPath,
+		mypassPath: filepath.Join(home, ".mypass"),
+	}
 }
 
 // Home returns the resolver's home directory.
 func (r *Resolver) Home() string { return r.home }
 
-// PgpassPath returns the absolute password-file path in effect.
+// PgpassPath returns the absolute PostgreSQL password-file path in effect.
 func (r *Resolver) PgpassPath() string { return r.pgpassPath }
+
+// MyPassPath returns the absolute MySQL/MariaDB password-file path in effect.
+func (r *Resolver) MyPassPath() string { return r.mypassPath }
 
 // MongoFiles returns the MongoDB connection files under the resolver's home.
 func (r *Resolver) MongoFiles() []string { return MongoFilesIn(r.home) }
@@ -81,7 +93,7 @@ func (r *Resolver) ResolveSource(p domain.Profile) (string, string, error) {
 		return "", "", ErrPromptRequired
 	}
 	switch p.Source.Kind {
-	case domain.SourcePgpass:
+	case domain.SourcePgpass, domain.SourceMySQLPass:
 		path, err := r.expand(p.Source.Path)
 		if err != nil {
 			return "", "", &SourceError{Kind: domain.KindConfig, Source: p.SourceLabel(), Reason: "source path is not valid"}
@@ -138,6 +150,20 @@ func (r *Resolver) MatchPostgres(host string, port int, database, user string) (
 		return "", PgpassEntry{}, false
 	}
 	return r.display(r.pgpassPath), entry, true
+}
+
+// MatchMySQL finds the current ~/.mypass source matching a connection tuple.
+// It returns the display path of the file.
+func (r *Resolver) MatchMySQL(host string, port int, database, user string) (string, MyPassEntry, bool) {
+	pf := ParseMyPass(r.mypassPath)
+	if pf.Missing || pf.Ignored || pf.ReadError != "" {
+		return "", MyPassEntry{}, false
+	}
+	entry, ok := MatchMyPass(pf.Entries, host, port, database, user)
+	if !ok {
+		return "", MyPassEntry{}, false
+	}
+	return r.display(r.mypassPath), entry, true
 }
 
 // MatchMongo finds the first ~/.mongo.* source matching a connection tuple.
@@ -209,7 +235,7 @@ func sourceState(home string, p domain.Profile) string {
 		path = filepath.Join(home, path[2:])
 	}
 	switch p.Source.Kind {
-	case domain.SourcePgpass:
+	case domain.SourcePgpass, domain.SourceMySQLPass:
 		pf := ParsePgpass(path)
 		switch {
 		case pf.Missing:

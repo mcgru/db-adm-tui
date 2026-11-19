@@ -51,15 +51,16 @@ the tunnel above matches the fixture's `.env.example`.
 
 ```text
 home/.pgpass
+home/.mypass
 home/.mongo.*
 home/.config/db-adm-tui/profiles.json
 home/LIVE-TEST-CREDENTIALS.md
 ```
 
 It defines all 12 profiles (root/admin/user/analyst for each engine), with
-PostgreSQL `no TLS` already enabled and MongoDB `replicaSet=rs0`/`authSource`
-coming from the local `.mongo.*` files. Passwords are kept in the credential
-files, not in `profiles.json`.
+PostgreSQL `no TLS` already enabled, MySQL/MariaDB using `~/.mypass`, and
+MongoDB `replicaSet=rs0`/`authSource` coming from the local `.mongo.*` files.
+Passwords are kept in the credential files, not in `profiles.json`.
 
 On the account where the TUI will run:
 
@@ -122,6 +123,7 @@ live-test/
   install-home.sh
   home/
     .pgpass
+    .mypass
     .mongo.*
     .config/db-adm-tui/profiles.json
     LIVE-TEST-CREDENTIALS.md

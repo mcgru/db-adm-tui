@@ -9,8 +9,8 @@ prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02
           │   uri       postgres://app_ro@db1.internal:5432/orders   │          
           │ > label     prod-ro                                      │          
           │                                                          │          
-          │ No password in the URI. It is read from ~/.pgpass or     │          
-          │ ~/.mongo.*, or prompted once.                            │          
+          │ No password in the URI. It is read from ~/.pgpass,       │          
+          │ ~/.mypass, or ~/.mongo.*, or prompted once.              │          
           │                                                          │          
           │ Enter connect · Esc cancel                               │          
           └──────────────────────────────────────────────────────────┘          

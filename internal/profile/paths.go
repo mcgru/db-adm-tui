@@ -75,6 +75,19 @@ func PgpassPath() (string, error) {
 	return filepath.Join(home, ".pgpass"), nil
 }
 
+// MyPassPath returns the MySQL/MariaDB password file path. MYPASSFILE wins
+// over ~/.mypass.
+func MyPassPath() (string, error) {
+	if v := os.Getenv("MYPASSFILE"); v != "" {
+		return ExpandPath(v)
+	}
+	home, err := HomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".mypass"), nil
+}
+
 // MongoFiles returns every regular file matching ~/.mongo.* plus ~/.mongo.
 // Results are sorted so discovery is deterministic.
 func MongoFiles() ([]string, error) {

@@ -83,6 +83,7 @@ func newFixture(t *testing.T) *fixture {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("PGPASSFILE", "")
+	t.Setenv("MYPASSFILE", "")
 	storeDir := filepath.Join(home, ".config", "db-adm-tui")
 	store := profile.NewStore(storeDir)
 	resolver := profile.NewResolverAt(home, filepath.Join(home, ".pgpass"))
@@ -163,11 +164,16 @@ func TestProfilesEmptyAndStorageError(t *testing.T) {
 	}
 }
 
-func TestDiscoverPgpassAndMongo(t *testing.T) {
+func TestDiscoverPasswordFilesAndMongo(t *testing.T) {
 	f := newFixture(t)
 	f.write(t, ".pgpass", strings.Join([]string{
 		"db1:5432:orders:app_ro:first",
 		"db2:5432:billing:billing_ro:second",
+		"malformed",
+	}, "\n"), 0o600)
+	f.write(t, ".mypass", strings.Join([]string{
+		"db1:3306:billing:app_ro:mysqlsecret",
+		"db2:*:analytics:analyst:other",
 		"malformed",
 	}, "\n"), 0o600)
 	f.write(t, ".mongo.analyst", "mongodb://analyst:hunter2@mongo1:27017/analytics\n", 0o600)
@@ -180,7 +186,7 @@ func TestDiscoverPgpassAndMongo(t *testing.T) {
 	if len(d.Status) != 0 {
 		t.Fatalf("status = %v", d.Status)
 	}
-	var pgpass, mongo, warnings int
+	var pgpass, mypass, mongo, warnings int
 	for _, entry := range d.Entries {
 		switch entry.Kind {
 		case "pgpass":
@@ -189,15 +195,25 @@ func TestDiscoverPgpassAndMongo(t *testing.T) {
 				continue
 			}
 			pgpass++
+		case "mypass":
+			if entry.Warning != "" {
+				warnings++
+				continue
+			}
+			mypass++
+			if entry.Port != domain.EngineMySQL.DefaultPort() && entry.Port != 3306 {
+				t.Fatalf("mypass default port = %d", entry.Port)
+			}
 		case "mongo-file":
 			mongo++
 		}
-		if strings.Contains(entry.Label+entry.Source+entry.Warning+entry.Error, "hunter2") {
+		if strings.Contains(entry.Label+entry.Source+entry.Warning+entry.Error, "secret") ||
+			strings.Contains(entry.Label+entry.Source+entry.Warning+entry.Error, "hunter2") {
 			t.Fatalf("discovery leaked a password: %+v", entry)
 		}
 	}
-	if pgpass != 2 || mongo != 2 || warnings != 1 {
-		t.Fatalf("pgpass=%d mongo=%d warnings=%d entries=%+v", pgpass, mongo, warnings, d.Entries)
+	if pgpass != 2 || mypass != 2 || mongo != 2 || warnings != 2 {
+		t.Fatalf("pgpass=%d mypass=%d mongo=%d warnings=%d entries=%+v", pgpass, mypass, mongo, warnings, d.Entries)
 	}
 }
 
@@ -219,6 +235,7 @@ func TestDiscoverReportsInsecurePgpass(t *testing.T) {
 func TestImportCreatesAndRefreshesProfiles(t *testing.T) {
 	f := newFixture(t)
 	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
+	f.write(t, ".mypass", "mysql1:3306:billing:app_ro:mysqlsecret\n", 0o600)
 	f.write(t, ".mongo.analyst", "mongodb://analyst:hunter2@mongo1:27017/analytics?authSource=admin\n", 0o600)
 	d := f.svc.Discover()
 	var selected []ImportEntry
@@ -231,18 +248,23 @@ func TestImportCreatesAndRefreshesProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.Created != 2 || summary.Updated != 0 {
+	if summary.Created != 3 || summary.Updated != 0 {
 		t.Fatalf("summary = %+v", summary)
 	}
 	views, err := f.svc.Profiles(context.Background())
-	if err != nil || len(views) != 2 {
+	if err != nil || len(views) != 3 {
 		t.Fatalf("views = %+v, %v", views, err)
 	}
 	for _, view := range views {
 		if view.Profile.Source == nil {
 			t.Fatalf("profile lost source: %+v", view.Profile)
 		}
-		if view.Profile.Engine == domain.EngineMongoDB {
+		switch view.Profile.Engine {
+		case domain.EngineMySQL:
+			if view.Profile.Source.Kind != domain.SourceMySQLPass {
+				t.Fatalf("mysql source = %+v", view.Profile.Source)
+			}
+		case domain.EngineMongoDB:
 			selector := view.Profile.Source.Selector
 			if !strings.Contains(selector, "authSource=admin") || strings.Contains(selector, "hunter2") {
 				t.Fatalf("mongo selector = %q", selector)
@@ -253,7 +275,7 @@ func TestImportCreatesAndRefreshesProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"secret", "hunter2"} {
+	for _, secret := range []string{"secret", "mysqlsecret", "hunter2"} {
 		if strings.Contains(string(data), secret) {
 			t.Fatalf("profiles.json leaked %q", secret)
 		}
@@ -451,6 +473,7 @@ func TestConnectFailureNamesProfileAndSourceWithoutSecret(t *testing.T) {
 func TestPrepareNewConnectionMatchesSources(t *testing.T) {
 	f := newFixture(t)
 	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
+	f.write(t, ".mypass", "mysql1:3306:billing:billing_ro:mysqlsecret\n", 0o600)
 	f.write(t, ".mongo.analyst", "mongodb://analyst:pw@mongo1:27017/analytics\n", 0o600)
 
 	pg, err := f.svc.PrepareNewConnection(context.Background(), "postgres://app_ro@db1:5432/orders", "prod-ro")
@@ -471,8 +494,8 @@ func TestPrepareNewConnectionMatchesSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mysql.Source != nil {
-		t.Fatalf("mysql must not match a source: %+v", mysql.Source)
+	if mysql.Source == nil || mysql.Source.Kind != domain.SourceMySQLPass || mysql.Source.Path != "~/.mypass" {
+		t.Fatalf("mysql source = %+v", mysql.Source)
 	}
 }
 

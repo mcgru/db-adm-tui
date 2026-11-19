@@ -19,7 +19,7 @@ func (m *Model) openImportModal() {
 	m.importEmpty = discovery.Empty
 	m.importSel = map[string]bool{}
 	for _, entry := range discovery.Entries {
-		if entry.Selectable && entry.Kind == "pgpass" {
+		if entry.Selectable && (entry.Kind == "pgpass" || entry.Kind == "mypass") {
 			m.importSel[entry.ID] = true
 		}
 	}
@@ -178,7 +178,7 @@ func (m Model) viewImport() string {
 	}
 
 	if m.importEmpty || (len(m.importEntries) == 0 && len(m.importStatus) == 0) {
-		for _, line := range wrapText("No ~/.pgpass or ~/.mongo.* files found. Press n to create a connection.", inner) {
+		for _, line := range wrapText("No ~/.pgpass, ~/.mypass, or ~/.mongo.* files found. Press n to create a connection.", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
 	} else if len(m.importEntries) > 0 {

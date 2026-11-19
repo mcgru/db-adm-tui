@@ -720,19 +720,20 @@ func TestStorageUnreadableKeepsPickerUsable(t *testing.T) {
 func TestImportFlowCreatesProfiles(t *testing.T) {
 	e := newTestEnv(t)
 	e.write(t, ".pgpass", "db1.internal:5432:orders:app_ro:pgsecret\n", 0o600)
+	e.write(t, ".mypass", "mysql1.internal:3306:billing:billing_ro:mysecret\n", 0o600)
 	e.write(t, ".mongo.analyst", "mongodb://analyst:mongosecret@mongo1:27017/analytics\n", 0o600)
 	m := e.model(t)
 	m, _ = press(t, m, "i")
 	if m.modal != modalImport {
 		t.Fatal("import modal not open")
 	}
-	if len(m.importEntries) < 2 {
+	if len(m.importEntries) < 3 {
 		t.Fatalf("import entries = %+v", m.importEntries)
 	}
-	// pgpass entries are selected by default; mongo files are not.
+	// Password-file entries are selected by default; mongo files are not.
 	for _, entry := range m.importEntries {
-		if entry.Kind == "pgpass" && entry.Selectable && !m.importSel[entry.ID] {
-			t.Fatalf("pgpass entry not selected by default: %+v", entry)
+		if (entry.Kind == "pgpass" || entry.Kind == "mypass") && entry.Selectable && !m.importSel[entry.ID] {
+			t.Fatalf("%s entry not selected by default: %+v", entry.Kind, entry)
 		}
 		if entry.Kind == "mongo-file" && m.importSel[entry.ID] {
 			t.Fatalf("mongo entry selected by default: %+v", entry)
@@ -746,7 +747,7 @@ func TestImportFlowCreatesProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 {
+	if len(views) != 2 {
 		t.Fatalf("profiles = %+v", views)
 	}
 	if !strings.Contains(m.message, "imported") {
@@ -1121,7 +1122,7 @@ func TestImportModalEmptyState(t *testing.T) {
 	m := e.model(t)
 	m, _ = press(t, m, "i")
 	view := StripANSI(m.View().Content)
-	if !strings.Contains(view, "No ~/.pgpass or ~/.mongo.* files found") {
+	if !strings.Contains(view, "No ~/.pgpass, ~/.mypass, or ~/.mongo.* files found") {
 		t.Fatalf("missing empty state:\n%s", view)
 	}
 }

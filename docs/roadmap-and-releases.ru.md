@@ -12,10 +12,12 @@ _[English](roadmap-and-releases.md) | Русский_
 - одноразовый live-стенд PostgreSQL 18, MariaDB 11.4 и MongoDB 8.2 в
   `live-test/`;
 - live-совместимость для hostless-ролей MariaDB, обнаружения ролей MongoDB и
-  PostgreSQL 18 `MAINTAIN`.
+  PostgreSQL 18 `MAINTAIN`;
+- импорт и connection-source `~/.mypass` для MySQL/MariaDB.
 
-Story 9 не завершена. Story 9c (пользователи и credential-файлы) и Story 9a
-(редактирование строк/документов) пока не реализованы.
+Story 9 не завершена. Story 9c (создание пользователей и запись
+credential-файлов) и Story 9a (редактирование строк/документов) пока не
+реализованы.
 
 ## Рекомендуемый следующий шаг
 

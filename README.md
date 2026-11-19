@@ -49,7 +49,7 @@ The tool starts on the profile picker.
 | `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
 | `n` | New connection at the picker; next tree-search or filtered Data view match |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
-| `i` | Import from `~/.pgpass` and `~/.mongo.*` |
+| `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker; with a role selected in the tree, open the privilege matrix focused on that role |
 | `+` | With the roles group selected: create a role. With a role selected: grant privileges or assign the role. Requires `r/w` |
 | `-` | With a role selected: revoke privileges, remove an assignment, or drop the role. Requires `r/w` |
@@ -440,8 +440,8 @@ remove the file by hand before saving again. The picker source column warns
 `ignored`, `missing`, `stale`, or `error` when a source is unusable. One profile
 is kept per selected `~/.mongo.*` source file, so saving a new URI that matches
 that source refreshes that profile (including its stored non-secret Mongo host
-list and options); a changed `~/.pgpass` selector leaves the old profile visible
-as `stale` and creates a new one on re-import.
+list and options); a changed `~/.pgpass` or `~/.mypass` selector leaves the old
+profile visible as `stale` and creates a new one on re-import.
 
 ## Import
 
@@ -462,6 +462,23 @@ The parser follows psql semantics:
   lines.
 - A missing file is an empty state, not an error.
 
+### MySQL/MariaDB (`~/.mypass`)
+
+The format is the same as `.pgpass`:
+
+```text
+host:port:database:user:password
+```
+
+- `MYPASSFILE` is honored; otherwise `~/.mypass` is used.
+- Owner-only permissions are required; a file readable by group/other is
+  ignored.
+- `#` comments, `\` escaping, and `*` wildcards work as in `.pgpass`.
+- `*` matches any host, port, database, or user; the first matching line wins.
+- A matching line is attached to the profile as `source: ~/.mypass`; the
+  password is read at connect time and never stored in the profile.
+- A missing file is an empty state, not an error.
+
 ### MongoDB (`~/.mongo.*`)
 
 Every `~/.mongo.*` file plus `~/.mongo` is listed, one row per file. Select the
@@ -471,9 +488,6 @@ not supported in v1. A malformed line makes that file show an `error` tag naming
 the file and it does not import, while other files remain selectable. The source
 selector preserves non-secret options such as `authSource`, `replicaSet`, and
 `tls`; password keys are stripped before the profile is written.
-
-MySQL/MariaDB has no import source in v1; create those profiles from a URI or a
-prompted password.
 
 ## New connection
 
@@ -492,9 +506,9 @@ and an empty label defaults to `database@host`. A URI containing
 accepted by the new-connection form in this story; put TLS/auth options in the
 selected `~/.mongo.*` source file instead.
 
-On submit, the tool looks for a matching `~/.pgpass` line or `~/.mongo.*` URI.
-If one exists, its password is used; otherwise the form reveals a masked
-one-time password field. If a matched source password is rejected, the form
+On submit, the tool looks for a matching `~/.pgpass`, `~/.mypass`, or
+`~/.mongo.*` source. If one exists, its password is used; otherwise the form
+reveals a masked one-time password field. If a matched source password is rejected, the form
 offers a one-time password instead and the saved profile becomes prompt-based.
 On success the picker offers
 `Save <label> as a profile? Enter save · Esc skip`. Saving stores the
@@ -503,7 +517,7 @@ non-secret fields and any matched source pointer, never the password.
 ## Password behavior
 
 - Passwords are resolved from the saved source **on every connect**; changes to
-  `~/.pgpass` or the selected `~/.mongo.*` file are respected.
+  `~/.pgpass`, `~/.mypass`, or the selected `~/.mongo.*` file are respected.
 - A saved profile with no source opens a centered masked
   `Password for <profile>` modal. `Enter` connects and `Esc` returns to the
   picker. The value is never stored.

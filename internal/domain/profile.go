@@ -16,6 +16,8 @@ type SourceKind string
 const (
 	// SourcePgpass points at a psql-compatible password file.
 	SourcePgpass SourceKind = "pgpass"
+	// SourceMySQLPass points at a MySQL/MariaDB-compatible password file.
+	SourceMySQLPass SourceKind = "mypass"
 	// SourceMongoFile points at a selected ~/.mongo.* file.
 	SourceMongoFile SourceKind = "mongo-file"
 	// SourcePrompt means no file; the password is prompted once per connect.
@@ -25,7 +27,7 @@ const (
 // Valid reports whether k is a known source kind.
 func (k SourceKind) Valid() bool {
 	switch k {
-	case SourcePgpass, SourceMongoFile, SourcePrompt:
+	case SourcePgpass, SourceMySQLPass, SourceMongoFile, SourcePrompt:
 		return true
 	}
 	return false

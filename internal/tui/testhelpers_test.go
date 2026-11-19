@@ -677,6 +677,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("PGPASSFILE", "")
+	t.Setenv("MYPASSFILE", "")
 	store := profile.NewStore(filepath.Join(home, ".config", "db-adm-tui"))
 	resolver := profile.NewResolverAt(home, filepath.Join(home, ".pgpass"))
 	connector := &fakeConnector{}

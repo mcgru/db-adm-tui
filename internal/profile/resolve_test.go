@@ -42,6 +42,27 @@ func TestResolvePgpassRereadsFile(t *testing.T) {
 	}
 }
 
+func TestResolveMyPassRereadsFile(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".mypass")
+	writeFile(t, path, "db1:3306:orders:app_ro:first\n", 0o600)
+	resolver := NewResolverAt(home, filepath.Join(home, ".pgpass"))
+	p := domain.Profile{
+		Label: "prod-mysql", Engine: domain.EngineMySQL, Host: "db1", Port: 3306,
+		Database: "orders", User: "app_ro",
+		Source: &domain.Source{Kind: domain.SourceMySQLPass, Path: "~/.mypass"},
+	}
+	secret, err := resolver.Resolve(p)
+	if err != nil || secret != "first" {
+		t.Fatalf("resolve = %q, %v", secret, err)
+	}
+	writeFile(t, path, "db1:3306:*:app_ro:second\n", 0o600)
+	secret, err = resolver.Resolve(p)
+	if err != nil || secret != "second" {
+		t.Fatalf("re-read wildcard = %q, %v", secret, err)
+	}
+}
+
 func TestResolvePgpassFailuresNameSource(t *testing.T) {
 	home := t.TempDir()
 	path := filepath.Join(home, ".pgpass")

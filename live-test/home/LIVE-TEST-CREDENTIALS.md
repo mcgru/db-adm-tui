@@ -20,22 +20,23 @@ ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
 
 Скрипт:
 
-- копирует `.pgpass`, `.mongo.*` и
+- копирует `.pgpass`, `.mypass`, `.mongo.*` и
   `.config/db-adm-tui/profiles.json` в `$HOME`;
 - делает backup существующих файлов с суффиксом
   `.live-test-backup-<timestamp>`;
 - выставляет `0700` на `~/.config/db-adm-tui`;
-- выставляет `0600` на `.pgpass`, `.mongo.*`, `profiles.json` и этот файл.
+- выставляет `0600` на `.pgpass`, `.mypass`, `.mongo.*`, `profiles.json` и
+  этот файл.
 
 Если вы копируете вручную, обязательно выполните после копирования:
 
 ```bash
 chmod 700 ~/.config/db-adm-tui
-chmod 600 ~/.pgpass ~/.mongo.* ~/.config/db-adm-tui/profiles.json
+chmod 600 ~/.pgpass ~/.mypass ~/.mongo.* ~/.config/db-adm-tui/profiles.json
 ```
 
-`~/.pgpass` с правами не `0600` игнорируется, и PostgreSQL-профили не смогут
-получить пароль.
+`~/.pgpass` и `~/.mypass` с правами не `0600` игнорируются, и
+соответствующие профили не смогут получить пароль.
 
 ## Что появится в TUI
 
@@ -47,17 +48,19 @@ chmod 600 ~/.pgpass ~/.mongo.* ~/.config/db-adm-tui/profiles.json
 | `live-pg-admin` | PostgreSQL | `appdb` | `db_admin` | `db_admin_test_password` | `~/.pgpass`, no TLS |
 | `live-pg-user` | PostgreSQL | `appdb` | `app_user` | `pg_app_test_password` | `~/.pgpass`, no TLS |
 | `live-pg-analyst` | PostgreSQL | `analytics` | `analyst` | `pg_analyst_test_password` | `~/.pgpass`, no TLS |
-| `live-maria-root` | MariaDB | `appdb` | `root` | `mariadb_root_test_password` | prompt |
-| `live-maria-admin` | MariaDB | `appdb` | `mdb_admin` | `mdb_admin_test_password` | prompt |
-| `live-maria-user` | MariaDB | `appdb` | `app_user` | `mdb_app_test_password` | prompt |
-| `live-maria-analyst` | MariaDB | `analytics` | `analyst` | `mdb_analyst_test_password` | prompt |
+| `live-maria-root` | MariaDB | `appdb` | `root` | `mariadb_root_test_password` | `~/.mypass` |
+| `live-maria-admin` | MariaDB | `appdb` | `mdb_admin` | `mdb_admin_test_password` | `~/.mypass` |
+| `live-maria-user` | MariaDB | `appdb` | `app_user` | `mdb_app_test_password` | `~/.mypass` |
+| `live-maria-analyst` | MariaDB | `analytics` | `analyst` | `mdb_analyst_test_password` | `~/.mypass` |
 | `live-mongo-root` | MongoDB | `admin` | `root` | `mongo_root_test_password` | `~/.mongo.root-in-admin` |
 | `live-mongo-admin` | MongoDB | `admin` | `mongo_admin` | `mongo_admin_test_password` | `~/.mongo.mongo_admin-in-admin` |
 | `live-mongo-user` | MongoDB | `appdb` | `app_user` | `mongo_app_test_password` | `~/.mongo.app_user-in-appdb` |
 | `live-mongo-analyst` | MongoDB | `analytics` | `analyst` | `mongo_analyst_test_password` | `~/.mongo.analyst-in-analytics` |
 
-MariaDB пока не поддерживает файловый password source в TUI, поэтому пароль
-запрашивается при каждом новом подключении. Это ожидаемо.
+MariaDB-профили используют `~/.mypass` в формате
+`HOST:PORT:DBNAME:USER:PASSWORD`; `*` в полях host/port/database/user работает
+как wildcard. Если `.mypass` отсутствует или не `0600`, TUI запросит пароль
+вручную.
 
 PostgreSQL-профили уже содержат `allow_no_tls: true`, потому что стенд работает
 без TLS. MongoDB-профили используют `replicaSet=rs0` и нужный `authSource` из

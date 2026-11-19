@@ -163,3 +163,25 @@ func MatchPgpass(entries []PgpassEntry, host string, port int, database, user st
 func pgpassMatch(pattern, value string) bool {
 	return pattern == "*" || pattern == value
 }
+
+// MyPassEntry and MyPassFile use the same five-field layout as .pgpass:
+// HOST:PORT:DBNAME:USER:PASSWORD.
+type MyPassEntry = PgpassEntry
+type MyPassWarning = PgpassWarning
+type MyPassFile = PgpassFile
+
+// ParseMyPass reads a MySQL/MariaDB password file with the same escaping,
+// comment, wildcard, and 0600 permission rules as .pgpass.
+func ParseMyPass(path string) MyPassFile {
+	return ParsePgpass(path)
+}
+
+// ParseMyPassLines parses .mypass content.
+func ParseMyPassLines(data string) ([]MyPassEntry, []MyPassWarning) {
+	return ParsePgpassLines(data)
+}
+
+// MatchMyPass returns the first .mypass entry matching the connection tuple.
+func MatchMyPass(entries []MyPassEntry, host string, port int, database, user string) (MyPassEntry, bool) {
+	return MatchPgpass(entries, host, port, database, user)
+}

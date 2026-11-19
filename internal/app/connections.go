@@ -232,6 +232,47 @@ func (s *Service) Discover() Discovery {
 		})
 	}
 
+	mypassPath := s.resolver.MyPassPath()
+	displayMyPass := s.resolver.DisplayPath(mypassPath)
+	mf := profile.ParseMyPass(mypassPath)
+	switch {
+	case mf.Ignored:
+		result.Status = append(result.Status, fmt.Sprintf("%s is ignored: %s.", displayMyPass, mf.IgnoreReason))
+	case mf.ReadError != "":
+		result.Status = append(result.Status, fmt.Sprintf("%s is unreadable: %s.", displayMyPass, mf.ReadError))
+	}
+	for _, entry := range mf.Entries {
+		host := concreteHost(entry.Host)
+		port := concretePortFor(domain.EngineMySQL, entry.Port)
+		database := concreteDatabase(entry.Database)
+		user := concreteUser(entry.User)
+		engine := domain.EngineMySQL
+		result.Entries = append(result.Entries, ImportEntry{
+			ID:         fmt.Sprintf("mypass:%d:%s:%s:%s:%s", entry.Line, host, entry.Port, database, user),
+			Kind:       "mypass",
+			Source:     displayMyPass,
+			Engine:     engine,
+			Host:       host,
+			Port:       port,
+			Database:   database,
+			User:       user,
+			Label:      autoImportLabel(engine, host, database, user),
+			Selectable: true,
+			Line:       entry.Line,
+		})
+	}
+	for _, warning := range mf.Warnings {
+		result.Entries = append(result.Entries, ImportEntry{
+			ID:         fmt.Sprintf("mypass:warning:%d", warning.Line),
+			Kind:       "mypass",
+			Source:     displayMyPass,
+			Engine:     domain.EngineMySQL,
+			Warning:    fmt.Sprintf("line %d: %s", warning.Line, warning.Reason),
+			Selectable: false,
+			Line:       warning.Line,
+		})
+	}
+
 	files := s.resolver.MongoFiles()
 	for _, path := range files {
 		display := s.resolver.DisplayPath(path)
@@ -482,6 +523,10 @@ func (s *Service) PrepareNewConnection(ctx context.Context, raw, label string) (
 		if source, _, ok := s.resolver.MatchPostgres(p.Host, p.Port, p.Database, p.User); ok {
 			p.Source = &domain.Source{Kind: domain.SourcePgpass, Path: source}
 		}
+	case domain.EngineMySQL:
+		if source, _, ok := s.resolver.MatchMySQL(p.Host, p.Port, p.Database, p.User); ok {
+			p.Source = &domain.Source{Kind: domain.SourceMySQLPass, Path: source}
+		}
 	case domain.EngineMongoDB:
 		if source, entry, ok := s.resolver.MatchMongo(p.Host, p.Port, p.Database, p.User); ok {
 			p.Source = &domain.Source{Kind: domain.SourceMongoFile, Path: source, Selector: entry.Selector}
@@ -589,7 +634,10 @@ func (s *Service) touchLastUsed(ctx context.Context, p domain.Profile, now time.
 
 func (s *Service) entryProfile(entry ImportEntry) domain.Profile {
 	source := &domain.Source{Kind: domain.SourcePgpass, Path: entry.Source}
-	if entry.Kind == "mongo-file" {
+	switch entry.Kind {
+	case "mypass":
+		source = &domain.Source{Kind: domain.SourceMySQLPass, Path: entry.Source}
+	case "mongo-file":
 		source = &domain.Source{Kind: domain.SourceMongoFile, Path: entry.Source, Selector: entry.Selector}
 	}
 	return domain.Profile{
@@ -652,13 +700,17 @@ func concreteHost(host string) string {
 }
 
 func concretePort(port string) int {
+	return concretePortFor(domain.EnginePostgreSQL, port)
+}
+
+func concretePortFor(engine domain.Engine, port string) int {
 	if port == "*" {
-		return domain.EnginePostgreSQL.DefaultPort()
+		return engine.DefaultPort()
 	}
 	if n, err := parsePort(port); err == nil {
 		return n
 	}
-	return domain.EnginePostgreSQL.DefaultPort()
+	return engine.DefaultPort()
 }
 
 func concreteDatabase(database string) string {

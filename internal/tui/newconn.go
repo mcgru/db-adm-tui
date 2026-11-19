@@ -341,7 +341,7 @@ func (m Model) viewNewConn() string {
 		body = append(body, m.inputLine("password", m.newPassword.View(), m.newFocus == fieldPassword, inner))
 	}
 	body = append(body, "")
-	for _, line := range wrapText("No password in the URI. It is read from ~/.pgpass or ~/.mongo.*, or prompted once.", inner) {
+	for _, line := range wrapText("No password in the URI. It is read from ~/.pgpass, ~/.mypass, or ~/.mongo.*, or prompted once.", inner) {
 		body = append(body, m.styles.Muted.Render(line))
 	}
 	if m.newErr != "" {

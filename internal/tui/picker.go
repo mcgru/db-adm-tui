@@ -134,7 +134,7 @@ func (m Model) viewPicker(regions layout.Regions) string {
 	}
 
 	if len(m.profiles) == 0 {
-		for _, line := range wrapText("No profiles yet. Press n to create one, or i to import from ~/.pgpass or ~/.mongo.*.", width) {
+		for _, line := range wrapText("No profiles yet. Press n to create one, or i to import from ~/.pgpass, ~/.mypass, or ~/.mongo.*.", width) {
 			lines = append(lines, m.styles.Muted.Render(line))
 		}
 	} else {
