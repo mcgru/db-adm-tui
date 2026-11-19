@@ -29,6 +29,19 @@ make build
 ./bin/db-adm-tui
 ```
 
+### Screenshots
+
+![Profile picker](docs/screenshots/ss.profiles.png)
+
+![PostgreSQL profile](docs/screenshots/ss.postgres.png)
+
+![MongoDB profile](docs/screenshots/ss.mongodb.png)
+
+![MySQL profile](docs/screenshots/ss.mysql.png)
+
+
+### Profile picker
+
 The tool starts on the profile picker.
 
 | Key | Action |
