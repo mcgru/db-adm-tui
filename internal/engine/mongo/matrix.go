@@ -23,13 +23,18 @@ func (c *connection) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) 
 		return domain.RoleMatrix{}, err
 	}
 	roleByKey := map[string]domain.RoleRef{}
+	var customRoles []domain.RoleRef
 	for _, role := range roles {
 		ref := matrixRoleRef(role)
-		matrix.Roles = append(matrix.Roles, ref)
 		roleByKey[ref.Key()] = ref
 		if !ref.Builtin {
 			matrix.Principals = append(matrix.Principals, ref)
+			customRoles = append(customRoles, ref)
 		}
+	}
+	usedRoles := map[string]domain.RoleRef{}
+	useRole := func(ref domain.RoleRef) {
+		usedRoles[ref.Key()] = ref
 	}
 	for _, user := range users {
 		ref := domain.RoleRef{
@@ -55,6 +60,7 @@ func (c *connection) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) 
 					Kind:     domain.KindRole,
 				}
 			}
+			useRole(memberRole)
 			if matrix.Members[key] == nil {
 				matrix.Members[key] = map[string]bool{}
 			}
@@ -82,11 +88,18 @@ func (c *connection) RoleMatrix(ctx context.Context) (domain.RoleMatrix, error) 
 					Kind:     domain.KindRole,
 				}
 			}
+			useRole(inheritedRef)
 			if matrix.Members[key] == nil {
 				matrix.Members[key] = map[string]bool{}
 			}
 			matrix.Members[key][inheritedRef.Key()] = true
 		}
+	}
+	for _, ref := range customRoles {
+		useRole(ref)
+	}
+	for _, ref := range usedRoles {
+		matrix.Roles = append(matrix.Roles, ref)
 	}
 	sort.Slice(matrix.Principals, func(i, j int) bool {
 		if matrix.Principals[i].Name == matrix.Principals[j].Name {
@@ -170,8 +183,7 @@ func (c *connection) matrixUsers(ctx context.Context) ([]matrixUser, error) {
 		Users []matrixUser `bson:"users"`
 	}
 	err := c.client.Database("admin").RunCommand(ctx, bson.D{
-		{Key: "usersInfo", Value: 1},
-		{Key: "forAllDBs", Value: true},
+		{Key: "usersInfo", Value: bson.D{{Key: "forAllDBs", Value: true}}},
 	}).Decode(&result)
 	if err != nil {
 		return nil, safeError("role-matrix", c.password, err)
@@ -180,21 +192,40 @@ func (c *connection) matrixUsers(ctx context.Context) ([]matrixUser, error) {
 }
 
 func (c *connection) matrixRoles(ctx context.Context, includeBuiltin, privileges bool) ([]matrixRole, error) {
-	command := bson.D{
-		{Key: "rolesInfo", Value: 1},
-		{Key: "forAllDBs", Value: true},
-		{Key: "showBuiltinRoles", Value: includeBuiltin},
-	}
-	if privileges {
-		command = append(command, bson.E{Key: "showPrivileges", Value: true})
-	}
-	var result struct {
-		Roles []matrixRole `bson:"roles"`
-	}
-	if err := c.client.Database("admin").RunCommand(ctx, command).Decode(&result); err != nil {
+	names, err := c.client.ListDatabaseNames(ctx, bson.D{})
+	if err != nil {
 		return nil, safeError("role-matrix", c.password, err)
 	}
-	return result.Roles, nil
+	sort.Strings(names)
+	seen := map[string]bool{}
+	var roles []matrixRole
+	for _, name := range names {
+		if name == "config" || name == "local" {
+			continue
+		}
+		command := bson.D{
+			{Key: "rolesInfo", Value: 1},
+			{Key: "showBuiltinRoles", Value: includeBuiltin},
+		}
+		if privileges {
+			command = append(command, bson.E{Key: "showPrivileges", Value: true})
+		}
+		var result struct {
+			Roles []matrixRole `bson:"roles"`
+		}
+		if err := c.client.Database(name).RunCommand(ctx, command).Decode(&result); err != nil {
+			return nil, safeError("role-matrix", c.password, err)
+		}
+		for _, role := range result.Roles {
+			key := role.DB + "\x00" + role.Role
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			roles = append(roles, role)
+		}
+	}
+	return roles, nil
 }
 
 // mongoMatrixPrivilegeMatches returns true only for the exact resource cell

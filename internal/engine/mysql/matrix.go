@@ -161,7 +161,11 @@ ORDER BY User, Host`)
 				return nil, nil, nil, false, safeError("role-matrix", c.password, err)
 			}
 			if strings.EqualFold(isRole, "Y") {
-				roles[user+"@"+host] = true
+				if host == "" {
+					roles[user] = true
+				} else {
+					roles[user+"@"+host] = true
+				}
 			}
 		}
 		if err := rows.Err(); err != nil {
@@ -193,9 +197,16 @@ ORDER BY User, Host`)
 			return nil, nil, nil, false, safeError("role-matrix", c.password, err)
 		}
 		name := user + "@" + host
+		isRole := roles[name]
+		if !isRole && host == "" {
+			isRole = roles[user]
+		}
 		kind := domain.KindUser
-		if roles[name] {
+		if isRole {
 			kind = domain.KindRole
+			if host == "" {
+				name = user
+			}
 		}
 		ref := domain.RoleRef{Engine: domain.EngineMySQL, Name: name, Kind: kind}
 		principals = append(principals, ref)
@@ -217,5 +228,5 @@ ORDER BY User, Host`)
 func normalizeMySQLGrantee(value string) string {
 	value = strings.ReplaceAll(value, "`", "")
 	value = strings.ReplaceAll(value, "'", "")
-	return value
+	return strings.TrimSuffix(value, "@")
 }

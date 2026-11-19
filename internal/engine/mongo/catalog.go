@@ -121,26 +121,12 @@ func (c *connection) users(ctx context.Context) ([]domain.Principal, error) {
 }
 
 func (c *connection) roles(ctx context.Context) ([]domain.Principal, error) {
-	var result struct {
-		Roles []struct {
-			Role      string `bson:"role"`
-			DB        string `bson:"db"`
-			IsBuiltin bool   `bson:"isBuiltin"`
-			Roles     []struct {
-				Role string `bson:"role"`
-				DB   string `bson:"db"`
-			} `bson:"roles"`
-		} `bson:"roles"`
-	}
-	err := c.client.Database("admin").RunCommand(ctx, bson.D{
-		{Key: "rolesInfo", Value: bson.D{{Key: "forAllDBs", Value: true}}},
-		{Key: "showBuiltinRoles", Value: false},
-	}).Decode(&result)
+	roles, err := c.matrixRoles(ctx, false, false)
 	if err != nil {
-		return nil, safeError("catalog", c.password, err)
+		return nil, err
 	}
 	var principals []domain.Principal
-	for _, role := range result.Roles {
+	for _, role := range roles {
 		if role.IsBuiltin {
 			continue
 		}

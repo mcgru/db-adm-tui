@@ -37,7 +37,15 @@ var mysqlRolePrivileges = map[domain.ObjectKind]map[string]bool{
 }
 
 func (c *connection) CreateRole(ctx context.Context, role domain.RoleRef) (domain.MutationResult, error) {
-	statement, err := mysqlRoleStatement("CREATE ROLE", role, "")
+	mariadb, err := c.isMariaDB(ctx)
+	if err != nil {
+		return domain.MutationResult{}, err
+	}
+	quote := quoteMySQLAccount
+	if mariadb {
+		quote = quoteMySQLRole
+	}
+	statement, err := mysqlRoleStatementWith("CREATE ROLE", role, "", quote)
 	if err != nil {
 		return domain.MutationResult{}, err
 	}
@@ -94,10 +102,14 @@ func (c *connection) execRole(ctx context.Context, statement string) (domain.Mut
 }
 
 func mysqlRoleStatement(verb string, role domain.RoleRef, suffix string) (string, error) {
+	return mysqlRoleStatementWith(verb, role, suffix, quoteMySQLRole)
+}
+
+func mysqlRoleStatementWith(verb string, role domain.RoleRef, suffix string, quote func(string) string) (string, error) {
 	if strings.TrimSpace(role.Name) == "" {
 		return "", domain.NewError(domain.KindConfig, "role", "the role name is empty")
 	}
-	return verb + " " + quoteMySQLAccount(role.Name) + suffix, nil
+	return verb + " " + quote(role.Name) + suffix, nil
 }
 
 func mysqlMembershipStatement(verb string, membership domain.RoleMembership) (string, error) {
@@ -108,11 +120,11 @@ func mysqlMembershipStatement(verb string, membership domain.RoleMembership) (st
 		return "", domain.NewError(domain.KindConfig, "role", "a role cannot be granted to itself")
 	}
 	if verb == "REVOKE" {
-		return "REVOKE " + quoteMySQLAccount(membership.Role.Name) +
-			" FROM " + quoteMySQLAccount(membership.Member.Name), nil
+		return "REVOKE " + quoteMySQLPrincipal(membership.Role) +
+			" FROM " + quoteMySQLPrincipal(membership.Member), nil
 	}
-	return "GRANT " + quoteMySQLAccount(membership.Role.Name) +
-		" TO " + quoteMySQLAccount(membership.Member.Name), nil
+	return "GRANT " + quoteMySQLPrincipal(membership.Role) +
+		" TO " + quoteMySQLPrincipal(membership.Member), nil
 }
 
 func mysqlPrivilegeStatement(verb string, grant domain.PrivilegeGrant) (string, error) {
@@ -132,7 +144,7 @@ func mysqlPrivilegeStatement(verb string, grant domain.PrivilegeGrant) (string, 
 		return "", err
 	}
 	return fmt.Sprintf("%s %s ON %s TO %s", verb, privileges, target,
-		quoteMySQLAccount(grant.Role.Name)), nil
+		quoteMySQLPrincipal(grant.Role)), nil
 }
 
 func mysqlNativePrivileges(values []string, allowed map[string]bool) (string, error) {
@@ -181,6 +193,22 @@ func mysqlGrantTarget(target domain.ObjectRef) (string, error) {
 	default:
 		return "", domain.NewError(domain.KindConfig, "role", "unsupported MySQL grant target")
 	}
+}
+
+func quoteMySQLPrincipal(ref domain.RoleRef) string {
+	if ref.Kind == domain.KindRole {
+		return quoteMySQLRole(ref.Name)
+	}
+	return quoteMySQLAccount(ref.Name)
+}
+
+// quoteMySQLRole handles both MySQL 8 role accounts (role@host) and MariaDB
+// roles, which have an empty host and are addressed by name alone.
+func quoteMySQLRole(name string) string {
+	if strings.Contains(name, "@") {
+		return quoteMySQLAccount(name)
+	}
+	return quoteIdentifier(name)
 }
 
 func splitMySQLAccount(name string) (string, string) {

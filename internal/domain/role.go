@@ -76,7 +76,7 @@ func RolePrivilegeChoices(engine Engine, kind ObjectKind) []string {
 		case KindSchema:
 			return []string{"USAGE", "CREATE"}
 		case KindTable, KindView:
-			return []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"}
+			return []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"}
 		}
 	case EngineMySQL:
 		switch kind {

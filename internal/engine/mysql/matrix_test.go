@@ -65,11 +65,11 @@ func TestMariaDBRoleMatrixMapsRoleNames(t *testing.T) {
 	mock.ExpectQuery(`SELECT User, Host, is_role`).WillReturnRows(
 		sqlmock.NewRows([]string{"user", "host", "is_role"}).
 			AddRow("app_ro", "%", "N").
-			AddRow("app_role", "%", "Y"))
+			AddRow("app_role", "", "Y"))
 	mock.ExpectQuery(`SELECT User, Host`).WillReturnRows(
 		sqlmock.NewRows([]string{"user", "host"}).
 			AddRow("app_ro", "%").
-			AddRow("app_role", "%"))
+			AddRow("app_role", ""))
 	mock.ExpectQuery(`SELECT Role, '', User, Host`).WillReturnRows(
 		sqlmock.NewRows([]string{"role", "unused", "user", "host"}).
 			AddRow("app_role", "", "app_ro", "%"))
@@ -78,7 +78,7 @@ func TestMariaDBRoleMatrixMapsRoleNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	user := domain.RoleRef{Engine: domain.EngineMySQL, Name: "app_ro@%", Kind: domain.KindUser}
-	role := domain.RoleRef{Engine: domain.EngineMySQL, Name: "app_role@%", Kind: domain.KindRole}
+	role := domain.RoleRef{Engine: domain.EngineMySQL, Name: "app_role", Kind: domain.KindRole}
 	if !matrix.Members[user.Key()][role.Key()] {
 		t.Fatalf("MariaDB membership missing: %+v", matrix.Members)
 	}

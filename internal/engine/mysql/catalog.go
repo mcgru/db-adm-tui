@@ -180,8 +180,14 @@ ORDER BY User, Host`)
 		if role {
 			principalKind = domain.KindRole
 		}
+		// MariaDB roles are stored with an empty host and are addressed by
+		// name alone; users keep the user@host account form.
+		name := user + "@" + host
+		if role && host == "" {
+			name = user
+		}
 		principals = append(principals, domain.Principal{
-			Name:       user + "@" + host,
+			Name:       name,
 			Kind:       principalKind,
 			Scope:      host,
 			Attributes: mysqlAttributes(plugin, ""),

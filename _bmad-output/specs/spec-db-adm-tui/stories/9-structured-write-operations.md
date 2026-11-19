@@ -188,11 +188,11 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   `rolesInfo`. Built-in MongoDB roles appear as membership columns but are not
   editable privilege rows.
 - **Known 9b limitations:** PostgreSQL `PUBLIC` grants are read but not shown as
-  a matrix row, and unsupported native privileges (for example PostgreSQL
-  `MAINTAIN`) remain visible but are not toggleable. Membership details show
-  `WITH ADMIN OPTION`/`INHERIT` as a later enhancement rather than editing them.
-  MongoDB role creation is scoped to the current database. Live databases are
-  not available, so native command acceptance is deferred.
+  a matrix row, and unsupported native privileges remain visible but are not
+  toggleable. Membership details show `WITH ADMIN OPTION`/`INHERIT` as a later
+  enhancement rather than editing them. MongoDB role creation is scoped to the
+  current database. Live databases are not available in CI; the `live-test/`
+  stack is the manual verification path.
 - **Next:** 9c users, then the deferred 9a rows.
 
 ## Risks and constraints

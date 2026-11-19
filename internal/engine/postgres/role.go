@@ -16,11 +16,11 @@ var pgRolePrivileges = map[domain.ObjectKind]map[string]bool{
 	domain.KindSchema:   {"USAGE": true, "CREATE": true, "ALL": true},
 	domain.KindTable: {
 		"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
-		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "ALL": true,
+		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "MAINTAIN": true, "ALL": true,
 	},
 	domain.KindView: {
 		"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
-		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "ALL": true,
+		"TRUNCATE": true, "REFERENCES": true, "TRIGGER": true, "MAINTAIN": true, "ALL": true,
 	},
 }
 
