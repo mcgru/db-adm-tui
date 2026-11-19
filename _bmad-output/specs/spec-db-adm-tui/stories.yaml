@@ -128,8 +128,9 @@
   spec_checkpoint: true
   done_checkpoint: true
   invoke_dev_with: >-
-    Implement 9a rows, 9b roles/grants, and 9c users. All three are unavailable
-    in r/o and must refuse mutations with the mode-switch hint. Cover
+    Implement 9a rows, 9b roles/grants, 9c users, and 9d cell update/batch
+    writes. All are unavailable in r/o and must refuse mutations with the
+    mode-switch hint. Cover
     PostgreSQL, MySQL/MariaDB, and MongoDB. Keep native terms; do not invent a
     cross-engine "user in database" model. Amend the v1 PRD/FR-40 and the
     read-only-source invariant before coding. Use ~/.pgpass and ~/.mypass with
@@ -138,10 +139,12 @@
     matching entry, append the new one, offer the save-as-profile prompt, and
     audit through existing history. The two matrices (Principal×Role and
     Principal/Role×Object) are opened by Ctrl+X Ctrl+R and use structured
-    matrix data from the adapters. Rows support single-row insert/delete from
-    the Data tab only: a SQL column form with val/NULL/DEFAULT modes, a Mongo
-    extended-JSON editor, and primary key/_id identity; missing or unsafe keys
-    block deletion. Refresh Data and audit every successful mutation. The
+    matrix data from the adapters. Rows support insert, focused-cell update, and
+    delete from the Data tab only: a SQL column form with val/NULL/DEFAULT
+    modes, a Mongo extended-JSON editor, primary key/_id identity, Space row
+    selection, and one native statement for batch update/delete. Missing or
+    unsafe keys block changes. Refresh Data and audit every successful mutation
+    with its affected count. The
     current account must be the admin; do not switch or impersonate the target
     user. Keep native errors and verify against the live-test stack when it is
     available.

@@ -63,10 +63,10 @@ The tool starts on the profile picker.
 | `n` | New connection at the picker; next tree-search or filtered Data view match |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
-| `e` | Edit the selected profile at the picker; with a role selected in the tree, open the privilege matrix focused on that role |
+| `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role |
 | `+` | Tree roles/users: create, grant, or assign. Data tab: insert a row/document. Requires `r/w` |
-| `-` | Tree roles/users: revoke, remove, or drop. Data tab: delete the selected row/document. Requires `r/w` |
-| `Space` | Select an import row, or open/expand the selected tree node |
+| `-` | Tree roles/users: revoke, remove, or drop. Data tab: delete the current or selected rows. Requires `r/w` |
+| `Space` | Select an import row; open/expand a tree node; Data tab: toggle row selection for batch update/delete |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
 | `Esc` | Cancel a query or fetch, clear a filter, release Results, cancel an attempt, or close the current modal |
@@ -94,6 +94,9 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
+- [`docs/release-notes-v1.4.0.md`](docs/release-notes-v1.4.0.md) — `v1.4.0`
+  scope, safety rules, and known limitations. Русская версия:
+  [`docs/release-notes-v1.4.0.ru.md`](docs/release-notes-v1.4.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -298,32 +301,48 @@ headers, and a status line such as `loaded 100 of ~12,480` or
   `cancelled`. A failed page keeps the previous window and shows an inline
   error; `m` retries the next page. A failed first page shows
   `press Enter to load rows` and retries with `m`.
-- Inline cell editing, row updates, sorting, and export are not present in the
-  Data tab; `+`/`-` insert or delete one row/document in `r/w`. Queries run from
-  the query bar.
+- Sorting and export are not present in the Data tab; `e` edits one cell and
+  `Space` selects rows for batch update/delete. Queries run from the query bar.
 
-## Row and document changes (Story 9a)
+## Row and document changes (Story 9)
 
-Single-row insert and delete are available only from the Data tab. Results is
-read-only; row updates, inline cell editing, sorting, and export are not part of
-this slice. Both actions require `r/w`: in `r/o`, `+`/`-` report that read-write
-mode is required and point to `Ctrl+X Ctrl+W` without switching automatically.
+Insert, cell update, and delete are available only from the Data tab. Results is
+read-only; sorting and export are not present. `+`, `e`, and `-` require `r/w`:
+in `r/o`, they report that read-write mode is required and point to
+`Ctrl+X Ctrl+W` without switching automatically. `Space` only marks rows and
+does not write.
 
 **Insert (`+`).** The SQL form mirrors the loaded grid columns. Each field is
 `val`, `NULL`, or `DEFAULT`, switched with `Ctrl+N` and `Ctrl+D`. Fields start
 in `DEFAULT`; typing switches one back to `val`. `Tab`/`Shift+Tab` moves between
-fields, `Enter` inserts, and `Esc` cancels. The statement uses quoted identifiers and bound parameters,
-and the engine casts each text value to the native column type. `DEFAULT` omits
-the column; an all-default row uses `DEFAULT VALUES` on PostgreSQL or
-`() VALUES ()` on MySQL/MariaDB. MongoDB opens an extended-JSON document editor
-instead and calls `insertOne`.
+fields, `Enter` inserts, and `Esc` cancels. The statement uses quoted
+identifiers and bound parameters, and the engine casts each text value to the
+native column type. `DEFAULT` omits the column; an all-default row uses
+`DEFAULT VALUES` on PostgreSQL or `() VALUES ()` on MySQL/MariaDB. MongoDB opens
+an extended-JSON document editor instead and calls `insertOne`.
 
-**Delete (`-`).** The confirmation names the profile, object, and key
-(`id=...` or `_id=...`); `Enter remove` executes and `Esc` cancels. The row
-identity is the stable Data order key: the native primary key for PostgreSQL and
-MySQL/MariaDB, or `_id` for MongoDB. If the page has no stable key, or a key
-value cannot be represented safely, delete is blocked locally and no engine call
-is made.
+**Update (`e`).** Move the cell cursor to the target column and press `e`. The
+editor changes one column or field at a time. `Enter` applies, `Ctrl+N` sets
+`NULL`, and `Ctrl+D` sets `DEFAULT` on SQL; typing switches a field back to
+`val`. Primary-key columns and MongoDB `_id` are read-only. SQL passes the value
+as a bound parameter and lets the engine perform the native cast. MongoDB parses
+the value using the source cell kind (text, number, bool, datetime, or extended
+JSON). SQL JSON subcolumns must be edited through the parent column; MongoDB
+dotted paths are supported.
+
+**Select multiple rows.** `Space` toggles a row in the loaded Data view; selected
+rows show `*` in the gutter and the banner shows the count. With rows selected,
+`-` deletes all selected rows, while `e` applies the focused column's new value
+to every selected row. Without a selection, both act on the current row. `Esc`
+clears the selection; object/tab changes, filters, and successful writes clear
+it automatically. Rows without a stable primary key or `_id` cannot be selected
+or changed.
+
+**Delete (`-`).** The confirmation names the profile, object, and one or more
+keys (`id=...` or `_id=...`); `Enter remove` executes and `Esc` cancels. A batch
+uses one native statement (`OR`-joined key predicates on SQL, `$in` on MongoDB).
+If the page has no stable key, or a key value cannot be represented safely,
+delete is blocked locally and no engine call is made.
 
 After a successful mutation the Data tab reloads from offset 0, the status line
 keeps the native statement, and the existing history records the mode, status,

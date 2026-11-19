@@ -1,6 +1,6 @@
 # Story 9 (v2) — Structured write operations
 
-**Status:** 9a row/document insert/delete, 9b access matrix, and 9c users implemented
+**Status:** 9a row/document insert/delete, 9b access matrix, 9c users, and 9d cell update/batch writes implemented
 **Scope:** users, access roles/grants, and rows in the current table/collection
 **Depends on:** Story 6 read-write mode, Story 7 privilege inspection, Story 8 security/release
 
@@ -119,6 +119,23 @@ read-only. Row updates are still out of scope for 9a and use the query bar.
   remain visible; the tool does not invent cross-engine error text.
 - Both actions require `r/w` and never switch mode automatically.
 
+### 9d — Cell update and batch writes (implemented)
+
+`e` edits one cell/field in the current row. Primary-key columns and MongoDB
+`_id` are read-only. SQL passes the value as a bound parameter and supports
+`val`, `NULL`, and `DEFAULT`; MongoDB parses the value by the source cell kind
+(text, number, bool, datetime, extended JSON) and updates a dotted field with
+`$set`.
+
+`Space` toggles rows into a selection. With a selection, `-` deletes all selected
+rows and `e` applies the focused column's new value to every selected row;
+without one, both act on the current row. `Esc` clears the selection, and
+object/tab changes, filters, refresh, and successful writes reset it. Batch
+writes use one native statement: an `OR`-joined key predicate on SQL and
+`$in` on MongoDB. Rows without a stable key or with unsafe binary keys cannot be
+selected or changed. Delete confirmation names the profile, object, and one or
+more keys. Both actions require `r/w`, refresh Data, and record the affected
+count in history.
 
 ## UI rules
 
@@ -224,8 +241,13 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   MySQL/MariaDB, and MongoDB adapters; SQL insert/delete with quoted identifiers
   and bound values; Mongo extended-JSON insert and `_id` delete; Data-tab
   modals, confirmation, `r/w` gate, Data refresh, and history audit. Row
-  updates and multi-row writes stay out of scope.
-- **Next:** live acceptance for 9a/9b/9c on the `live-test/` stack.
+  updates and batch writes are covered by 9d.
+- **9d cell update/batch slice implemented:** focused-cell editor, row
+  selection with `Space`, batch delete and batch column update, primary-key and
+  `_id` protection, SQL value/NULL/DEFAULT handling, Mongo typed `$set`, and
+  native error/refresh/history behavior. `v1.4.0` includes 9a–9d.
+- **Next:** release `v1.4.0` and keep the `live-test/` stack as the manual
+  verification path.
 
 ## Risks and constraints
 

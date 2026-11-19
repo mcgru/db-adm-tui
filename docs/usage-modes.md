@@ -23,7 +23,7 @@ actually possible.
 | Role/privilege matrix | blocked | yes, with native admin rights |
 | Create/drop role | blocked | yes |
 | Create/drop user | blocked | yes, with native admin rights |
-| Row/document insert/delete | blocked | yes, one row/document at a time |
+| Row/document insert/update/delete | blocked | yes, one cell or a selected row set |
 
 ## Read-only mode (`r/o`)
 
@@ -60,15 +60,18 @@ Ctrl+End     jump to the last loaded row
 `Ctrl+F` adds a server-side regexp filter on the focused SQL column; `Esc`
 clears the filter or releases Results.
 
-### Insert or delete one row/document
+### Insert, update, or delete rows/documents
 
 Open the Data tab in `r/w`. `+` opens the insert form: SQL columns start in
 `DEFAULT` and accept `val`, `NULL`, or `DEFAULT` (`Ctrl+N`/`Ctrl+D`), while
-MongoDB uses an extended-JSON document editor. `-` deletes the selected row/document by its native primary key
-or `_id`, after a confirmation that names the profile, object, and key. The
-loaded page must have a stable key; otherwise delete is blocked locally. After
-success the Data tab refreshes and the operation is written to history. Results
-is read-only, and row updates are not part of this flow.
+MongoDB uses an extended-JSON document editor. `e` edits the focused cell or
+field; primary-key columns and MongoDB `_id` are read-only. `Space` toggles row
+selection: `-` deletes the current or every selected row/document, and `e`
+applies the focused column's new value to all selected rows. A batch uses one
+native statement. The confirmation names the profile, object, and key(s), and
+the loaded page must have a stable key; otherwise the action is blocked locally.
+After success Data refreshes and the operation is written to history with the
+affected count. Results is read-only.
 
 ### Run read-only SQL
 
@@ -413,7 +416,7 @@ refreshed; after a row change the Data tab reloads from the first page.
 
 ### What `r/w` does not do yet
 
-- Update table rows or MongoDB documents, or write more than one row at a time;
+- Insert more than one row at a time or change several columns in one statement;
   use the query bar.
 - Edit `WITH ADMIN OPTION`/`INHERIT` membership attributes.
 - Change an existing user's password or edit MongoDB user roles outside the

@@ -246,6 +246,10 @@ mongodb://analyst@127.0.0.1:57017/analytics
 | RS-05 | `r/w` | `live-mongo-admin` | insert MongoDB extended JSON |
 | RS-06 | `r/w` | `live-mongo-admin` | delete MongoDB по `_id` |
 | RS-07 | `r/w` | `live-pg-admin` | native error и history |
+| RS-08 | `r/w` | `live-pg-admin` | update ячейки PostgreSQL |
+| RS-09 | `r/w` | `live-pg-admin` | batch update/delete PostgreSQL |
+| RS-10 | `r/w` | `live-maria-admin` | update и batch MariaDB |
+| RS-11 | `r/w` | `live-mongo-admin` | updateOne/updateMany/deleteMany |
 | CL-01 | — | — | reset и повторный `up.sh` |
 
 ### Минимальный smoke перед релизом
@@ -255,7 +259,7 @@ mongodb://analyst@127.0.0.1:57017/analytics
 `RO-01`, `RO-06`, `RO-07`, `RO-09`, `RW-01`, `RW-02`, `RW-03`, `MX-01`,
 `MX-03`, `MX-04`, `MX-05`, `MX-06`, `MX-08`, `MX-09`, `MX-10`,
 `US-01`, `US-02`, `US-03`, `US-05`, `US-06`, `RS-01`, `RS-02`, `RS-03`,
-`RS-05`, `RS-06`, `CL-01`.
+`RS-05`, `RS-06`, `RS-08`, `RS-09`, `RS-11`, `CL-01`.
 
 Полный план ниже покрывает остальные edge cases.
 
@@ -1077,6 +1081,7 @@ stat -c '%a %n' ~/.mongo.tmp_user_mongo-in-appdb
 1. Откройте `app.customers` → `Data`.
 2. Нажмите `+`.
 3. Нажмите `-`.
+4. Нажмите `Right`, затем `e`.
 
 **Ожидаемо:**
 - модальное окно не открывается;
@@ -1230,6 +1235,127 @@ INSERT INTO app.no_pk VALUES (1, 'no key');
 ```sql
 DROP TABLE app.no_pk;
 ```
+
+### RS-08. PostgreSQL: update ячейки
+
+**Профиль:** `live-pg-admin` в `r/w`, `app.customers` → `Data`.
+
+**Шаги:**
+1. Переместите курсор на колонку `name` (`Right`).
+2. Нажмите `e`, измените `Alice` на `Alicia`, `Enter`.
+3. Проверьте native:
+
+```sql
+SELECT id, name FROM app.customers WHERE id = 1;
+```
+
+4. Проверьте history.
+5. Верните имя:
+
+```sql
+UPDATE app.customers SET name = 'Alice' WHERE id = 1;
+```
+
+**Ожидаемо:**
+- модальное окно `update cell` показывает профиль, объект, колонку и текущее
+  значение;
+- `Enter` выполняет `UPDATE ... SET "name" = $1 WHERE ("id" = $2)`;
+- Data перезагружается, сообщение `row updated`;
+- history содержит `mode:r/w`, `status:ok`, `affected:1`;
+- попытка `e` на колонке `id` сообщает, что primary key read-only.
+
+### RS-09. PostgreSQL: batch update и delete
+
+**Профиль:** `live-pg-admin` в `r/w`, `app.customers` → `Data`.
+
+**Подготовка:**
+
+```sql
+INSERT INTO app.customers (id, name, status) VALUES
+  (9001, 'tmp_batch_a', 'paused'),
+  (9002, 'tmp_batch_b', 'paused');
+```
+
+**Шаги:**
+1. Перезагрузите Data (reconnect или повторно откройте объект).
+2. `Space` на `9001`, `Down`, `Space` на `9002`.
+3. Перейдите на колонку `status` (`Right` два раза), нажмите `e`.
+4. Замените `paused` на `active`, `Enter`.
+5. Проверьте native:
+
+```sql
+SELECT id, name, status FROM app.customers WHERE id IN (9001, 9002);
+```
+
+6. Снова выделите `9001` и `9002`, нажмите `-`.
+7. Проверьте подтверждение и `Enter`.
+
+**Ожидаемо:**
+- баннер показывает `2 selected`, в gutter видны `*`;
+- batch update выполняет один
+  `UPDATE ... WHERE ("id" = $2) OR ("id" = $3)`;
+- сообщение `2 rows updated`, history `affected:2`;
+- confirmation: `Delete 2 rows from app.customers?`, ключи `id=9001, id=9002`;
+- batch delete выполняет один `DELETE ... WHERE ("id" = $1) OR ("id" = $2)`;
+- сообщение `2 rows removed`, history `affected:2`;
+- после refresh выделение очищено.
+
+### RS-10. MariaDB: update и batch
+
+**Профиль:** `live-maria-admin` в `r/w`, `appdb.customers` → `Data`.
+
+**Подготовка:**
+
+```sql
+INSERT INTO appdb.customers (id, name, status) VALUES
+  (9001, 'tmp_my_batch_a', 'paused'),
+  (9002, 'tmp_my_batch_b', 'paused');
+```
+
+**Шаги:**
+1. Перезагрузите Data.
+2. `e` на `name` строки `1`: `Alice` → `Alicia`, `Enter`; верните имя через SQL.
+3. Выделите `9001`/`9002`, смените `status` на `active` через `e`.
+4. Выделите обе строки, `-`, `Enter`.
+5. Проверьте native и history.
+
+**Ожидаемо:**
+- update использует placeholders `?` и backtick-идентификаторы;
+- batch update/delete выполняются одним statement;
+- history содержит `affected:1` и `affected:2`;
+- после теста временные строки отсутствуют.
+
+### RS-11. MongoDB: updateOne/updateMany/deleteMany
+
+**Профиль:** `live-mongo-admin` в `r/w`, `appdb.customers` → `Data`.
+
+**Подготовка:**
+
+```js
+db.getSiblingDB("appdb").customers.insertMany([
+  {_id: 9001, name: "tmp_m_a", status: "paused"},
+  {_id: 9002, name: "tmp_m_b", status: "paused"}
+])
+```
+
+**Шаги:**
+1. Перезагрузите Data.
+2. На документе `9001` нажмите `e` на `name`, измените на `tmp_m_x`.
+3. Выделите `9001`/`9002`, `e` на `status`, установите `active`.
+4. Выделите оба документа, `-`, `Enter`.
+5. Проверьте native:
+
+```js
+db.getSiblingDB("appdb").customers.countDocuments({_id: {$in: [9001, 9002]}})
+```
+
+**Ожидаемо:**
+- update одной строки выполняет `updateOne` с `$set`;
+- batch update выполняет `updateMany` с `_id:{$in:...}` и `$set`;
+- batch delete выполняет `deleteMany` с `_id:{$in:...}`;
+- остальные поля документа сохраняются;
+- history содержит `affected:1`/`affected:2` и native-имена операций;
+- в конце count равен `0`.
 
 ## 8. Очистка
 

@@ -83,7 +83,9 @@ ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
 If you prefer to copy the bundle manually, copy `home/` contents to your home
 directory and run the `chmod` commands from
 [`home/LIVE-TEST-CREDENTIALS.md`](home/LIVE-TEST-CREDENTIALS.md). The full TUI
-test checklist is in [`TUI-TEST-PLAN.md`](TUI-TEST-PLAN.md) (Russian).
+test checklist is in [`TUI-TEST-PLAN.md`](TUI-TEST-PLAN.md) (Russian). The
+latest recorded live acceptance is in
+[`ACCEPTANCE-2026-11-20.md`](ACCEPTANCE-2026-11-20.md).
 
 ## Quick start
 

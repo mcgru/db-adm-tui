@@ -18,74 +18,49 @@ _[English](roadmap-and-releases.md) | Русский_
   credential-файлов с ротацией и save-as-profile;
 - Story 9a: вставка и удаление одной строки/документа из вкладки Data с
   идентификацией по primary key/`_id`, гейтом `r/w`, обновлением Data и
-  аудитом в history.
+  аудитом в history;
+- Story 9d: обновление ячейки по `e`, выделение строк `Space` и batch
+  update/delete для SQL и MongoDB с affected count в history.
 
-Обновление строк и запись нескольких строк в 9a не входят; используйте query
-bar.
+Изменение нескольких столбцов за раз и multi-row insert остаются сценариями
+query bar.
 
-## Рекомендуемый следующий шаг
+## Статус приёмки
 
-### 1. Live TUI acceptance для 9b
+Все срезы Story 9 реализованы и проверены на стенде `live-test/`:
 
-Используйте новый стенд `live-test/` по SSH и проверьте именно TUI, а не только
-engine-пробы:
+- 9a insert/delete, 9b access matrix, 9c users, 9d cell update/batch writes;
+- PostgreSQL 18, MariaDB 11.4, MongoDB 8.2;
+- результаты, коммиты и очистка записаны в
+  `live-test/ACCEPTANCE-2026-11-20.md`.
 
-- подключитесь как `db_admin`, `mdb_admin` и `mongo_admin`;
-- откройте `Ctrl+X Ctrl+R`, переключите обе панели через `Tab`/`1`/`2`;
-- переключите membership и table/schema/database privileges;
-- откройте `e`-детали и примените multi-select diff привилегий;
-- создайте и удалите роль;
-- проверьте обновление матрицы, списков Security, панели Privileges и маркеров
-  доступа;
-- проверьте, что `r/o` блокирует матрицу и write-запросы, а `r/w` разрешает их;
-- проверьте, что history содержит режим, native statement, статус и количество
-  затронутых строк;
-- повторите неуспешную операцию под non-admin пользователем и проверьте
-  native-ошибку с подсказкой `Ctrl+D`;
-- для MongoDB проверьте replica set, поведение `$out`/`$merge` в `r/w` и то,
-  что встроенные роли доступны только для чтения.
+## Рекомендуемый следующий шаг: релиз v1.4.0
 
-Исправьте найденное до объявления Story 9b принятой.
+1. Прогнать полный набор проверок:
 
-### 2. Live TUI acceptance для 9c
+   ```sh
+   go test ./...
+   go test -race ./...
+   go vet ./...
+   make verify
+   ```
 
-Проверьте новый user flow на стенде `live-test/`:
+2. Собрать архивы:
 
-- создайте пользователя в PostgreSQL, MariaDB и MongoDB; убедитесь, что
-  native-аккаунт появился;
-- проверьте credential-файлы: правильную строку/URI, закомментированную старую
-  строку, новую строку ниже, `0600` на файле и `0700` на директории;
-- создайте того же пользователя повторно и проверьте native duplicate error;
-- удалите созданного пользователя и проверьте исчезновение из Security и
-  native-каталога;
-- убедитесь, что удаление текущего подключённого пользователя блокируется;
-- проверьте save-as-profile: профиль сохраняется, активная сессия не
-  переключается;
-- убедитесь, что пароли не появляются в picker, history, статусах и ошибках.
+   ```sh
+   make release VERSION=v1.4.0
+   ./dist/db-adm-tui_v1.4.0_linux_amd64/db-adm-tui --version
+   ./dist/db-adm-tui_v1.4.0_linux_arm64/db-adm-tui --version
+   ```
 
-Исправьте найденное до объявления 9c принятой.
+3. Поставить тег и опубликовать release notes с итогами 9a–9d, результатами
+   live-приёмки и известными ограничениями ниже.
 
-### 3. Live TUI acceptance для 9a
+4. Обновить бинарник на `jojo@uuu:~/db-adm-tui` и синхронизировать
+   `~/live-test`.
 
-Проверьте вставку/удаление одной строки на стенде `live-test/`:
-
-- убедитесь, что `+`/`-` блокируются в `r/o` и доходят до движка только в `r/w`;
-- вставьте строку в PostgreSQL и MariaDB с полями `val`, `NULL` и `DEFAULT`;
-  проверьте native-строку, обновление Data и запись в history;
-- вставьте extended-JSON документ в MongoDB и проверьте `insertOne`;
-- удалите строку по primary key в SQL и по `_id` в MongoDB, проверьте текст
-  подтверждения и исчезновение ровно одной строки/документа;
-- убедитесь, что таблица без primary key блокирует удаление локально;
-- вызовите native-ошибку (duplicate key, bad cast, missing privilege) и
-  проверьте, что сообщение движка остаётся видимым, а audit-запись не получает
-  статус `ok`.
-
-Исправьте найденное до объявления 9a принятой.
-
-### 4. Документация релиза
-
-Обновите README, usage-документацию, статус story и release notes с финальным
-scope пользователей/ролей/строк и ограничениями live-проверки.
+Не ставьте тег, пока acceptance-файл и README/usage-документация не совпадают с
+собранным бинарником.
 
 ## Политика тегирования
 
@@ -112,9 +87,10 @@ v1.1.0-rc.1
 | `v1.1.0` | принятая 9b | live-smoke TUI на всех трёх движках, документация и release notes обновлены |
 | `v1.2.0` | 9c: пользователи и credential-файлы | live-проверка создания, ротации, удаления и save-as-profile |
 | `v1.3.0` | 9a: строки/документы | live insert/delete одной строки на всех движках |
+| `v1.4.0` | 9d: update ячейки и batch writes | live update, batch update и batch delete на всех движках |
 
-Если 9b ещё не принята live, не ставьте `v1.1.0`; используйте `v1.1.0-rc.1`
-или подождите.
+Текущий релиз можно выпустить как кумулятивный `v1.4.0`; если нужна отдельная
+история тегов, сначала поставьте `v1.3.0` на коммит 9a, затем `v1.4.0`.
 
 Существующие теги `1.0.1` и `v.1.0.0` указывают на один старый коммит и
 названы непоследовательно. Не переписывайте уже опубликованные теги.
@@ -166,22 +142,25 @@ git push origin v1.1.0
 ```text
 ## Highlights
 - матрица доступа для membership и native object privileges
+- native-пользователи с ротацией credential-файлов
+- insert, update ячейки и batch delete/update строк/документов
 - поведение r/o/r/w и native-ошибки доступа
 - live fixture-стенд PostgreSQL 18, MariaDB 11.4, MongoDB 8.2
 
 ## Engines
-- PostgreSQL 18: роли, ACL, MAINTAIN
-- MariaDB 11.4: hostless-роли, schema/table grants
-- MongoDB 8.2: rs0, пользователи, custom/built-in роли
+- PostgreSQL 18: роли, ACL, MAINTAIN, bound row writes
+- MariaDB 11.4: hostless-роли, schema/table grants, batch writes
+- MongoDB 8.2: rs0, пользователи, custom/built-in роли, typed $set/batch
 
 ## Safety
 - явное подтверждение read-write
-- один логический statement за выполнение
+- один native statement на batch
 - history-аудит с mode/status/affected count
-- пароли маскируются
+- пароли маскируются; primary key и _id защищены
 
 ## Known limitations
-- обновление строк и запись нескольких строк; используйте query bar
+- редактор строк меняет одну ячейку/столбец за раз; несколько столбцов — через query bar
+- multi-row insert недоступен; используйте query bar или несколько statements
 - query bar MongoDB остаётся find/aggregate/count/distinct; запись через $out/$merge
 - редактирование membership WITH ADMIN OPTION/INHERIT пока не реализовано
 ```
