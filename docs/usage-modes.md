@@ -1,5 +1,7 @@
 # Using db-adm-tui in r/o and r/w
 
+_[English](usage-modes.md) | [Русский](usage-modes.ru.md)_
+
 Every connection starts in read-only mode (`r/o`). The mode is a property of the
 live session: it is shown next to the database in the top status line, is never
 stored in a profile, and resets to `r/o` on reconnect and on a PostgreSQL

@@ -76,9 +76,11 @@ Latin and Cyrillic physical key positions resolve to the same actions
 
 - [`docs/usage-modes.md`](docs/usage-modes.md) — practical `r/o` and `r/w`
   workflows, query examples, role/privilege matrix walkthroughs, and
-  troubleshooting.
+  troubleshooting. Русская версия:
+  [`docs/usage-modes.ru.md`](docs/usage-modes.ru.md).
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
-  implementation steps and the release/tagging checklist.
+  implementation steps and the release/tagging checklist. Русская версия:
+  [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures.
 

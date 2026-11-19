@@ -1,5 +1,7 @@
 # Next steps and release tagging
 
+_[English](roadmap-and-releases.md) | [Русский](roadmap-and-releases.ru.md)_
+
 ## Current state
 
 The repository contains:
