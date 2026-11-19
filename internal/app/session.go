@@ -427,14 +427,14 @@ func (s *Session) ExecuteQuery(ctx context.Context, request domain.QueryRequest,
 	cursor, err := s.bundle.QueryExecutor.Query(queryCtx, request)
 	if err != nil {
 		cancel()
-		s.recordHistoryLocked(request.Statement, start, queryStatus(err))
+		s.recordHistoryLocked(request.Statement, start, queryStatus(err), 0)
 		return domain.QueryPage{}, s.redactQueryError(err)
 	}
 	page, err := cursor.Next(queryCtx, limit)
 	if err != nil {
 		_ = cursor.Close(context.Background())
 		cancel()
-		s.recordHistoryLocked(request.Statement, start, queryStatus(err))
+		s.recordHistoryLocked(request.Statement, start, queryStatus(err), 0)
 		return domain.QueryPage{}, s.redactQueryError(err)
 	}
 	page.Elapsed = time.Since(start)
@@ -450,7 +450,7 @@ func (s *Session) ExecuteQuery(ctx context.Context, request domain.QueryRequest,
 		cancel()
 		s.closeResultsLocked()
 	}
-	s.recordHistoryLocked(request.Statement, start, "ok")
+	s.recordHistoryLocked(request.Statement, start, "ok", 0)
 	return page, nil
 }
 
@@ -583,10 +583,10 @@ func (s *Session) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.
 	start := time.Now()
 	result, err := s.bundle.UserAdmin.CreateUser(ctx, spec)
 	if err != nil {
-		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err), result.Affected)
 		return domain.UserResult{Mutation: result}, err
 	}
-	s.recordHistoryLocked(result.Statement, start, "ok")
+	s.recordHistoryLocked(result.Statement, start, "ok", result.Affected)
 
 	target := profile.CredentialTarget{
 		Engine:   spec.Engine,
@@ -638,10 +638,10 @@ func (s *Session) DropUser(ctx context.Context, user domain.RoleRef) (domain.Mut
 	start := time.Now()
 	result, err := s.bundle.UserAdmin.DropUser(ctx, user)
 	if err != nil {
-		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err), result.Affected)
 		return result, err
 	}
-	s.recordHistoryLocked(result.Statement, start, "ok")
+	s.recordHistoryLocked(result.Statement, start, "ok", result.Affected)
 	return result, nil
 }
 
@@ -706,6 +706,42 @@ func mongoCredentialOptions(p domain.Profile, database string) string {
 	return query.Encode()
 }
 
+// InsertRow inserts one structured row or document.
+func (s *Session) InsertRow(ctx context.Context, spec domain.RowInsert) (domain.MutationResult, error) {
+	return s.runRowMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RowAdmin.InsertRow(ctx, spec)
+	})
+}
+
+// DeleteRow deletes one structured row or document by primary key/_id.
+func (s *Session) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+	return s.runRowMutation(ctx, func() (domain.MutationResult, error) {
+		return s.bundle.RowAdmin.DeleteRow(ctx, spec)
+	})
+}
+
+func (s *Session) runRowMutation(ctx context.Context, operation func() (domain.MutationResult, error)) (domain.MutationResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.RowAdmin == nil {
+		return domain.MutationResult{}, domain.NewError(domain.KindConfig, "row", "row administration is not available")
+	}
+	if s.readOnly.Load() {
+		return domain.MutationResult{}, domain.NewError(domain.KindGuard, "row", "read-write mode is required; Ctrl+X Ctrl+W to switch.")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.MutationResult{}, err
+	}
+	start := time.Now()
+	result, err := operation()
+	if err != nil {
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err), result.Affected)
+		return result, err
+	}
+	s.recordHistoryLocked(result.Statement, start, "ok", result.Affected)
+	return result, nil
+}
+
 func (s *Session) runRoleMutation(ctx context.Context, operation func() (domain.MutationResult, error)) (domain.MutationResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -721,10 +757,10 @@ func (s *Session) runRoleMutation(ctx context.Context, operation func() (domain.
 	start := time.Now()
 	result, err := operation()
 	if err != nil {
-		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err), result.Affected)
 		return result, err
 	}
-	s.recordHistoryLocked(result.Statement, start, "ok")
+	s.recordHistoryLocked(result.Statement, start, "ok", result.Affected)
 	return result, nil
 }
 
@@ -815,7 +851,7 @@ func (s *Session) closeResultsLocked() {
 	s.resultsOpen.Store(false)
 }
 
-func (s *Session) recordHistoryLocked(statement string, start time.Time, status string) {
+func (s *Session) recordHistoryLocked(statement string, start time.Time, status string, affected int64) {
 	if s.history == nil {
 		return
 	}
@@ -833,6 +869,7 @@ func (s *Session) recordHistoryLocked(statement string, start time.Time, status 
 		DurationMs: duration.Milliseconds(),
 		Duration:   duration,
 		Status:     status,
+		Affected:   affected,
 	}
 	if err := s.history.Append(context.Background(), entry); err != nil {
 		s.historyWarn = "history write failed: " + domain.RedactSecrets(err.Error(), s.credential.Password)

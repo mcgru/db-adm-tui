@@ -228,6 +228,17 @@ func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	if m.modal == modalRowInsert {
+		if m.rowInsert.mongo {
+			m.rowInsert.document, m.rowInsert.docPos = insertFilterText(
+				m.rowInsert.document, m.rowInsert.docPos, msg.Content)
+		} else if m.rowInsert.cursor >= 0 && m.rowInsert.cursor < len(m.rowInsert.values) {
+			value, pos := insertFilterText(m.rowInsertInputValue(), m.rowInsert.valuePos, msg.Content)
+			m.setRowInsertInputValue(value)
+			m.rowInsert.valuePos = pos
+		}
+		return m, nil
+	}
 	switch m.modal {
 	case modalNew:
 		if m.newBusy {

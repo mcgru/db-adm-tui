@@ -51,7 +51,7 @@ func (connector) Connect(ctx context.Context, p domain.Profile, password string)
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{conn: conn, db: db, password: password}
-	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live, RoleMatrix: live, UserAdmin: live}, nil
+	return ports.SessionBundle{Session: live, Catalog: live, DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live, RoleMatrix: live, UserAdmin: live, RowAdmin: live}, nil
 }
 
 func buildConfig(p domain.Profile, password string) *mysqldriver.Config {

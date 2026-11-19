@@ -56,6 +56,8 @@ const (
 	modalUserForm
 	modalUserConfirm
 	modalUserSave
+	modalRowInsert
+	modalRowDelete
 )
 
 type messageLevel int
@@ -165,6 +167,8 @@ type Model struct {
 	tree          treeState
 	details       detailsState
 	data          dataState
+	dataNotice    string
+	dataNoticeLvl messageLevel
 	treeGen       uint64
 	dataGen       uint64
 	detailsGen    uint64
@@ -177,6 +181,8 @@ type Model struct {
 	role            roleState
 	matrix          matrixState
 	user            userState
+	rowInsert       rowInsertState
+	rowDelete       rowDeleteState
 	history         []string
 	historyIndex    int
 	historyDraft    string
@@ -210,6 +216,7 @@ type Model struct {
 	matrixGen      uint64
 	matrixDirty    bool
 	userGen        uint64
+	rowGen         uint64
 
 	connecting      bool
 	connectingKey   string
@@ -380,6 +387,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRoleDone(msg)
 	case userDoneMsg:
 		return m.handleUserDone(msg)
+	case rowDoneMsg:
+		return m.handleRowDone(msg)
 	case matrixMembershipMsg:
 		return m.handleMatrixMembership(msg)
 	case matrixPrivilegesMsg:
@@ -446,6 +455,10 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUserConfirmKey(msg)
 	case modalUserSave:
 		return m.handleUserSaveKey(msg)
+	case modalRowInsert:
+		return m.handleRowInsertKey(msg)
+	case modalRowDelete:
+		return m.handleRowDeleteKey(msg)
 	}
 	if m.pendingChord {
 		m.pendingChord = false
@@ -552,14 +565,20 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			if m.focus == FocusTree {
 				return m.startRoleAdd()
 			}
-			m.setMessage(levelInfo, "row changes are story 9a")
+			if m.focus == FocusMain {
+				return m.startRowAdd()
+			}
+			m.setMessage(levelInfo, "row changes are available in the Data tab")
 		}
 	case keymap.Remove:
 		if m.screen == ScreenWorkspace {
 			if m.focus == FocusTree {
 				return m.startRoleRemove()
 			}
-			m.setMessage(levelInfo, "row changes are story 9a")
+			if m.focus == FocusMain {
+				return m.startRowRemove()
+			}
+			m.setMessage(levelInfo, "row changes are available in the Data tab")
 		}
 	case keymap.Help:
 		m.setMessage(levelInfo, "help — story 9")
@@ -1326,6 +1345,10 @@ func (m Model) viewModal() string {
 		return m.viewUserConfirm()
 	case modalUserSave:
 		return m.viewUserSave()
+	case modalRowInsert:
+		return m.viewRowInsert()
+	case modalRowDelete:
+		return m.viewRowDelete()
 	}
 	return ""
 }
@@ -1362,6 +1385,8 @@ func (m *Model) dismissModal() {
 	case modalUserForm, modalUserConfirm, modalUserSave:
 		m.modal = modalNone
 		m.user = newUserState()
+	case modalRowInsert, modalRowDelete:
+		m.modal = modalNone
 	}
 }
 

@@ -63,6 +63,27 @@ type fakeConnector struct {
 	role       *fakeRoleAdmin
 	matrix     *fakeRoleMatrix
 	user       *fakeUserAdmin
+	row        *fakeRowAdmin
+}
+
+type fakeRowAdmin struct {
+	result  domain.MutationResult
+	err     error
+	calls   int
+	inserts []domain.RowInsert
+	deletes []domain.RowDelete
+}
+
+func (f *fakeRowAdmin) InsertRow(ctx context.Context, spec domain.RowInsert) (domain.MutationResult, error) {
+	f.calls++
+	f.inserts = append(f.inserts, spec)
+	return f.result, f.err
+}
+
+func (f *fakeRowAdmin) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+	f.calls++
+	f.deletes = append(f.deletes, spec)
+	return f.result, f.err
 }
 
 type fakeUserAdmin struct {
@@ -467,10 +488,15 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if user == nil {
 		user = &fakeUserAdmin{result: domain.MutationResult{Statement: "user change"}}
 	}
+	row := f.row
+	if row == nil {
+		row = &fakeRowAdmin{result: domain.MutationResult{Statement: "row change", Affected: 1}}
+	}
 	return ports.SessionBundle{
 		Session: conn, Catalog: catalog, DataReader: data,
 		StatsReader: stats, PrivilegeReader: privileges, QueryExecutor: query,
 		ModeController: mode, RoleAdmin: role, RoleMatrix: matrix, UserAdmin: user,
+		RowAdmin: row,
 	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }

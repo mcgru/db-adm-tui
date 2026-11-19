@@ -884,3 +884,56 @@ func TestMongoCredentialOptionsKeepReplicaSetAndReplaceAuthSource(t *testing.T) 
 		t.Fatalf("options = %q", got)
 	}
 }
+
+type fakeRowAdmin struct {
+	result domain.MutationResult
+	err    error
+	calls  int
+	insert domain.RowInsert
+	delete domain.RowDelete
+}
+
+func (f *fakeRowAdmin) InsertRow(ctx context.Context, spec domain.RowInsert) (domain.MutationResult, error) {
+	f.calls++
+	f.insert = spec
+	return f.result, f.err
+}
+
+func (f *fakeRowAdmin) DeleteRow(ctx context.Context, spec domain.RowDelete) (domain.MutationResult, error) {
+	f.calls++
+	f.delete = spec
+	return f.result, f.err
+}
+
+func TestRowMutationsRequireReadWriteAndAudit(t *testing.T) {
+	f := newFixture(t)
+	rows := &fakeRowAdmin{result: domain.MutationResult{Statement: `INSERT INTO "app"."customers" ("id") VALUES ($1)`, Affected: 1}}
+	historyStore := &fakeHistoryStore{}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, RowAdmin: rows,
+	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, historyStore)
+	spec := domain.RowInsert{Ref: domain.ObjectRef{Kind: domain.KindTable, Schema: "app", Name: "customers"},
+		Values: []domain.RowValue{{Column: "id", Value: "1"}}}
+	if _, err := session.InsertRow(context.Background(), spec); domain.KindOf(err) != domain.KindGuard {
+		t.Fatalf("read-only err = %v", err)
+	}
+	if rows.calls != 0 {
+		t.Fatal("read-only insert reached the engine")
+	}
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.InsertRow(context.Background(), spec)
+	if err != nil || result.Affected != 1 || rows.calls != 1 {
+		t.Fatalf("result = %+v, err = %v, calls=%d", result, err, rows.calls)
+	}
+	if len(historyStore.entries) != 1 || historyStore.entries[0].Mode != "r/w" || historyStore.entries[0].Affected != 1 {
+		t.Fatalf("history = %+v", historyStore.entries)
+	}
+	if _, err := session.DeleteRow(context.Background(), domain.RowDelete{Ref: spec.Ref, Keys: []domain.RowValue{{Column: "id", Value: "1"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if rows.calls != 2 {
+		t.Fatalf("delete calls = %d", rows.calls)
+	}
+}

@@ -30,5 +30,6 @@ type HistoryEntry struct {
 	Mode       string        `json:"mode"`
 	DurationMs int64         `json:"duration_ms"`
 	Status     string        `json:"status"`
+	Affected   int64         `json:"affected,omitempty"`
 	Duration   time.Duration `json:"-"`
 }

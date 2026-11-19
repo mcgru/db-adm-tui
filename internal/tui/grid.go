@@ -137,6 +137,8 @@ func (m *Model) resetData() {
 	}
 	m.dataGen++
 	m.data = newDataState()
+	m.dataNotice = ""
+	m.dataNoticeLvl = levelNone
 }
 
 func (m *Model) resetDataFor(ref domain.ObjectRef) {
@@ -953,6 +955,8 @@ func (m Model) handleDataPage(msg dataPageMsg) (tea.Model, tea.Cmd) {
 		m.data.cancel = nil
 	}
 	if msg.err != nil {
+		m.dataNotice = ""
+		m.dataNoticeLvl = levelNone
 		if m.session != nil && !m.session.Alive() {
 			return m.leaveWorkspace(msg.err)
 		}
@@ -1033,9 +1037,14 @@ func (m Model) handleDataPage(msg dataPageMsg) (tea.Model, tea.Cmd) {
 	m.data.loaded = true
 	m.data.recount()
 	m.ensureDataViewport()
-	if msg.direction == dataInitial && m.data.orderKnown && m.data.orderKey == "" {
+	switch {
+	case m.dataNotice != "":
+		m.setMessage(m.dataNoticeLvl, m.dataNotice)
+		m.dataNotice = ""
+		m.dataNoticeLvl = levelNone
+	case msg.direction == dataInitial && m.data.orderKnown && m.data.orderKey == "":
 		m.setMessage(levelWarning, "no stable order; rows may repeat or skip")
-	} else {
+	default:
 		m.message = ""
 		m.messageLevel = levelNone
 	}
