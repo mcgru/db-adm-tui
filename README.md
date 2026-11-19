@@ -72,6 +72,16 @@ The tool starts on the profile picker.
 Latin and Cyrillic physical key positions resolve to the same actions
 (`n`/`т`, `i`/`ш`, `Ctrl+Q`/`Ctrl+й`, `m`/`ь`, and the chord finals).
 
+## Documentation
+
+- [`docs/usage-modes.md`](docs/usage-modes.md) — practical `r/o` and `r/w`
+  workflows, query examples, role/privilege matrix walkthroughs, and
+  troubleshooting.
+- [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
+  implementation steps and the release/tagging checklist.
+- [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
+  MariaDB, and MongoDB fixtures.
+
 ## Tree and Security
 
 After connecting, the workspace shows the databases visible to the connected
