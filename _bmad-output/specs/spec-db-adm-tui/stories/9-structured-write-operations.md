@@ -193,6 +193,9 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   enhancement rather than editing them. MongoDB role creation is scoped to the
   current database. Live databases are not available in CI; the `live-test/`
   stack is the manual verification path.
+- **Credential-source groundwork:** `~/.mypass` is now read and imported with
+  the same format, wildcard, escaping, and `0600` rules as `~/.pgpass`;
+  MYPASSFILE is honored. Creating/updating user credentials remains part of 9c.
 - **Next:** 9c users, then the deferred 9a rows.
 
 ## Risks and constraints
