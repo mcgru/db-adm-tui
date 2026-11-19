@@ -224,6 +224,17 @@ ORDER BY rolname`)
 	return out, c.err("principals", rows.Err())
 }
 
+// orderKeyQuery needs the explicit text casts: without them PostgreSQL cannot
+// infer the parameter types in a prepared statement and returns SQLSTATE
+// 42P18, which silently degrades paging and blocks row deletes.
+const orderKeyQuery = `
+SELECT a.attname
+FROM pg_index i
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+WHERE i.indrelid = format('%I.%I', $1::text, $2::text)::regclass
+  AND i.indisprimary
+ORDER BY array_position(i.indkey, a.attnum)`
+
 func (c *catalog) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, error) {
 	if ref.Kind != domain.KindTable && ref.Kind != domain.KindCollection {
 		return "", nil
@@ -232,13 +243,7 @@ func (c *catalog) OrderKey(ctx context.Context, ref domain.ObjectRef) (string, e
 	if schema == "" {
 		schema = "public"
 	}
-	rows, err := c.conn.conn.QueryContext(ctx, `
-SELECT a.attname
-FROM pg_index i
-JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-WHERE i.indrelid = format('%I.%I', $1, $2)::regclass
-  AND i.indisprimary
-ORDER BY array_position(i.indkey, a.attnum)`, schema, ref.Name)
+	rows, err := c.conn.conn.QueryContext(ctx, orderKeyQuery, schema, ref.Name)
 	if err != nil {
 		return "", c.err("order-key", err)
 	}

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -85,6 +86,12 @@ func TestPostgresObjectKind(t *testing.T) {
 		if got := postgresObjectKind(relkind); got != want {
 			t.Fatalf("postgresObjectKind(%q) = %q, want %q", relkind, got, want)
 		}
+	}
+}
+
+func TestPostgresOrderKeyCastsFormatParameters(t *testing.T) {
+	if !strings.Contains(orderKeyQuery, "$1::text") || !strings.Contains(orderKeyQuery, "$2::text") {
+		t.Fatal("order-key query must cast format() parameters to text")
 	}
 }
 
