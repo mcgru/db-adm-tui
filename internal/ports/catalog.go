@@ -25,4 +25,5 @@ type SessionBundle struct {
 	ModeController  ModeController
 	RoleAdmin       RoleAdmin
 	RoleMatrix      RoleMatrixReader
+	UserAdmin       UserAdmin
 }

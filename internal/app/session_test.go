@@ -8,6 +8,7 @@ import (
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/ports"
+	"github.com/mcgru/db-adm-tui/internal/profile"
 )
 
 type fakeDataReader struct {
@@ -760,5 +761,126 @@ func TestSessionMatrixUnavailable(t *testing.T) {
 	}, domain.Profile{Label: "prod", Engine: domain.EnginePostgreSQL, Database: "orders"}, Credential{}, f.connector, f.resolver, &fakeHistoryStore{})
 	if _, err := session.RoleMatrix(context.Background()); err == nil || domain.KindOf(err) != domain.KindConfig {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+type fakeUserAdmin struct {
+	result   domain.MutationResult
+	err      error
+	calls    int
+	lastSpec domain.UserSpec
+	lastUser domain.RoleRef
+}
+
+func (f *fakeUserAdmin) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.MutationResult, error) {
+	f.calls++
+	f.lastSpec = spec
+	return f.result, f.err
+}
+
+func (f *fakeUserAdmin) DropUser(ctx context.Context, user domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	f.lastUser = user
+	return f.result, f.err
+}
+
+func TestCreateUserWritesCredentialAndAudits(t *testing.T) {
+	f := newFixture(t)
+	admin := &fakeUserAdmin{result: domain.MutationResult{
+		Statement: `CREATE ROLE "app_new" LOGIN PASSWORD '***'`,
+	}}
+	historyStore := &fakeHistoryStore{}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, UserAdmin: admin,
+	}, domain.Profile{
+		Label: "prod", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "admin",
+	}, Credential{}, f.connector, f.resolver, historyStore)
+	if _, err := session.CreateUser(context.Background(), domain.UserSpec{
+		Engine: domain.EnginePostgreSQL, Name: "app_new", Password: "hunter2",
+	}); domain.KindOf(err) != domain.KindGuard {
+		t.Fatalf("read-only err = %v", err)
+	}
+	if admin.calls != 0 {
+		t.Fatal("read-only create reached the engine")
+	}
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	result, err := session.CreateUser(context.Background(), domain.UserSpec{
+		Engine: domain.EnginePostgreSQL, Name: "app_new", Password: "hunter2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Source == nil || result.Source.Kind != domain.SourcePgpass || result.Source.Path != "~/.pgpass" {
+		t.Fatalf("source = %+v", result.Source)
+	}
+	if admin.calls != 1 || admin.lastSpec.Name != "app_new" {
+		t.Fatalf("admin = %+v", admin)
+	}
+	pf := profile.ParsePgpass(f.resolver.PgpassPath())
+	if len(pf.Entries) != 1 || pf.Entries[0].Password != "hunter2" {
+		t.Fatalf("credential file = %+v", pf.Entries)
+	}
+	if len(historyStore.entries) != 1 || strings.Contains(historyStore.entries[0].Statement, "hunter2") {
+		t.Fatalf("history = %+v", historyStore.entries)
+	}
+}
+
+func TestCreateMySQLUserWritesPlainUserAndHost(t *testing.T) {
+	f := newFixture(t)
+	admin := &fakeUserAdmin{result: domain.MutationResult{
+		Statement: "CREATE USER 'app_new'@'%' IDENTIFIED BY '***'",
+	}}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, UserAdmin: admin,
+	}, domain.Profile{
+		Label: "maria", Engine: domain.EngineMySQL, Host: "db1", Port: 3306,
+		Database: "billing", User: "admin",
+	}, Credential{}, f.connector, f.resolver, &fakeHistoryStore{})
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.CreateUser(context.Background(), domain.UserSpec{
+		Engine: domain.EngineMySQL, Name: "app_new@%", Password: "secret",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mf := profile.ParseMyPass(f.resolver.MyPassPath())
+	if len(mf.Entries) != 1 || mf.Entries[0].User != "app_new" || mf.Entries[0].Database != "billing" {
+		t.Fatalf("credential file = %+v", mf.Entries)
+	}
+}
+
+func TestDropCurrentUserIsBlocked(t *testing.T) {
+	f := newFixture(t)
+	admin := &fakeUserAdmin{}
+	session := newSession(ports.SessionBundle{
+		Session: &fakeConn{}, Catalog: fakeCatalog{}, ModeController: &fakeModeController{}, UserAdmin: admin,
+	}, domain.Profile{
+		Label: "prod", Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_new",
+	}, Credential{}, f.connector, f.resolver, &fakeHistoryStore{})
+	if err := session.SetReadOnly(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	_, err := session.DropUser(context.Background(), domain.RoleRef{Engine: domain.EnginePostgreSQL, Name: "app_new"})
+	if err == nil || domain.KindOf(err) != domain.KindGuard {
+		t.Fatalf("err = %v", err)
+	}
+	if admin.calls != 0 {
+		t.Fatal("current user drop reached the engine")
+	}
+}
+
+func TestMongoCredentialOptionsKeepReplicaSetAndReplaceAuthSource(t *testing.T) {
+	p := domain.Profile{Source: &domain.Source{
+		Kind:     domain.SourceMongoFile,
+		Selector: "mongodb://mongo_admin@127.0.0.1:57017/admin?authSource=admin&replicaSet=rs0",
+	}}
+	got := mongoCredentialOptions(p, "appdb")
+	if !strings.Contains(got, "authSource=appdb") || !strings.Contains(got, "replicaSet=rs0") {
+		t.Fatalf("options = %q", got)
 	}
 }

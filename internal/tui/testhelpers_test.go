@@ -62,6 +62,27 @@ type fakeConnector struct {
 	mode       *fakeModeController
 	role       *fakeRoleAdmin
 	matrix     *fakeRoleMatrix
+	user       *fakeUserAdmin
+}
+
+type fakeUserAdmin struct {
+	result   domain.MutationResult
+	err      error
+	calls    int
+	lastSpec domain.UserSpec
+	lastUser domain.RoleRef
+}
+
+func (f *fakeUserAdmin) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.MutationResult, error) {
+	f.calls++
+	f.lastSpec = spec
+	return f.result, f.err
+}
+
+func (f *fakeUserAdmin) DropUser(ctx context.Context, user domain.RoleRef) (domain.MutationResult, error) {
+	f.calls++
+	f.lastUser = user
+	return f.result, f.err
 }
 
 type fakeRoleMatrix struct {
@@ -442,10 +463,14 @@ func (f *fakeConnector) Connect(ctx context.Context, p domain.Profile, password 
 	if matrix == nil {
 		matrix = defaultFakeMatrix(p.Engine)
 	}
+	user := f.user
+	if user == nil {
+		user = &fakeUserAdmin{result: domain.MutationResult{Statement: "user change"}}
+	}
 	return ports.SessionBundle{
 		Session: conn, Catalog: catalog, DataReader: data,
 		StatsReader: stats, PrivilegeReader: privileges, QueryExecutor: query,
-		ModeController: mode, RoleAdmin: role, RoleMatrix: matrix,
+		ModeController: mode, RoleAdmin: role, RoleMatrix: matrix, UserAdmin: user,
 	}, nil
 }
 func (f *fakeConnector) Close() error { return nil }

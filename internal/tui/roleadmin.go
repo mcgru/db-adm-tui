@@ -74,10 +74,12 @@ func (m Model) startRoleAdd() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.openRoleMenu(node, true)
-	case domain.KindUsers, domain.KindUser:
-		m.setMessage(levelInfo, "user changes are story 9c")
+	case domain.KindUsers:
+		return m.startUserAdd()
+	case domain.KindUser:
+		m.setMessage(levelInfo, "select the users group to create a user")
 	default:
-		m.setMessage(levelInfo, "select a role or the roles group")
+		m.setMessage(levelInfo, "select a role, user, or the matching group")
 	}
 	return m, nil
 }
@@ -93,12 +95,14 @@ func (m Model) startRoleRemove() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.openRoleMenu(node, false)
-	case domain.KindUsers, domain.KindUser:
-		m.setMessage(levelInfo, "user changes are story 9c")
+	case domain.KindUser:
+		return m.startUserRemove()
+	case domain.KindUsers:
+		m.setMessage(levelInfo, "select a user first")
 	case domain.KindRoles:
 		m.setMessage(levelInfo, "select a role first")
 	default:
-		m.setMessage(levelInfo, "select a role")
+		m.setMessage(levelInfo, "select a role or user")
 	}
 	return m, nil
 }

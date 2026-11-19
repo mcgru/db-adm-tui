@@ -90,7 +90,7 @@ func connectOnce(ctx context.Context, p domain.Profile, password, sslmode string
 		return ports.SessionBundle{}, safeError("ping", password, err)
 	}
 	live := &connection{conn: conn, db: db, password: password}
-	return ports.SessionBundle{Session: live, Catalog: newCatalog(live), DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live, RoleMatrix: live}, nil
+	return ports.SessionBundle{Session: live, Catalog: newCatalog(live), DataReader: live, StatsReader: live, PrivilegeReader: live, QueryExecutor: live, ModeController: live, RoleAdmin: live, RoleMatrix: live, UserAdmin: live}, nil
 }
 
 type connection struct {

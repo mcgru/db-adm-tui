@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -556,6 +557,153 @@ func (s *Session) RevokePrivileges(ctx context.Context, grant domain.PrivilegeGr
 	return s.runRoleMutation(ctx, func() (domain.MutationResult, error) {
 		return s.bundle.RoleAdmin.RevokePrivileges(ctx, grant)
 	})
+}
+
+// CreateUser creates one native user and writes its password to the matching
+// local credential source. The password never enters a profile or history.
+func (s *Session) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.UserResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.UserAdmin == nil {
+		return domain.UserResult{}, domain.NewError(domain.KindConfig, "user", "user administration is not available")
+	}
+	if s.readOnly.Load() {
+		return domain.UserResult{}, domain.NewError(domain.KindGuard, "user", "read-write mode is required; Ctrl+X Ctrl+W to switch.")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.UserResult{}, err
+	}
+	p := s.profile
+	if spec.Database == "" {
+		spec.Database = p.Database
+	}
+	if sameAsCurrentUser(p, spec) {
+		return domain.UserResult{}, domain.NewError(domain.KindGuard, "user", "cannot create the currently connected user")
+	}
+	start := time.Now()
+	result, err := s.bundle.UserAdmin.CreateUser(ctx, spec)
+	if err != nil {
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		return domain.UserResult{Mutation: result}, err
+	}
+	s.recordHistoryLocked(result.Statement, start, "ok")
+
+	target := profile.CredentialTarget{
+		Engine:   spec.Engine,
+		Host:     p.Host,
+		Port:     p.Port,
+		Database: spec.Database,
+		Password: spec.Password,
+		User:     spec.Name,
+	}
+	if p.Source != nil {
+		switch {
+		case spec.Engine == domain.EnginePostgreSQL && p.Source.Kind == domain.SourcePgpass:
+			target.SourcePath = p.Source.Path
+		case spec.Engine == domain.EngineMySQL && p.Source.Kind == domain.SourceMySQLPass:
+			target.SourcePath = p.Source.Path
+		}
+	}
+	if spec.Engine == domain.EngineMySQL {
+		target.User, _ = splitMySQLCredentialUser(spec.Name)
+	}
+	if spec.Engine == domain.EngineMongoDB {
+		target.MongoOptions = mongoCredentialOptions(p, spec.Database)
+	}
+	source, credErr := s.resolver.SaveCredential(target)
+	if credErr != nil {
+		return domain.UserResult{Mutation: result}, domain.NewError(domain.KindConfig, "user",
+			"user was created, but credentials could not be saved: "+credErr.Error())
+	}
+	return domain.UserResult{Mutation: result, Source: &source}, nil
+}
+
+// DropUser drops one native user. The currently connected account is refused
+// locally so the live session cannot be unexpectedly removed.
+func (s *Session) DropUser(ctx context.Context, user domain.RoleRef) (domain.MutationResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dead || s.bundle.Session == nil || s.bundle.UserAdmin == nil {
+		return domain.MutationResult{}, domain.NewError(domain.KindConfig, "user", "user administration is not available")
+	}
+	if s.readOnly.Load() {
+		return domain.MutationResult{}, domain.NewError(domain.KindGuard, "user", "read-write mode is required; Ctrl+X Ctrl+W to switch.")
+	}
+	if err := s.readyForEngine(); err != nil {
+		return domain.MutationResult{}, err
+	}
+	if sameAsCurrentRef(s.profile, user) {
+		return domain.MutationResult{}, domain.NewError(domain.KindGuard, "user", "cannot drop the currently connected user")
+	}
+	start := time.Now()
+	result, err := s.bundle.UserAdmin.DropUser(ctx, user)
+	if err != nil {
+		s.recordHistoryLocked(result.Statement, start, queryStatus(err))
+		return result, err
+	}
+	s.recordHistoryLocked(result.Statement, start, "ok")
+	return result, nil
+}
+
+func sameAsCurrentUser(p domain.Profile, spec domain.UserSpec) bool {
+	switch spec.Engine {
+	case domain.EnginePostgreSQL:
+		return spec.Name == p.User
+	case domain.EngineMySQL:
+		user, _ := splitMySQLCredentialUser(spec.Name)
+		return user == p.User
+	case domain.EngineMongoDB:
+		name := spec.Name
+		if index := strings.LastIndex(name, "@"); index >= 0 {
+			name = name[:index]
+		}
+		return name == p.User && (spec.Database == "" || spec.Database == p.Database)
+	default:
+		return false
+	}
+}
+
+func sameAsCurrentRef(p domain.Profile, user domain.RoleRef) bool {
+	switch user.Engine {
+	case domain.EnginePostgreSQL:
+		return user.Name == p.User
+	case domain.EngineMySQL:
+		name, _ := splitMySQLCredentialUser(user.Name)
+		return name == p.User
+	case domain.EngineMongoDB:
+		name := user.Name
+		if index := strings.LastIndex(name, "@"); index >= 0 {
+			name = name[:index]
+		}
+		return name == p.User && (user.Database == "" || user.Database == p.Database)
+	default:
+		return false
+	}
+}
+
+func splitMySQLCredentialUser(value string) (string, string) {
+	value = strings.TrimSpace(value)
+	if index := strings.LastIndex(value, "@"); index >= 0 {
+		return value[:index], value[index+1:]
+	}
+	return value, ""
+}
+
+func mongoCredentialOptions(p domain.Profile, database string) string {
+	query := url.Values{}
+	if p.Source != nil && p.Source.Selector != "" {
+		if u, err := url.Parse(p.Source.Selector); err == nil {
+			query = u.Query()
+		}
+	}
+	for key := range query {
+		switch strings.ToLower(key) {
+		case "password", "passwd", "pwd":
+			query.Del(key)
+		}
+	}
+	query.Set("authSource", database)
+	return query.Encode()
 }
 
 func (s *Session) runRoleMutation(ctx context.Context, operation func() (domain.MutationResult, error)) (domain.MutationResult, error) {

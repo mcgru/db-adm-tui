@@ -53,6 +53,9 @@ const (
 	modalRoleCreate
 	modalRoleConfirm
 	modalMatrixDetails
+	modalUserForm
+	modalUserConfirm
+	modalUserSave
 )
 
 type messageLevel int
@@ -173,6 +176,7 @@ type Model struct {
 	statementOrigin string
 	role            roleState
 	matrix          matrixState
+	user            userState
 	history         []string
 	historyIndex    int
 	historyDraft    string
@@ -205,6 +209,7 @@ type Model struct {
 	roleGen        uint64
 	matrixGen      uint64
 	matrixDirty    bool
+	userGen        uint64
 
 	connecting      bool
 	connectingKey   string
@@ -277,6 +282,7 @@ func New(svc *app.Service) Model {
 	m.statementInput = newInput("", false)
 	m.role = newRoleState()
 	m.matrix = newMatrixState()
+	m.user = newUserState()
 	m.editLabel = newInput("label", false)
 	m.editHost = newInput("host", false)
 	m.editPort = newInput("5432", false)
@@ -372,6 +378,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleModeDone(msg)
 	case roleDoneMsg:
 		return m.handleRoleDone(msg)
+	case userDoneMsg:
+		return m.handleUserDone(msg)
 	case matrixMembershipMsg:
 		return m.handleMatrixMembership(msg)
 	case matrixPrivilegesMsg:
@@ -432,6 +440,12 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleRoleCreateKey(msg)
 	case modalRoleConfirm:
 		return m.handleRoleConfirmKey(msg)
+	case modalUserForm:
+		return m.handleUserFormKey(msg)
+	case modalUserConfirm:
+		return m.handleUserConfirmKey(msg)
+	case modalUserSave:
+		return m.handleUserSaveKey(msg)
 	}
 	if m.pendingChord {
 		m.pendingChord = false
@@ -1222,6 +1236,9 @@ func (m *Model) resizeInputs() {
 	}
 	m.query.SetWidth(queryWidth)
 	m.statementInput.SetWidth(modalWidth(m.width, 70) - 6)
+	m.user.name.SetWidth(newWidth)
+	m.user.host.SetWidth(newWidth)
+	m.user.password.SetWidth(newWidth)
 	m.editLabel.SetWidth(newWidth)
 	m.editHost.SetWidth(newWidth)
 	m.editPort.SetWidth(newWidth)
@@ -1303,6 +1320,12 @@ func (m Model) viewModal() string {
 		return m.viewRoleConfirm()
 	case modalMatrixDetails:
 		return m.viewMatrixDetails()
+	case modalUserForm:
+		return m.viewUserForm()
+	case modalUserConfirm:
+		return m.viewUserConfirm()
+	case modalUserSave:
+		return m.viewUserSave()
 	}
 	return ""
 }
@@ -1336,6 +1359,9 @@ func (m *Model) dismissModal() {
 	case modalMatrixDetails:
 		m.modal = modalNone
 		m.matrix.details = matrixDetails{}
+	case modalUserForm, modalUserConfirm, modalUserSave:
+		m.modal = modalNone
+		m.user = newUserState()
 	}
 }
 
