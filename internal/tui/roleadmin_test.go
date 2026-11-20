@@ -76,7 +76,7 @@ func TestMatrixOpensAndSwitches(t *testing.T) {
 		t.Fatalf("active = %v", m.matrix.active)
 	}
 	view := StripANSI(m.viewMatrix())
-	for _, want := range []string{"Principal × Role", "app_ro", "reporting", "[x]"} {
+	for _, want := range []string{"Role × Principal", "u:app_ro", "r:reporting", "[x]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -135,6 +135,63 @@ func TestMongoMatrixUsesRoleRowsAndShowsBuiltinRoles(t *testing.T) {
 	}
 }
 
+func TestMatrixPrincipalLabels(t *testing.T) {
+	cases := []struct {
+		ref  domain.RoleRef
+		want string
+	}{
+		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "admin", Name: "root@admin"}, "u:root"},
+		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "appdb", Name: "app_user@appdb"}, "u:app_user@appdb"},
+		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindRole, Database: "appdb", Name: "readWrite@appdb"}, "r:readWrite@appdb"},
+		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@%"}, "u:app"},
+		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@db1"}, "u:app@db1"},
+		{domain.RoleRef{Engine: domain.EnginePostgreSQL, Kind: domain.KindUser, Name: "app_ro"}, "u:app_ro"},
+	}
+	for _, tc := range cases {
+		if got := matrixPrincipalLabel(tc.ref); got != tc.want {
+			t.Fatalf("label(%+v) = %q, want %q", tc.ref, got, tc.want)
+		}
+	}
+}
+
+func TestSecurityDetailsShowsMatrixHint(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindSecurity)
+	if view := StripANSI(m.View().Content); !strings.Contains(view, accessMatrixHint) {
+		t.Fatalf("security details missing matrix hint:\n%s", view)
+	}
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	for _, kind := range []domain.ObjectKind{domain.KindUsers, domain.KindRoles} {
+		m = selectKind(t, m, kind)
+		if view := StripANSI(m.View().Content); !strings.Contains(view, accessMatrixHint) {
+			t.Fatalf("%s details missing matrix hint:\n%s", kind, view)
+		}
+	}
+}
+
+func TestMatrixShowsFullTruncatedColumnLabel(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	engine := domain.EnginePostgreSQL
+	user := domain.RoleRef{Engine: engine, Name: "very_long_principal_name", Kind: domain.KindUser}
+	role := domain.RoleRef{Engine: engine, Name: "reporting", Kind: domain.KindRole}
+	e.connector.matrix = &fakeRoleMatrix{
+		membership: domain.RoleMatrix{
+			Principals: []domain.RoleRef{user},
+			Roles:      []domain.RoleRef{role},
+			Members:    map[string]map[string]bool{user.Key(): {role.Key(): true}},
+		},
+	}
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	view := StripANSI(m.viewMatrix())
+	if !strings.Contains(view, "column u:very_long_principal_name") {
+		t.Fatalf("full truncated column label missing:\n%s", view)
+	}
+}
+
 func TestMatrixSpaceTogglesMembership(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
@@ -173,6 +230,37 @@ func TestMatrixSpaceTogglesPrivilege(t *testing.T) {
 	if admin.lastGrant.Role.Name != "reporting" || admin.lastGrant.Target.Kind != domain.KindDatabase ||
 		len(admin.lastGrant.Privileges) != 1 || admin.lastGrant.Privileges[0] != "CONNECT" {
 		t.Fatalf("grant = %+v", admin.lastGrant)
+	}
+}
+
+func TestMatrixDetailsCtrlATogglesAllPrivileges(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "2")
+	m, _ = press(t, m, "e")
+	if m.modal != modalMatrixDetails {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	if len(m.matrix.details.choices) < 2 {
+		t.Fatalf("choices = %+v", m.matrix.details.choices)
+	}
+	m, _ = press(t, m, "ctrl+a")
+	for _, choice := range m.matrix.details.choices {
+		if !m.matrix.details.chosen[choice] {
+			t.Fatalf("Ctrl+A did not select %q", choice)
+		}
+	}
+	m, _ = press(t, m, "ctrl+a")
+	for _, choice := range m.matrix.details.choices {
+		if m.matrix.details.chosen[choice] {
+			t.Fatalf("second Ctrl+A did not clear %q", choice)
+		}
+	}
+	if view := StripANSI(m.viewModal()); !strings.Contains(view, "Ctrl+A toggle all") {
+		t.Fatalf("Ctrl+A hint missing:\n%s", view)
 	}
 }
 

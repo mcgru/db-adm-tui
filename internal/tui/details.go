@@ -56,6 +56,18 @@ type detailLine struct {
 	Rule    bool
 }
 
+const accessMatrixHint = "Ctrl+X Ctrl+R opens the access matrix (r/w)"
+
+func securityPrincipalKind(kind domain.ObjectKind) bool {
+	switch kind {
+	case domain.KindSecurity, domain.KindUsers, domain.KindRoles,
+		domain.KindUser, domain.KindRole:
+		return true
+	default:
+		return false
+	}
+}
+
 func (d *detailsState) selectNode(node domain.Node) {
 	if d.exactCancel != nil {
 		d.exactCancel()
@@ -204,16 +216,21 @@ func detailLines(d *detailsState, currentDB string, childCount, width int) []det
 				lines = append(lines, detailLine{Value: "  " + attr})
 			}
 		}
+		lines = append(lines, detailLine{}, detailLine{Value: accessMatrixHint, Mutable: true})
 		return lines
 	case domain.KindSecurity:
 		return []detailLine{
 			{Label: "name", Value: "Security"},
 			{Value: "expand users or roles", Mutable: true},
+			detailLine{},
+			{Value: accessMatrixHint, Mutable: true},
 		}
 	case domain.KindUsers, domain.KindRoles:
 		return []detailLine{
 			{Label: "group", Value: string(node.Kind)},
 			{Value: "expand to load principals", Mutable: true},
+			detailLine{},
+			{Value: accessMatrixHint, Mutable: true},
 		}
 	default:
 		return []detailLine{{Value: "nothing selected", Mutable: true}}
@@ -426,17 +443,21 @@ func fitTableWidths(widths []int, width int) {
 }
 
 func privilegeLines(d *detailsState) []detailLine {
+	var prefix []detailLine
+	if securityPrincipalKind(d.node.Kind) {
+		prefix = append(prefix, detailLine{Value: accessMatrixHint, Mutable: true}, detailLine{})
+	}
 	switch {
 	case d.privilegesLoading:
-		return []detailLine{{Value: "loading privileges…", Mutable: true}}
+		return append(prefix, detailLine{Value: "loading privileges…", Mutable: true})
 	case d.privilegesErr != "":
-		return []detailLine{{Value: "error: " + d.privilegesErr, Error: true}}
+		return append(prefix, detailLine{Value: "error: " + d.privilegesErr, Error: true})
 	}
 	report := d.privileges
 	if report.Principal == "" && len(report.Sections) == 0 {
-		return []detailLine{{Value: "no privileges", Mutable: true}}
+		return append(prefix, detailLine{Value: "no privileges", Mutable: true})
 	}
-	var lines []detailLine
+	lines := prefix
 	if report.Principal != "" {
 		lines = append(lines, detailLine{Label: "principal", Value: report.Principal})
 	}

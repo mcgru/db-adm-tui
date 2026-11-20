@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/mcgru/db-adm-tui/internal/app"
 	"github.com/mcgru/db-adm-tui/internal/domain"
@@ -197,7 +198,7 @@ func (m *Model) applyMatrixPendingFocus() {
 		}
 		m.matrix.active = matrixMembership
 		if index := roleIndex(m.matrix.membership.Roles, role.Key()); index >= 0 {
-			m.matrix.cursors[matrixMembership].col = index
+			m.matrix.cursors[matrixMembership].row = index
 		}
 	case matrixPrivileges:
 		if !m.matrix.privilegesLoaded {
@@ -220,11 +221,13 @@ func roleIndex(refs []domain.RoleRef, key string) int {
 	return -1
 }
 
+// matrixRoleRows returns the left-hand rows: roles in the membership matrix,
+// principals/roles in the privilege matrix.
 func (m Model) matrixRoleRows() []domain.RoleRef {
 	filter := m.matrix.cursors[m.matrix.active].filter
 	switch m.matrix.active {
 	case matrixMembership:
-		return filterMatrixRoles(m.matrix.membership.Principals, filter)
+		return filterMatrixRoles(m.matrix.membership.Roles, filter)
 	default:
 		return filterMatrixRoles(m.matrix.privileges.Principals, filter)
 	}
@@ -241,7 +244,7 @@ func (m Model) matrixRoleCols() []domain.RoleRef {
 	if m.matrix.active != matrixMembership {
 		return nil
 	}
-	return filterMatrixRoles(m.matrix.membership.Roles, m.matrix.cursors[matrixMembership].filter)
+	return filterMatrixRoles(m.matrix.membership.Principals, m.matrix.cursors[matrixMembership].filter)
 }
 
 func (m Model) matrixRowCount() int {
@@ -260,7 +263,7 @@ func (m Model) matrixRowLabel(index int) string {
 	if index < 0 || index >= len(rows) {
 		return ""
 	}
-	return rolePrefix(rows[index]) + oneLine(rows[index].Name)
+	return matrixRoleLabel(rows[index])
 }
 
 func (m Model) matrixColLabel(index int) string {
@@ -269,13 +272,45 @@ func (m Model) matrixColLabel(index int) string {
 		if index < 0 || index >= len(cols) {
 			return ""
 		}
-		return rolePrefix(cols[index]) + oneLine(cols[index].Name)
+		return matrixPrincipalLabel(cols[index])
 	}
 	cols := m.matrixObjectCols()
 	if index < 0 || index >= len(cols) {
 		return ""
 	}
 	return matrixObjectLabel(cols[index])
+}
+
+// matrixRoleLabel keeps the database suffix on the left, where there is room
+// for long names such as readWriteAnyDatabase@admin.
+func matrixRoleLabel(ref domain.RoleRef) string {
+	return rolePrefix(ref) + oneLine(ref.Name)
+}
+
+// matrixPrincipalLabel is the compact column label. MongoDB users in admin are
+// shown without @admin; users in another database keep @database. MySQL users
+// hide the default % host.
+func matrixPrincipalLabel(ref domain.RoleRef) string {
+	if ref.Kind == domain.KindUser && ref.Engine == domain.EngineMongoDB {
+		name := oneLine(ref.Name)
+		database := ref.Database
+		if index := strings.LastIndex(name, "@"); index >= 0 {
+			if database == "" {
+				database = name[index+1:]
+			}
+			name = name[:index]
+		}
+		if database == "" || database == "admin" {
+			return "u:" + name
+		}
+		return "u:" + name + "@" + database
+	}
+	if ref.Kind == domain.KindUser && ref.Engine == domain.EngineMySQL {
+		name := oneLine(ref.Name)
+		name = strings.TrimSuffix(name, "@%")
+		return "u:" + name
+	}
+	return rolePrefix(ref) + oneLine(ref.Name)
 }
 
 func rolePrefix(ref domain.RoleRef) string {
@@ -314,7 +349,7 @@ func (m Model) matrixCellText(row, col int) string {
 		if row < 0 || row >= len(rows) || col < 0 || col >= len(cols) {
 			return ""
 		}
-		if m.matrix.membership.Members[rows[row].Key()][cols[col].Key()] {
+		if m.matrix.membership.Members[cols[col].Key()][rows[row].Key()] {
 			return "[x]"
 		}
 		return "[ ]"
@@ -341,9 +376,33 @@ func (m Model) matrixFilterVisible() bool {
 
 func (m Model) matrixCellWidth() int {
 	if m.matrix.active == matrixMembership {
-		return 12
+		width := 12
+		for _, ref := range m.matrixRoleCols() {
+			if w := lipgloss.Width(matrixPrincipalLabel(ref)); w > width {
+				width = w
+			}
+		}
+		if width > 24 {
+			width = 24
+		}
+		return width
 	}
 	return 16
+}
+
+// matrixTruncatedColumnLabel returns the full current column label when it
+// does not fit into a cell. The matrix tabs line shows it after "Tab switch"
+// (or on the next line when the combined line would be too wide).
+func (m Model) matrixTruncatedColumnLabel() (string, bool) {
+	cursor := m.matrix.cursors[m.matrix.active]
+	if cursor.col < 0 || cursor.col >= m.matrixColCount() {
+		return "", false
+	}
+	label := oneLine(m.matrixColLabel(cursor.col))
+	if label == "" || lipgloss.Width(label) <= m.matrixCellWidth() {
+		return "", false
+	}
+	return label, true
 }
 
 func (m Model) matrixPrincipalWidth() int {
@@ -359,7 +418,7 @@ func (m Model) matrixPrincipalWidth() int {
 
 func (m Model) matrixViewport() (rows, cols int) {
 	innerHeight := m.height - 4
-	used := 2 // matrix tabs + column header
+	used := len(m.matrixHeaderLines(m.width-4)) + 1 // tabs/hint + column header
 	if m.matrixFilterVisible() {
 		used++
 	}
@@ -589,8 +648,8 @@ func (m Model) toggleMatrixCell() (tea.Model, tea.Cmd) {
 		if cursor.row >= len(rows) || cursor.col >= len(cols) {
 			return m, nil
 		}
-		member := rows[cursor.row]
-		role := cols[cursor.col]
+		role := rows[cursor.row]
+		member := cols[cursor.col]
 		if member.Key() == role.Key() {
 			m.setMessage(levelInfo, "a role cannot be its own member")
 			return m, nil
@@ -675,8 +734,8 @@ func (m Model) openMatrixDetails() (tea.Model, tea.Cmd) {
 		if cursor.row >= len(rows) || cursor.col >= len(cols) {
 			return m, nil
 		}
-		member := rows[cursor.row]
-		role := cols[cursor.col]
+		role := rows[cursor.row]
+		member := cols[cursor.col]
 		m.matrix.details = matrixDetails{
 			open:       true,
 			membership: true,
@@ -761,6 +820,20 @@ func (m Model) handleMatrixDetailsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		if details.cursor >= 0 && details.cursor < len(details.choices) {
 			choice := details.choices[details.cursor]
 			details.chosen[choice] = !details.chosen[choice]
+		}
+	case keymap.FetchAll:
+		if details.membership {
+			return m, nil
+		}
+		all := true
+		for _, choice := range details.choices {
+			if !details.chosen[choice] {
+				all = false
+				break
+			}
+		}
+		for _, choice := range details.choices {
+			details.chosen[choice] = !all
 		}
 	case keymap.Confirm:
 		if details.membership {
@@ -1024,7 +1097,7 @@ func matrixObjectRank(ref domain.ObjectRef) int {
 }
 
 func (m Model) matrixTabsLine() string {
-	membership := "1 Principal × Role"
+	membership := "1 Role × Principal"
 	privileges := "2 Principal/Role × Object"
 	if m.matrix.active == matrixMembership {
 		membership = m.styles.Accent.Bold(true).Underline(true).Render(membership)
@@ -1037,8 +1110,21 @@ func (m Model) matrixTabsLine() string {
 		m.styles.Muted.Render("   Tab switch")
 }
 
+func (m Model) matrixHeaderLines(width int) []string {
+	tabs := m.matrixTabsLine()
+	if full, ok := m.matrixTruncatedColumnLabel(); ok {
+		hint := m.styles.Muted.Render("column ") + m.styles.Text.Render(full)
+		separator := m.styles.Muted.Render(" · ")
+		if lipgloss.Width(tabs)+lipgloss.Width(separator)+lipgloss.Width(hint) <= width {
+			return []string{tabs + separator + hint}
+		}
+		return []string{tabs, hint}
+	}
+	return []string{tabs}
+}
+
 func (m Model) matrixBodyLines(width int) []string {
-	lines := []string{m.matrixTabsLine()}
+	lines := m.matrixHeaderLines(width)
 	cursor := m.matrix.cursors[m.matrix.active]
 	if m.matrixFilterVisible() {
 		value := m.styles.Text.Render(filterText(cursor.filter))
@@ -1072,7 +1158,11 @@ func (m Model) matrixBodyLines(width int) []string {
 	if colEnd > cols {
 		colEnd = cols
 	}
-	header := Pad(m.styles.Header.Render("principal"), principalWidth) + " "
+	firstHeader := "principal/role"
+	if m.matrix.active == matrixMembership {
+		firstHeader = "role"
+	}
+	header := Pad(m.styles.Header.Render(firstHeader), principalWidth) + " "
 	for col := colStart; col < colEnd; col++ {
 		label := Truncate(m.matrixColLabel(col), cellWidth)
 		style := m.styles.Header
@@ -1180,12 +1270,13 @@ func (m Model) viewMatrixDetails() string {
 	body = append(body, field("principal", 10)+" "+m.styles.Text.Render(oneLine(details.role.Name)))
 	body = append(body, field("target", 10)+" "+m.styles.Text.Render(oneLine(matrixObjectLabel(details.object))))
 	body = append(body, "")
-	body = append(body, m.styles.Header.Render("native privileges · Space toggle · Enter apply"))
+	body = append(body, m.styles.Header.Render("native privileges · Space toggle · Ctrl+A all"))
 	body = append(body, m.viewMatrixChoices(inner)...)
 	if details.err != "" {
 		body = append(body, m.styles.Error.Render(Truncate(details.err, inner)))
 	}
-	body = append(body, "", m.actionLine("Enter", "apply", "Esc", "cancel"))
+	body = append(body, "", m.actionLine("Enter", "apply", "Ctrl+A", "toggle all"))
+	body = append(body, m.styles.Muted.Render("Esc cancel"))
 	return modalBox("privilege details", body, width, m.styles)
 }
 

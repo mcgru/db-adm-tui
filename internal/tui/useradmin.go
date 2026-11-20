@@ -340,7 +340,7 @@ func (m Model) viewUserForm() string {
 		body = append(body, m.inputLine("host", m.user.host.View(), m.user.focus == 1, inner))
 	}
 	body = append(body, m.inputLine("password", m.user.password.View(), m.user.focus == 2, inner))
-	for _, line := range wrapText("roles: after create use Ctrl+X Ctrl+R → 1 Principal × Role", inner) {
+	for _, line := range wrapText("roles: after create use Ctrl+X Ctrl+R → 1 Role × Principal", inner) {
 		body = append(body, m.styles.Muted.Render(line))
 	}
 	if m.user.formErr != "" {
