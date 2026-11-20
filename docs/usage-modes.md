@@ -282,8 +282,9 @@ The form asks for:
 - PostgreSQL: a login role name and password;
 - MySQL/MariaDB: a user name, host (`%` by default), and password;
 - MongoDB: a user name, password, and authentication database. The database
-  defaults to the current one and can be changed to `admin`; it is where the
-  user is stored and authenticated, not a database access grant.
+  defaults to `admin`; on that field `Space` cycles through `admin` and the
+  databases loaded in the tree, and a custom target can still be typed. It is
+  where the user is stored and authenticated, not a database access grant.
 
 The password field is masked. On success the native user is created first and
 the password is written to the matching source file:

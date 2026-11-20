@@ -1010,24 +1010,28 @@ stat -c '%a %n' ~/.mypass
 
 **Шаги:**
 1. `Security → users → +`.
-2. Имя `tmp_user_mongo`, пароль `tmp_mongo_secret`.
-3. `Enter`.
-4. Проверьте native:
+2. Имя `tmp_user_mongo`, `Tab`, пароль `tmp_mongo_secret`, `Tab`.
+3. Поле database по умолчанию `admin`; нажмите `Space`, пока не появится
+   `appdb` (или введите `appdb` вручную).
+4. `Enter`.
+5. Проверьте native:
 
 ```js
 db.getSiblingDB("appdb").getUser("tmp_user_mongo")
 ```
 
-5. Проверьте файл:
+6. Проверьте файл:
 
 ```bash
 grep 'tmp_user_mongo' ~/.mongo.tmp_user_mongo-in-appdb
 stat -c '%a %n' ~/.mongo.tmp_user_mongo-in-appdb
 ```
 
-6. Удалите пользователя через `-`.
+7. Удалите пользователя через `-`.
 
 **Ожидаемо:**
+- auth-база по умолчанию — `admin`;
+- `Space` циклически переключает `admin` и загруженные базы;
 - пользователь создан в `appdb` с `roles: []`;
 - credential-файл содержит полный `mongodb://tmp_user_mongo:...@127.0.0.1:57017/appdb?...`;
 - файл `0600`;

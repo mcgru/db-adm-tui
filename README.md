@@ -77,7 +77,7 @@ The tool starts on the profile picker.
 | `Ctrl+X` then `Ctrl+E` | Open the current statement in the edit modal |
 | `Ctrl+X` then `Ctrl+R` | Open the access matrix in `r/w` (membership and object privileges) |
 | `Ctrl+X` then `Ctrl+W` | Switch between read-only and read-write; read-write asks for confirmation |
-| `Ctrl+Space` | Open completion for the word at the cursor; `Esc` then `Tab` also opens it in the query bar or edit modal |
+| `Ctrl+Space` | Open completion for the word at the cursor; in the statement editor, `Tab` also opens it and a second `Tab` accepts |
 | `Ctrl+F1` | Open offline context help for the focused element or word; `Enter` or `Ctrl+F1` again shows examples |
 | `?` / `F1` | Help stub |
 | `Ctrl+C` / `Ctrl+с` | Force quit, even below the 80×24 floor |
@@ -94,12 +94,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.5.2.md`](docs/release-notes-v1.5.2.md) — latest
-  statement-editor notes; [`v1.5.1`](docs/release-notes-v1.5.1.md) covers the
-  MongoDB form, [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix orientation,
-  and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская
-  версия:
-  [`docs/release-notes-v1.5.2.ru.md`](docs/release-notes-v1.5.2.ru.md).
+- [`docs/release-notes-v1.5.3.md`](docs/release-notes-v1.5.3.md) — latest
+  MongoDB auth-database and statement completion notes;
+  [`v1.5.2`](docs/release-notes-v1.5.2.md) covers the compact statement prompt,
+  [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix orientation, and
+  [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
+  [`docs/release-notes-v1.5.3.ru.md`](docs/release-notes-v1.5.3.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -240,11 +240,11 @@ Create a user from `Security → users → +`:
 - **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
   The account is created as `'user'@'host'` with no extra grants.
 - **MongoDB:** enter a user name, password, and authentication database. The
-  form order is name → password → database; the database defaults to the
-  current database, so press `Tab` past password and change it to `admin` (or
-  another database) when needed. The auth database stores the MongoDB user; it
-  does not grant access to that database. The user is created with an empty
-  role list; use the matrix to assign roles.
+  form order is name → password → database; the database defaults to `admin`.
+  On the database field, `Space` cycles through `admin` and the databases
+  loaded in the tree; a custom target can still be typed. The auth database
+  stores the MongoDB user; it does not grant access to that database. The user
+  is created with an empty role list; use the matrix to assign roles.
 
 The password is masked in the form. It is written to the matching credential
 file only after the native account is created:
@@ -461,8 +461,10 @@ works at the beginning, middle, or end of an identifier and accepting a
 suggestion replaces the whole word. In MQL, a key immediately before `:` is
 also used as the completion term, so `$o:` offers `$or` and keeps the colon.
 The popup opens above the cursor column in the query bar and edit modal.
-In the query bar and edit modal, `Esc` then `Tab` opens the same popup without
-changing focus; `Tab` alone still moves focus, never completes. Accepting a
+In the query bar, `Esc` then `Tab` opens the same popup without changing focus;
+`Tab` alone still moves focus, never completes. In the statement edit modal,
+`Tab` opens completion and a second `Tab` accepts the selected item; `Esc` then
+`Tab` still opens it there. Accepting a
 Mongo array operator such as `$or`, `$and`, `$in`, or `$nin` adds `: [  ]` with
 the cursor inside unless the text after the word already has a colon/array;
 accepting a function term such as `COUNT`, `COALESCE`, `ObjectId`, or `ISODate`
