@@ -405,6 +405,7 @@ The leading [db]/[schema] columns stay frozen while tables/collections scroll wh
 Space toggles a cell, e opens native privilege details, / filters, Esc closes.
 Use + on the roles group to create a role; role + - can drop one.
 On Security, users, or roles, e opens membership and r opens privileges.
+On a specific user, e focuses the user column and r focuses the user row.
 Select a principal and open Privileges for native grants and memberships.`,
 
 	"status": `The bottom line shows counts, elapsed query time, errors, and cancellation hints.

@@ -171,17 +171,20 @@ func (m Model) matrixEnsureDatabase() string {
 
 // startTreeMatrix opens the access matrix from the tree selection. Security,
 // users, and roles groups open an unscoped panel; database, schema, table, and
-// collection nodes open the scoped matrix; a role opens the matrix focused on
-// that role.
+// collection nodes open the scoped matrix; a user or role opens the matrix
+// focused on that principal.
 func (m Model) startTreeMatrix(active matrixKind) (tea.Model, tea.Cmd) {
 	node, ok := m.tree.selectedNode()
 	if !ok {
-		m.setMessage(levelInfo, "select a database, schema, table, collection, or role")
+		m.setMessage(levelInfo, "select a database, schema, table, collection, user, or role")
 		return m, nil
 	}
 	switch node.Kind {
 	case domain.KindSecurity, domain.KindUsers, domain.KindRoles:
 		return m.openMatrix(active, nil)
+	case domain.KindUser:
+		user := roleRefFromNode(node)
+		return m.openMatrix(active, &user)
 	case domain.KindRole:
 		if active == matrixMembership {
 			// The tree shortcut on a role keeps the established privilege view.
@@ -193,9 +196,9 @@ func (m Model) startTreeMatrix(active matrixKind) (tea.Model, tea.Cmd) {
 		return m.openMatrixWithDB(active, nil, m.matrixEnsureDatabase())
 	default:
 		if active == matrixPrivileges {
-			m.setMessage(levelInfo, "select a database, schema, table, collection, or role for privileges")
+			m.setMessage(levelInfo, "select a database, schema, table, collection, user, or role for privileges")
 		} else {
-			m.setMessage(levelInfo, "select a database, schema, table, or collection")
+			m.setMessage(levelInfo, "select a database, schema, table, collection, user, or role")
 		}
 		return m, nil
 	}
@@ -287,8 +290,15 @@ func (m *Model) applyMatrixPendingFocus() {
 			return
 		}
 		m.matrix.active = matrixMembership
-		if index := roleIndex(m.matrix.membership.Roles, role.Key()); index >= 0 {
-			m.matrix.cursors[matrixMembership].row = index
+		switch role.Kind {
+		case domain.KindUser:
+			if index := roleIndex(m.matrix.membership.Principals, role.Key()); index >= 0 {
+				m.matrix.cursors[matrixMembership].col = index
+			}
+		default:
+			if index := roleIndex(m.matrix.membership.Roles, role.Key()); index >= 0 {
+				m.matrix.cursors[matrixMembership].row = index
+			}
 		}
 	case matrixPrivileges:
 		if !m.matrix.privilegesLoaded {

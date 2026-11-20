@@ -588,3 +588,49 @@ func TestMatrixFreezesDatabaseAndSchemaColumns(t *testing.T) {
 		t.Fatalf("narrow matrix froze %d columns, want normal scrolling", got)
 	}
 }
+
+func TestUserTreeShortcutFocusesMatrixColumnAndRow(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	engine := domain.EnginePostgreSQL
+	user := domain.RoleRef{Engine: engine, Name: "app_ro", Kind: domain.KindUser}
+	role := domain.RoleRef{Engine: engine, Name: "reporting", Kind: domain.KindRole}
+	other := domain.RoleRef{Engine: engine, Name: "app_role", Kind: domain.KindRole}
+	object := domain.ObjectRef{Engine: engine, Kind: domain.KindDatabase, Database: "orders", Name: "orders"}
+	e.connector.matrix = &fakeRoleMatrix{
+		membership: domain.RoleMatrix{
+			Principals: []domain.RoleRef{other, user},
+			Roles:      []domain.RoleRef{role},
+			Members:    map[string]map[string]bool{user.Key(): {role.Key(): true}},
+		},
+		privileges: domain.PrivilegeMatrix{
+			Principals: []domain.RoleRef{other, user},
+			Objects:    []domain.ObjectRef{object},
+			Cells:      map[string]map[string][]string{user.Key(): {object.Key(): {"CONNECT"}}},
+		},
+	}
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = selectUsersGroup(t, m)
+	m = selectKind(t, m, domain.KindUser)
+
+	m, cmd := press(t, m, "e")
+	m = runCmd(t, m, cmd)
+	if m.screen != ScreenMatrix || m.matrix.active != matrixMembership {
+		t.Fatalf("user e screen=%v tab=%v", m.screen, m.matrix.active)
+	}
+	if got := m.matrix.cursors[matrixMembership].col; got != 1 {
+		t.Fatalf("membership user column = %d, want 1", got)
+	}
+	m, _ = press(t, m, "esc")
+
+	m = selectKind(t, m, domain.KindUser)
+	m, cmd = press(t, m, "r")
+	m = runCmd(t, m, cmd)
+	if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
+		t.Fatalf("user r screen=%v tab=%v", m.screen, m.matrix.active)
+	}
+	if got := m.matrix.cursors[matrixPrivileges].row; got != 1 {
+		t.Fatalf("privilege user row = %d, want 1", got)
+	}
+}
