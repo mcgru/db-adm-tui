@@ -121,18 +121,28 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 		t.Fatalf("default database = %q", m.user.database.Value())
 	}
 	view := StripANSI(m.viewModal())
-	if !strings.Contains(view, "database") || !strings.Contains(view, "analytics") {
-		t.Fatalf("editable database field missing:\n%s", view)
+	if !strings.Contains(view, "database") || !strings.Contains(view, "analytics") ||
+		!strings.Contains(view, "auth database: stores the MongoDB user") {
+		t.Fatalf("editable auth database field missing:\n%s", view)
+	}
+	nameAt := strings.Index(view, "name")
+	passwordAt := strings.Index(view, "password")
+	databaseAt := strings.Index(view, "database")
+	if nameAt < 0 || passwordAt < 0 || databaseAt < 0 || !(nameAt < passwordAt && passwordAt < databaseAt) {
+		t.Fatalf("form order is not name, password, database:\n%s", view)
 	}
 	m = typeString(t, m, "new_mongo")
 	m, _ = press(t, m, "tab")
+	if m.user.focus != 2 {
+		t.Fatalf("focus after name = %d, want password", m.user.focus)
+	}
+	m = typeString(t, m, "mongo-secret")
+	m, _ = press(t, m, "tab")
 	if m.user.focus != 3 {
-		t.Fatalf("focus after name = %d, want database", m.user.focus)
+		t.Fatalf("focus after password = %d, want database", m.user.focus)
 	}
 	m.user.database.SetValue("admin")
 	m.user.database.CursorEnd()
-	m, _ = press(t, m, "tab")
-	m = typeString(t, m, "mongo-secret")
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != "admin" {

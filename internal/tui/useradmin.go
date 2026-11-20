@@ -100,11 +100,13 @@ func (m Model) userFields() []int {
 	fields := []int{0}
 	switch m.engine() {
 	case domain.EngineMySQL:
-		fields = append(fields, 1)
+		fields = append(fields, 1, 2)
 	case domain.EngineMongoDB:
-		fields = append(fields, 3)
+		fields = append(fields, 2, 3)
+	default:
+		fields = append(fields, 2)
 	}
-	return append(fields, 2)
+	return fields
 }
 
 func (m *Model) focusUserField() {
@@ -330,9 +332,7 @@ func (m Model) viewUserForm() string {
 	inner := width - 4
 	var body []string
 	body = append(body, m.styles.Muted.Render("engine ")+m.styles.Text.Render(m.engine().DisplayName()))
-	if m.engine() == domain.EngineMongoDB {
-		body = append(body, m.inputLine("database", m.user.database.View(), m.user.focus == 3, inner))
-	} else {
+	if m.engine() != domain.EngineMongoDB {
 		body = append(body, m.styles.Muted.Render("database ")+m.styles.Text.Render(oneLine(m.currentDatabase())))
 	}
 	body = append(body, m.inputLine("name", m.user.name.View(), m.user.focus == 0, inner))
@@ -340,6 +340,12 @@ func (m Model) viewUserForm() string {
 		body = append(body, m.inputLine("host", m.user.host.View(), m.user.focus == 1, inner))
 	}
 	body = append(body, m.inputLine("password", m.user.password.View(), m.user.focus == 2, inner))
+	if m.engine() == domain.EngineMongoDB {
+		body = append(body, m.inputLine("database", m.user.database.View(), m.user.focus == 3, inner))
+		for _, line := range wrapText("auth database: stores the MongoDB user; it does not grant access", inner) {
+			body = append(body, m.styles.Muted.Render(line))
+		}
+	}
 	for _, line := range wrapText("roles: after create use Ctrl+X Ctrl+R → 1 Role × Principal", inner) {
 		body = append(body, m.styles.Muted.Render(line))
 	}
