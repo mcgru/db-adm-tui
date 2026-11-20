@@ -647,7 +647,7 @@ func (m Model) handleMatrixKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cursor.filterCursor = len([]rune(cursor.filter))
 	case keymap.Space:
 		return m.toggleMatrixCell()
-	case keymap.EditProfile:
+	case keymap.EditProfile, keymap.Confirm:
 		return m.openMatrixDetails()
 	}
 	return m, nil
@@ -767,12 +767,12 @@ func defaultPrivilege(engine domain.Engine, kind domain.ObjectKind) string {
 			return "CONNECT"
 		case domain.KindSchema:
 			return "USAGE"
-		case domain.KindTable, domain.KindView:
+		case domain.KindTable:
 			return "SELECT"
 		}
 	case domain.EngineMySQL:
 		switch kind {
-		case domain.KindDatabase, domain.KindTable, domain.KindView:
+		case domain.KindDatabase, domain.KindTable:
 			return "SELECT"
 		}
 	case domain.EngineMongoDB:
@@ -865,7 +865,7 @@ func (m Model) handleMatrixDetailsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 	switch action {
 	case keymap.ForceQuit, keymap.Quit:
 		return m, tea.Quit
-	case keymap.Cancel:
+	case keymap.Cancel, keymap.EditProfile:
 		m.modal = modalNone
 		*details = matrixDetails{}
 	case keymap.Up, keymap.PageUp:
@@ -1077,6 +1077,12 @@ func (m Model) matrixObjects() ([]domain.ObjectRef, string) {
 	}
 	schema := m.matrixSchema(engine)
 	scope := database
+	if engine == domain.EnginePostgreSQL {
+		scope = "all databases"
+		if database != "" {
+			scope += " · " + database
+		}
+	}
 	if schema != "" {
 		scope += " · " + schema
 	}
@@ -1084,7 +1090,31 @@ func (m Model) matrixObjects() ([]domain.ObjectRef, string) {
 		scope = "current connection"
 	}
 	var objects []domain.ObjectRef
-	if database != "" {
+	if engine == domain.EnginePostgreSQL {
+		seenDatabases := map[string]bool{}
+		addDatabase := func(name string) {
+			name = strings.TrimSpace(name)
+			if name == "" || seenDatabases[name] {
+				return
+			}
+			seenDatabases[name] = true
+			objects = append(objects, domain.ObjectRef{
+				Engine: engine, Kind: domain.KindDatabase, Database: name, Name: name,
+			})
+		}
+		for _, key := range m.tree.roots {
+			entry, ok := m.tree.node(key)
+			if !ok || entry.Node.Kind != domain.KindDatabase {
+				continue
+			}
+			name := entry.Node.Ref.Database
+			if name == "" {
+				name = entry.Node.Name
+			}
+			addDatabase(name)
+		}
+		addDatabase(database)
+	} else if database != "" {
 		objects = append(objects, domain.ObjectRef{
 			Engine: engine, Kind: domain.KindDatabase, Database: database, Name: database,
 		})
@@ -1151,8 +1181,6 @@ func matrixObjectKind(engine domain.Engine, kind domain.ObjectKind) bool {
 		return true
 	case domain.KindCollection:
 		return engine == domain.EngineMongoDB
-	case domain.KindView:
-		return engine != domain.EngineMongoDB
 	default:
 		return false
 	}
@@ -1304,9 +1332,9 @@ func (m Model) matrixFooter(width int) string {
 			style = m.styles.Info
 		}
 	}
-	right := "Tab switch · 1 membership · 2 privileges · Space toggle · e details · / filter · Esc close"
+	right := "Tab switch · 1 membership · 2 privileges · Space toggle · e/Enter details · / filter · Esc close"
 	if width < 120 {
-		right = "Tab/1/2 · Space · e details · / filter · Esc close"
+		right = "Tab/1/2 · Space · e/Enter details · / filter · Esc close"
 	}
 	if m.matrix.cursors[m.matrix.active].filterPrompt {
 		right = "type to filter · Enter keep · Esc clear"
@@ -1341,7 +1369,8 @@ func (m Model) viewMatrixDetails() string {
 		for _, line := range wrapText("Space toggles this membership. Native admin options such as WITH ADMIN OPTION or INHERIT are not editable in this slice.", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
-		body = append(body, "", m.actionLine("Space", "toggle", "Esc", "close"))
+		body = append(body, "", m.actionLine("Space", "toggle", "Enter", "toggle/close"))
+		body = append(body, m.styles.Muted.Render("e/Esc close"))
 		return modalBox("membership details", body, width, m.styles)
 	}
 	body = append(body, field("principal", 10)+" "+m.styles.Text.Render(oneLine(details.role.Name)))
@@ -1353,7 +1382,7 @@ func (m Model) viewMatrixDetails() string {
 		body = append(body, m.styles.Error.Render(Truncate(details.err, inner)))
 	}
 	body = append(body, "", m.actionLine("Enter", "apply", "Ctrl+A", "toggle all"))
-	body = append(body, m.styles.Muted.Render("Esc cancel"))
+	body = append(body, m.styles.Muted.Render("e/Esc cancel"))
 	return modalBox("privilege details", body, width, m.styles)
 }
 

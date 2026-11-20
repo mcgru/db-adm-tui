@@ -221,6 +221,52 @@ func TestMatrixShowsFullTruncatedColumnLabel(t *testing.T) {
 	}
 }
 
+func TestPostgresMatrixIncludesAllDatabases(t *testing.T) {
+	m := workspace(t)
+	objects, scope := m.matrixObjects()
+	names := map[string]bool{}
+	for _, object := range objects {
+		if object.Kind == domain.KindDatabase {
+			names[object.Database] = true
+		}
+	}
+	if !names["orders"] || !names["billing"] {
+		t.Fatalf("database objects = %+v", objects)
+	}
+	if !strings.Contains(scope, "all databases") {
+		t.Fatalf("scope = %q", scope)
+	}
+	if matrixObjectKind(domain.EnginePostgreSQL, domain.KindView) {
+		t.Fatal("views must not be editable in the matrix")
+	}
+	if len(domain.RolePrivilegeChoices(domain.EnginePostgreSQL, domain.KindView)) != 0 {
+		t.Fatal("view privileges must not be editable")
+	}
+}
+
+func TestMatrixEnterOpensDetailsAndECloses(t *testing.T) {
+	m := workspace(t)
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "enter")
+	if m.modal != modalMatrixDetails {
+		t.Fatalf("membership details modal = %v", m.modal)
+	}
+	m, _ = press(t, m, "e")
+	if m.modal != modalNone {
+		t.Fatalf("membership details did not close on e: %v", m.modal)
+	}
+	m, _ = press(t, m, "2")
+	m, _ = press(t, m, "enter")
+	if m.modal != modalMatrixDetails {
+		t.Fatalf("privilege details modal = %v", m.modal)
+	}
+	m, _ = press(t, m, "e")
+	if m.modal != modalNone {
+		t.Fatalf("privilege details did not close on e: %v", m.modal)
+	}
+}
+
 func TestMatrixSpaceTogglesMembership(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)

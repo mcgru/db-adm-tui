@@ -75,14 +75,14 @@ func RolePrivilegeChoices(engine Engine, kind ObjectKind) []string {
 			return []string{"CONNECT", "CREATE", "TEMPORARY"}
 		case KindSchema:
 			return []string{"USAGE", "CREATE"}
-		case KindTable, KindView:
+		case KindTable:
 			return []string{"SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER", "MAINTAIN"}
 		}
 	case EngineMySQL:
 		switch kind {
 		case KindDatabase:
 			return []string{"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "INDEX", "REFERENCES", "CREATE TEMPORARY TABLES", "LOCK TABLES", "EXECUTE", "EVENT", "TRIGGER"}
-		case KindTable, KindView:
+		case KindTable:
 			return []string{"SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "INDEX", "REFERENCES", "TRIGGER"}
 		}
 	case EngineMongoDB:
