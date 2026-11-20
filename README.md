@@ -52,19 +52,22 @@ The tool starts on the profile picker.
 | `Left` / `Right` | Collapse / expand the selected tree node; move the Data/Results cell cursor |
 | `Home` / `End` | Jump to the first/last tree or import row; first/last Data/Results column |
 | `Ctrl+Home` / `Ctrl+End` | Jump to the first/last row of the loaded Data range |
-| `Ctrl+Left` / `Ctrl+Right` | Resize the tree by 2 cells (16 cells to half the terminal width) |
-| `Ctrl+Up` / `Ctrl+Down` | Resize the query bar between 1 and 3 lines |
+| `Ctrl+Left` / `Ctrl+Right` | Resize the tree by 2 cells (16 cells to half the terminal width). In the matrix: jump to the start/end of the selected row |
+| `Ctrl+Up` / `Ctrl+Down` | Resize the query bar between 1 and 3 lines. In the matrix: jump to the start/end of the selected column |
 | `m` | Append the next Data/Results page |
 | `Ctrl+A` | Append a full-fetch batch (Data) or drain the result cursor up to 10,000 rows |
 | `` ` `` | Data/Results: expand/collapse the selected JSON object column into dotted subcolumns |
-| `/` or `.` | Tree: quick search over loaded/expanded nodes. Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
+| `/` or `.` | Tree: quick search over loaded/expanded nodes; press `/` twice quickly to insert the selected name. Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
+| `Ins` | Tree search: insert the selected name in full (`schema.table` when applicable) |
 | `Ctrl+F` | Data tab: server-side regexp on the focused column or field |
 | `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
 | `n` | New connection at the picker; next tree-search or filtered Data view match; Security/users: create a user |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
-| `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role |
-| `u` | Security/users: create a user. MongoDB database/collection: open Role × Principal with `read@db`/`readWrite@db` rows |
+| `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role; on a database/schema/table/collection, open the membership matrix |
+| `r` | Tree database/schema/table/collection or role: open the privilege matrix (`2`) |
+| `u` | Security/users: create a user. Tree database/schema/table/collection: open the membership matrix (`1`); MongoDB also ensures `read@db`/`readWrite@db` rows |
+| `w` | Tree: switch `r/o` ↔ `r/w`; enabling read-write opens the same confirmation as `Ctrl+X Ctrl+W` |
 | `Ctrl+N` | Same as `u`: add a user from Security/users |
 | `h` | On a MongoDB user: choose `home.db` for the saved profile |
 | `+` | Security/users: create a user. Tree roles: create/grant/assign. Data tab: insert a row/document. Requires `r/w` |
@@ -98,12 +101,13 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.9.0.md`](docs/release-notes-v1.9.0.md) — latest
-  MongoDB home/auth and user-action notes;
-  [`v1.8.1`](docs/release-notes-v1.8.1.md) covers matrix scope,
+- [`docs/release-notes-v1.10.0.md`](docs/release-notes-v1.10.0.md) — latest
+  tree matrix shortcuts, search insertion, and mode notes;
+  [`v1.9.0`](docs/release-notes-v1.9.0.md) covers MongoDB home/auth databases,
+  [`v1.8.1`](docs/release-notes-v1.8.1.md) matrix scope,
   [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.9.0.ru.md`](docs/release-notes-v1.9.0.ru.md).
+  [`docs/release-notes-v1.10.0.ru.md`](docs/release-notes-v1.10.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -128,9 +132,12 @@ matching row as soon as a pattern matches. `Enter` keeps the search, closes the
 bar, and jumps to the first match; `n`/`N` jump to the next/previous match
 below/above the current row with wrapping, and `Esc` clears the search. Typing
 `n` while the bar is open inserts `n`; `Tab`, `Shift+Tab`, `Ctrl+D`, and other
-global keys still work. The search never queries the database and never expands
-a node by itself. With focus in the main pane, `/` continues to filter loaded
-Data/Results rows as before.
+global keys still work. Pressing `/` twice quickly inserts the selected node
+name instead of a literal `/` (or `.`); `Ins` inserts the full selected value,
+for example `schema.table`. Both insert at the current search cursor. The
+search never queries the database and never expands a node by itself. With
+focus in the main pane, `/` continues to filter loaded Data/Results rows as
+before.
 
 `Security` expands into `users` and `roles` groups. PostgreSQL shows cluster
 roles with attributes, MySQL/MariaDB shows `user@host` accounts and roles, and
@@ -193,30 +200,40 @@ The matrix has two panels:
 
 - `1 Role × Principal` — membership. Rows are native roles, columns are users
   and roles, and a cell is `[x]` or `[ ]`. Long role names stay on the left;
-  usernames form the compact columns. MongoDB users in `admin` are shown
-  without `@admin`; users in another database keep `@database`. MySQL user
-  columns hide the default `%` host.
+  usernames form the compact columns. User columns have no prefix; roles keep
+  `R:` (built-in) and `r:` (custom), so `r:readWrite@app` is a custom role while
+  `R:read@config` is built-in. MongoDB users in `admin` are shown without
+  `@admin`; users in another database keep `@database`. MySQL user columns hide
+  the default `%` host.
 - `2 Principal/Role × Object` — privileges. Rows are roles, plus users for
   PostgreSQL and MySQL so direct grants stay visible. Columns are the selected
   database/schema or table and the objects loaded in that scope. The current
   selection is highlighted as `scope <database> · <object>` in the matrix
   footer. Views and column-level privileges are not editable; MongoDB uses
-  collection columns and role rows only.
+  collection columns and role rows only. On this panel the leading `[db]` and
+  `[schema]` columns stay frozen while table and collection columns scroll,
+  provided the window can also show at least two scrolling object columns;
+  narrower windows fall back to normal horizontal scrolling.
 
-The Details tab for `Security`, `users`, `roles`, and individual principals
-shows the `Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges
-tab. On a MongoDB database or collection, `u` or `Ctrl+X Ctrl+R` opens the
-membership matrix and ensures `read@<db>` and `readWrite@<db>` rows exist, so
-the built-in roles can be assigned immediately.
+Open the matrix from the tree with `e` or `u` on a database, schema, table, or
+collection (`1` membership), `r` on the same nodes (`2` privileges), or `r` on
+a role. `Ctrl+X Ctrl+R` remains the global shortcut. The Details tab for
+`Security`, `users`, `roles`, and individual principals shows the
+`Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges tab. On a
+MongoDB database or collection, `u` or `Ctrl+X Ctrl+R` opens the membership
+matrix and ensures `read@<db>` and `readWrite@<db>` rows exist, so the built-in
+roles can be assigned immediately.
 
 Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
 Switching keeps the selected principal: the membership column user/role becomes
 the matching privileges row, and switching back returns to that principal's
 column. The target panel also tries to keep it at the same screen position.
 Each panel keeps its own cursor, scroll position, and filter. Arrows move the
-cell cursor, `Home`/`End` jump to an edge, `PageUp`/`PageDown` move a page,
-`Space` toggles the default access for the cell, `e` or `Enter` opens details,
-`/` filters rows and columns, and `Esc` closes the matrix (or clears an active
+cell cursor; `Ctrl+Up`/`Ctrl+Down` jump to the start/end of the selected column,
+`Ctrl+Left`/`Ctrl+Right` jump to the start/end of the selected row, and
+`Home`/`End` jump to the matrix edge. `PageUp`/`PageDown` move a page, `Space`
+toggles the default access for the cell, `e` or `Enter` opens details, `/`
+filters rows and columns, and `Esc` closes the matrix (or clears an active
 filter prompt first). In details, `e` or `Esc` closes; `Enter` applies
 privileges or toggles the membership. If the focused column label is truncated
 to fit its cell, the full current name is shown after `Tab switch` in the matrix
@@ -262,7 +279,9 @@ Create a user from `Security → users → +`:
   is created with an empty role list; use the matrix to assign roles.
 
 Create users from `Security` or `users` with `+`, `n`, `u`, or `Ctrl+N`
-(Russian physical equivalents included). A new user is created in the selected
+(Russian physical equivalents included). The form labels are `name:`,
+`password:`, `auth.db:`, and `hosts:` (plus `host:` for MySQL); `Tab`/`Shift+Tab`
+and `Up`/`Down` move between fields. A new user is created in the selected
 auth database with no roles. On a MongoDB user node, `h` opens a `home.db`
 picker: `Space` cycles the loaded databases and `Enter` writes the choice to the
 matching saved profile. `home.db` is the default database in the URI; `auth.db`
@@ -533,9 +552,10 @@ no session-level read-only.` and the guard is the only layer.
 
 `Ctrl+X Ctrl+W` asks for confirmation before enabling read-write with
 `Writes will run on <profile>`, then changes the badge to `r/w` and says
-`read-write mode on. Read-only guard is off.` Switching back to `r/o` is
-immediate and needs no confirmation. Mode changes are refused while a query
-result cursor is open; press `Esc` to release Results first.
+`read-write mode on. Read-only guard is off.` With focus on the tree, plain `w`
+opens the same confirmation; `Enter`, `e`, or `w` accepts. Switching back to
+`r/o` is immediate and needs no confirmation. Mode changes are refused while a
+query result cursor is open; press `Esc` to release Results first.
 
 Superuser/root and server-admin accounts carry a persistent `privileged` tag in
 the top status line. A connection with elevated rights warns that read-only mode
