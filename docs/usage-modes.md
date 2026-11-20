@@ -354,9 +354,10 @@ truncated, the full name is shown after `Tab switch` in the header.
   follows across panels and the target tries to keep the same screen position.
 - From the tree, `e` or `u` on a database/schema/table/collection opens this
   panel; `r` opens the privilege panel when applicable. On `Security`, `users`,
-  or `roles`, `e` opens this panel and `r` opens privileges. On a MongoDB
-  database or collection, `u` or `Ctrl+X Ctrl+R` also ensures the built-in
-  `read@db` and `readWrite@db` rows are present before opening this matrix.
+  or `roles`, `e` opens this panel and `r` opens privileges. On a specific
+  user, `e` also places the cursor on that user's column. On a MongoDB database
+  or collection, `u` or `Ctrl+X Ctrl+R` also ensures the built-in `read@db` and
+  `readWrite@db` rows are present before opening this matrix.
 - `Ctrl+Up`/`Ctrl+Down` jump to the start/end of the selected column;
   `Ctrl+Left`/`Ctrl+Right` jump to the start/end of the selected row.
 - `Esc` closes the matrix, or clears an active filter prompt first.
@@ -385,6 +386,8 @@ app_writer             —             —           INSERT+2   —
 - The matrix follows the current tree selection: database level for a selected
   database, schema/table level for a selected table. The selected scope is
   highlighted in the footer. Views and column-level privileges are not editable.
+- Opening with `r` on a specific user or role puts the cursor on that principal's
+  row.
 - The leading `[db]` and `[schema]` columns stay frozen while table/collection
   columns scroll. Freezing is used only when at least two scrolling object
   columns fit beside them; otherwise the panel uses normal horizontal scrolling.

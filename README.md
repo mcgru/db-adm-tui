@@ -64,8 +64,8 @@ The tool starts on the profile picker.
 | `n` | New connection at the picker; next tree-search or filtered Data view match; Security/users: create a user |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
-| `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role; on a database/schema/table/collection, open the membership matrix; on Security/users/roles, open the membership matrix |
-| `r` | Tree database/schema/table/collection, role, or Security/users/roles: open the privilege matrix (`2`) |
+| `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role; on a database/schema/table/collection, open the membership matrix; on Security/users/roles or a specific user, open the membership matrix and focus that principal |
+| `r` | Tree database/schema/table/collection, role, Security/users/roles, or a specific user: open the privilege matrix (`2`) and focus that principal when applicable |
 | `u` | Security/users: create a user. Tree database/schema/table/collection: open the membership matrix (`1`); MongoDB also ensures `read@db`/`readWrite@db` rows |
 | `w` | Tree: switch `r/o` ↔ `r/w`; enabling read-write opens the same confirmation as `Ctrl+X Ctrl+W` |
 | `Ctrl+N` | Same as `u`: add a user from Security/users |
@@ -101,15 +101,16 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.10.1.md`](docs/release-notes-v1.10.1.md) — latest
-  security-group matrix shortcuts;
-  [`v1.10.0`](docs/release-notes-v1.10.0.md) covers tree matrix shortcuts, search
+- [`docs/release-notes-v1.10.2.md`](docs/release-notes-v1.10.2.md) — latest
+  principal-focused matrix shortcuts;
+  [`v1.10.1`](docs/release-notes-v1.10.1.md) security-group matrix shortcuts,
+  [`v1.10.0`](docs/release-notes-v1.10.0.md) tree matrix shortcuts, search
   insertion, mode switching, and frozen matrix columns;
   [`v1.9.0`](docs/release-notes-v1.9.0.md) MongoDB home/auth databases,
   [`v1.8.1`](docs/release-notes-v1.8.1.md) matrix scope,
   [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.10.1.ru.md`](docs/release-notes-v1.10.1.ru.md).
+  [`docs/release-notes-v1.10.2.ru.md`](docs/release-notes-v1.10.2.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -220,12 +221,14 @@ The matrix has two panels:
 Open the matrix from the tree with `e` or `u` on a database, schema, table, or
 collection (`1` membership), `r` on the same nodes (`2` privileges), or `r` on
 a role. On the `Security`, `users`, or `roles` group, `e` opens membership and
-`r` opens privileges. `Ctrl+X Ctrl+R` remains the global shortcut. The Details
-tab for `Security`, `users`, `roles`, and individual principals shows the
-`Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges tab. On a
-MongoDB database or collection, `u` or `Ctrl+X Ctrl+R` opens the membership
-matrix and ensures `read@<db>` and `readWrite@<db>` rows exist, so the built-in
-roles can be assigned immediately.
+`r` opens privileges. On a specific user, `e` opens membership with the cursor
+on that user's column, and `r` opens privileges with the cursor on that user's
+row; a role opens privileges focused on its row. `Ctrl+X Ctrl+R` remains the
+global shortcut. The Details tab for `Security`, `users`, `roles`, and
+individual principals shows the `Ctrl+X Ctrl+R` matrix hint. The same hint
+appears on the Privileges tab. On a MongoDB database or collection, `u` or
+`Ctrl+X Ctrl+R` opens the membership matrix and ensures `read@<db>` and
+`readWrite@<db>` rows exist, so the built-in roles can be assigned immediately.
 
 Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
 Switching keeps the selected principal: the membership column user/role becomes
