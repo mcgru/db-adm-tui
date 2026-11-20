@@ -117,12 +117,17 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	if m.modal != modalUserForm || m.engine() != domain.EngineMongoDB {
 		t.Fatalf("modal=%v engine=%v", m.modal, m.engine())
 	}
-	if m.user.database.Value() != "analytics" {
+	if m.user.database.Value() != "admin" {
 		t.Fatalf("default database = %q", m.user.database.Value())
 	}
+	choices := m.mongoUserDatabases()
+	if len(choices) < 2 || choices[0] != "admin" {
+		t.Fatalf("database choices = %+v", choices)
+	}
 	view := StripANSI(m.viewModal())
-	if !strings.Contains(view, "database") || !strings.Contains(view, "analytics") ||
-		!strings.Contains(view, "auth database: stores the MongoDB user") {
+	if !strings.Contains(view, "database") || !strings.Contains(view, "admin") ||
+		!strings.Contains(view, "auth database: stores the MongoDB user") ||
+		!strings.Contains(view, "Space cycles: admin") {
 		t.Fatalf("editable auth database field missing:\n%s", view)
 	}
 	nameAt := strings.Index(view, "name")
@@ -141,21 +146,24 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	if m.user.focus != 3 {
 		t.Fatalf("focus after password = %d, want database", m.user.focus)
 	}
-	m.user.database.SetValue("admin")
-	m.user.database.CursorEnd()
+	m, _ = press(t, m, "space")
+	target := choices[1]
+	if m.user.database.Value() != target {
+		t.Fatalf("Space selected %q, want %q", m.user.database.Value(), target)
+	}
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
-	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != "admin" {
+	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != target {
 		t.Fatalf("admin = %+v", admin)
 	}
 	if m.modal != modalUserSave {
 		t.Fatalf("save modal = %v", m.modal)
 	}
-	if m.user.saveProfile.Database != "admin" || m.user.saveProfile.Label != "new_mongo@admin" {
+	if m.user.saveProfile.Database != target || m.user.saveProfile.Label != "new_mongo@"+target {
 		t.Fatalf("save profile = %+v", m.user.saveProfile)
 	}
 	if m.user.saveProfile.Source == nil || m.user.saveProfile.Source.Kind != domain.SourceMongoFile ||
-		!strings.Contains(m.user.saveProfile.Source.Path, ".mongo.new_mongo-in-admin") {
+		!strings.Contains(m.user.saveProfile.Source.Path, ".mongo.new_mongo-in-"+target) {
 		t.Fatalf("credential source = %+v", m.user.saveProfile.Source)
 	}
 }

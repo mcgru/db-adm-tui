@@ -499,6 +499,29 @@ func TestEscTabOpensCompletionInStatementModal(t *testing.T) {
 	}
 }
 
+func TestTabCompletesInStatementModal(t *testing.T) {
+	m := workspace(t)
+	m = focusQuery(t, m)
+	m = setQuery(m, "sel")
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "ctrl+e")
+	if m.modal != modalStatement {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	m.statementInput.SetCursor(len([]rune("sel")))
+	m, _ = press(t, m, "tab")
+	if !m.completion.active {
+		t.Fatal("Tab did not open modal completion")
+	}
+	m, _ = press(t, m, "tab")
+	if m.completion.active {
+		t.Fatal("second Tab did not accept completion")
+	}
+	if m.statementInput.Value() != "SELECT" {
+		t.Fatalf("completion value = %q", m.statementInput.Value())
+	}
+}
+
 func TestEscTabDoesNotStealCompletionEscape(t *testing.T) {
 	m := workspace(t)
 	m = focusQuery(t, m)

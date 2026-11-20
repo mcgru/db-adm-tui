@@ -34,12 +34,16 @@ func (m *Model) closeStatementModal() {
 }
 
 func (m Model) handleStatementKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
 	if m.completion.active {
+		if key == "tab" {
+			m.acceptCompletion()
+			return m, nil
+		}
 		if next, cmd, handled := m.handleCompletionKey(msg); handled {
 			return next, cmd
 		}
 	}
-	key := msg.String()
 	if m.escChord {
 		m.escChord = false
 		if key == "tab" {
@@ -66,7 +70,9 @@ func (m Model) handleStatementKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case keymap.ContextHelp:
 			m.openContextHelp()
 			return m, nil
-		case keymap.Tab, keymap.ShiftTab:
+		case keymap.Tab:
+			return m, m.openCompletion(true)
+		case keymap.ShiftTab:
 			return m, nil
 		}
 	}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -74,7 +75,7 @@ func (m Model) startUserAdd() (tea.Model, tea.Cmd) {
 	m.user = newUserState()
 	m.user.host.SetValue("%")
 	if m.engine() == domain.EngineMongoDB {
-		m.user.database.SetValue(m.currentDatabase())
+		m.user.database.SetValue("admin")
 	}
 	m.user.focus = 0
 	m.focusUserField()
@@ -130,6 +131,47 @@ func (m *Model) focusUserField() {
 	}
 }
 
+// mongoUserDatabases returns the auth-database choices: admin first, then the
+// databases loaded in the tree. Complex custom targets can still be typed.
+func (m Model) mongoUserDatabases() []string {
+	seen := map[string]bool{"admin": true}
+	choices := []string{"admin"}
+	for _, key := range m.tree.roots {
+		entry, ok := m.tree.node(key)
+		if !ok || entry.Node.Kind != domain.KindDatabase {
+			continue
+		}
+		name := strings.TrimSpace(entry.Node.Ref.Database)
+		if name == "" {
+			name = strings.TrimSpace(entry.Node.Name)
+		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		choices = append(choices, name)
+	}
+	sort.Strings(choices[1:])
+	return choices
+}
+
+func (m *Model) cycleUserDatabase() {
+	choices := m.mongoUserDatabases()
+	if len(choices) == 0 {
+		return
+	}
+	current := strings.TrimSpace(m.user.database.Value())
+	next := choices[0]
+	for i, choice := range choices {
+		if choice == current {
+			next = choices[(i+1)%len(choices)]
+			break
+		}
+	}
+	m.user.database.SetValue(next)
+	m.user.database.CursorEnd()
+}
+
 func (m *Model) nextUserField(delta int) {
 	fields := m.userFields()
 	pos := 0
@@ -146,6 +188,10 @@ func (m *Model) nextUserField(delta int) {
 
 func (m Model) handleUserFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if action, ok := keymap.Lookup(msg.String()); ok {
+		if action == keymap.Space && m.user.focus == 3 && m.engine() == domain.EngineMongoDB {
+			m.cycleUserDatabase()
+			return m, nil
+		}
 		switch action {
 		case keymap.Cancel:
 			m.modal = modalNone
@@ -343,6 +389,9 @@ func (m Model) viewUserForm() string {
 	if m.engine() == domain.EngineMongoDB {
 		body = append(body, m.inputLine("database", m.user.database.View(), m.user.focus == 3, inner))
 		for _, line := range wrapText("auth database: stores the MongoDB user; it does not grant access", inner) {
+			body = append(body, m.styles.Muted.Render(line))
+		}
+		for _, line := range wrapText("Space cycles: "+strings.Join(m.mongoUserDatabases(), ", "), inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
 	}
