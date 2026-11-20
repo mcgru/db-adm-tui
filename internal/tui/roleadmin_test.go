@@ -221,7 +221,7 @@ func TestMatrixShowsFullTruncatedColumnLabel(t *testing.T) {
 	}
 }
 
-func TestPostgresMatrixIncludesAllDatabases(t *testing.T) {
+func TestPostgresMatrixUsesCurrentDatabaseAndObjectScope(t *testing.T) {
 	m := workspace(t)
 	objects, scope := m.matrixObjects()
 	names := map[string]bool{}
@@ -230,10 +230,10 @@ func TestPostgresMatrixIncludesAllDatabases(t *testing.T) {
 			names[object.Database] = true
 		}
 	}
-	if !names["orders"] || !names["billing"] {
+	if !names["orders"] || names["billing"] {
 		t.Fatalf("database objects = %+v", objects)
 	}
-	if !strings.Contains(scope, "all databases") {
+	if !strings.Contains(scope, "orders") || !strings.Contains(scope, "customers") {
 		t.Fatalf("scope = %q", scope)
 	}
 	if matrixObjectKind(domain.EnginePostgreSQL, domain.KindView) {

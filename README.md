@@ -95,12 +95,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.8.0.md`](docs/release-notes-v1.8.0.md) — latest
-  matrix details and PostgreSQL database-scope notes;
-  [`v1.7.0`](docs/release-notes-v1.7.0.md) covers MongoDB replica hosts,
-  [`v1.6.1`](docs/release-notes-v1.6.1.md) matrix panel switching, and
-  [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.8.0.ru.md`](docs/release-notes-v1.8.0.ru.md).
+- [`docs/release-notes-v1.8.1.md`](docs/release-notes-v1.8.1.md) — latest
+  matrix scope notes; [`v1.7.0`](docs/release-notes-v1.7.0.md) covers MongoDB
+  replica hosts, [`v1.6.1`](docs/release-notes-v1.6.1.md) matrix panel
+  switching, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope.
+  Русская версия:
+  [`docs/release-notes-v1.8.1.ru.md`](docs/release-notes-v1.8.1.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -194,9 +194,10 @@ The matrix has two panels:
   without `@admin`; users in another database keep `@database`. MySQL user
   columns hide the default `%` host.
 - `2 Principal/Role × Object` — privileges. Rows are roles, plus users for
-  PostgreSQL and MySQL so direct grants stay visible. Columns are the current
-  schema/table scope and, for PostgreSQL, **all databases** for `CONNECT`
-  grants. Views and column-level privileges are not editable; MongoDB uses
+  PostgreSQL and MySQL so direct grants stay visible. Columns are the selected
+  database/schema or table and the objects loaded in that scope. The current
+  selection is highlighted as `scope <database> · <object>` in the matrix
+  footer. Views and column-level privileges are not editable; MongoDB uses
   collection columns and role rows only.
 
 The Details tab for `Security`, `users`, `roles`, and individual principals

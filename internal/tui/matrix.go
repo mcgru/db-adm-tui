@@ -1077,44 +1077,34 @@ func (m Model) matrixObjects() ([]domain.ObjectRef, string) {
 	}
 	schema := m.matrixSchema(engine)
 	scope := database
-	if engine == domain.EnginePostgreSQL {
-		scope = "all databases"
-		if database != "" {
-			scope += " · " + database
-		}
-	}
 	if schema != "" {
 		scope += " · " + schema
+	}
+	if node, ok := m.tree.selectedNode(); ok {
+		switch node.Kind {
+		case domain.KindTable, domain.KindCollection:
+			table := node.Name
+			if node.Ref.Schema != "" {
+				table = node.Ref.Schema + "." + table
+			}
+			if database != "" {
+				scope = database + " · " + table
+			} else {
+				scope = table
+			}
+		case domain.KindSchema:
+			if database != "" {
+				scope = database + " · " + node.Name
+			} else {
+				scope = node.Name
+			}
+		}
 	}
 	if scope == "" {
 		scope = "current connection"
 	}
 	var objects []domain.ObjectRef
-	if engine == domain.EnginePostgreSQL {
-		seenDatabases := map[string]bool{}
-		addDatabase := func(name string) {
-			name = strings.TrimSpace(name)
-			if name == "" || seenDatabases[name] {
-				return
-			}
-			seenDatabases[name] = true
-			objects = append(objects, domain.ObjectRef{
-				Engine: engine, Kind: domain.KindDatabase, Database: name, Name: name,
-			})
-		}
-		for _, key := range m.tree.roots {
-			entry, ok := m.tree.node(key)
-			if !ok || entry.Node.Kind != domain.KindDatabase {
-				continue
-			}
-			name := entry.Node.Ref.Database
-			if name == "" {
-				name = entry.Node.Name
-			}
-			addDatabase(name)
-		}
-		addDatabase(database)
-	} else if database != "" {
+	if database != "" {
 		objects = append(objects, domain.ObjectRef{
 			Engine: engine, Kind: domain.KindDatabase, Database: database, Name: database,
 		})
@@ -1322,10 +1312,8 @@ func (m Model) matrixFooter(width int) string {
 	left := m.message
 	style := m.messageStyle()
 	if left == "" {
-		rows := m.matrixRowCount()
-		cols := m.matrixColCount()
-		left = fmt.Sprintf("%d×%d cells · %s", rows, cols, m.matrixScopeText())
-		style = m.styles.Muted
+		left = fmt.Sprintf("scope %s · %s", oneLine(m.matrix.scope), m.matrixScopeText())
+		style = m.styles.Accent
 		if (m.matrix.active == matrixMembership && m.matrix.membershipLoading) ||
 			(m.matrix.active == matrixPrivileges && m.matrix.privilegesLoading) {
 			left = "loading matrix…"

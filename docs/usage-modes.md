@@ -364,8 +364,9 @@ app_writer             —             —           INSERT+2   —
   already selected.
 - `Enter` applies the diff between the current cell and the selected list.
 - `e` or `Esc` closes the details without applying.
-- PostgreSQL database columns cover every visible database for `CONNECT`;
-  views and column-level privileges are not editable.
+- The matrix follows the current tree selection: database level for a selected
+  database, schema/table level for a selected table. The selected scope is
+  highlighted in the footer. Views and column-level privileges are not editable.
 - Built-in MongoDB roles are read-only.
 
 Default privileges:

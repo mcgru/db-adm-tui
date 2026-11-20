@@ -159,7 +159,7 @@ SELECT COALESCE(grantee.rolname, 'PUBLIC'), d.datname, acl.privilege_type
 FROM pg_database d
 CROSS JOIN LATERAL aclexplode(COALESCE(d.datacl, acldefault('d', d.datdba))) acl
 LEFT JOIN pg_roles grantee ON grantee.oid = acl.grantee
-ORDER BY d.datname`)
+WHERE d.datname = current_database()`)
 	if err != nil {
 		return safeError("role-matrix", c.password, err)
 	}
