@@ -438,14 +438,15 @@ func (m Model) statementCompletionAnchor(popupWidth, popupHeight int) (int, int)
 		pos = len(runes)
 	}
 	prefixWidth := lipgloss.Width(string(runes[:pos]))
-	inputWidth := modalWidth - 16
+	inputWidth := m.statementInput.Width()
 	if inputWidth < 1 {
 		inputWidth = 1
 	}
 	if prefixWidth >= inputWidth {
 		prefixWidth = inputWidth - 1
 	}
-	x := modalX + 14 + prefixWidth
+	// Border + one-cell padding + the SQL>/MQL> prompt.
+	x := modalX + 2 + lipgloss.Width(m.statementPrompt()) + prefixWidth
 	y := modalY + 1 - popupHeight
 	return x, y
 }

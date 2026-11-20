@@ -1272,7 +1272,11 @@ func (m *Model) resizeInputs() {
 		queryWidth = 10
 	}
 	m.query.SetWidth(queryWidth)
-	m.statementInput.SetWidth(modalWidth(m.width, 70) - 6)
+	statementWidth := modalWidth(m.width, 70) - 10
+	if statementWidth < 10 {
+		statementWidth = 10
+	}
+	m.statementInput.SetWidth(statementWidth)
 	m.user.name.SetWidth(newWidth)
 	m.user.host.SetWidth(newWidth)
 	m.user.database.SetWidth(newWidth)

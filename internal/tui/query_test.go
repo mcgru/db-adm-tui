@@ -513,6 +513,22 @@ func TestEscTabDoesNotStealCompletionEscape(t *testing.T) {
 	}
 }
 
+func TestStatementPromptUsesMQL(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = focusQuery(t, m)
+	m = setQuery(m, "db.customers.find({})")
+	m, _ = press(t, m, "ctrl+x")
+	m, _ = press(t, m, "ctrl+e")
+	if m.modal != modalStatement {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	if view := StripANSI(m.viewModal()); !strings.Contains(view, "MQL> db.customers.find({})") {
+		t.Fatalf("compact MQL prompt missing:\n%s", view)
+	}
+}
+
 func TestStatementEditModalExecutes(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
@@ -528,6 +544,9 @@ func TestStatementEditModalExecutes(t *testing.T) {
 	m, _ = press(t, m, "ctrl+e")
 	if m.modal != modalStatement {
 		t.Fatalf("modal = %v", m.modal)
+	}
+	if view := StripANSI(m.viewModal()); !strings.Contains(view, "SQL> SELECT 1") {
+		t.Fatalf("compact SQL prompt missing:\n%s", view)
 	}
 	m.statementInput.SetValue("SELECT count(*) FROM customers")
 	m.statementInput.SetCursor(len([]rune("SELECT count(*) FROM customers")))

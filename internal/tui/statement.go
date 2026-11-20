@@ -80,15 +80,17 @@ func (m Model) handleStatementKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) viewStatement() string {
 	width := modalWidth(m.width, 70)
-	inner := width - 4
-	label := "SQL"
-	if m.profileForStatus().Engine == domain.EngineMongoDB {
-		label = "MQL"
-	}
 	var body []string
-	body = append(body, m.inputLine(label, m.statementInput.View(), true, inner))
+	body = append(body, m.styles.Accent.Render(m.statementPrompt())+m.statementInput.View())
 	body = append(body, "", m.actionLine("Enter", "execute", "Esc", "cancel"))
 	return modalBox("edit statement", body, width, m.styles)
+}
+
+func (m Model) statementPrompt() string {
+	if m.profileForStatus().Engine == domain.EngineMongoDB {
+		return "MQL> "
+	}
+	return "SQL> "
 }
 
 func (m *Model) openContextHelp() {
