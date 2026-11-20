@@ -94,10 +94,11 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.5.0.md`](docs/release-notes-v1.5.0.md) — latest
-  matrix orientation and label notes; [`v1.4.0`](docs/release-notes-v1.4.0.md)
-  has the feature scope, safety rules, and known limitations. Русская версия:
-  [`docs/release-notes-v1.5.0.ru.md`](docs/release-notes-v1.5.0.ru.md).
+- [`docs/release-notes-v1.5.1.md`](docs/release-notes-v1.5.1.md) — latest
+  MongoDB form notes; [`v1.5.0`](docs/release-notes-v1.5.0.md) covers the matrix
+  orientation, and [`v1.4.0`](docs/release-notes-v1.4.0.md) has the feature
+  scope and known limitations. Русская версия:
+  [`docs/release-notes-v1.5.1.ru.md`](docs/release-notes-v1.5.1.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -237,10 +238,12 @@ Create a user from `Security → users → +`:
   `LOGIN` and no extra grants; use the access matrix afterwards.
 - **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
   The account is created as `'user'@'host'` with no extra grants.
-- **MongoDB:** enter a user name, target database, and password. The database
-  field defaults to the current database; press `Tab` and change it to `admin`
-  (or another database) when needed. The user is created with an empty role
-  list; use the matrix to assign roles.
+- **MongoDB:** enter a user name, password, and authentication database. The
+  form order is name → password → database; the database defaults to the
+  current database, so press `Tab` past password and change it to `admin` (or
+  another database) when needed. The auth database stores the MongoDB user; it
+  does not grant access to that database. The user is created with an empty
+  role list; use the matrix to assign roles.
 
 The password is masked in the form. It is written to the matching credential
 file only after the native account is created:
