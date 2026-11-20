@@ -94,6 +94,35 @@ func TestMatrixOpensAndSwitches(t *testing.T) {
 	}
 }
 
+func TestMatrixTabKeepsSelectedPrincipal(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.matrix = defaultFakeMatrix(domain.EnginePostgreSQL)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	start := m.matrixRoleCols()[m.matrix.cursors[matrixMembership].col]
+	if start.Name != "app_ro" {
+		t.Fatalf("initial column = %+v", start)
+	}
+	m, _ = press(t, m, "2")
+	if m.matrix.active != matrixPrivileges {
+		t.Fatalf("active = %v", m.matrix.active)
+	}
+	selected := m.matrixRoleRows()[m.matrix.cursors[matrixPrivileges].row]
+	if selected.Name != start.Name {
+		t.Fatalf("privileges row = %+v, want %+v", selected, start)
+	}
+	m, _ = press(t, m, "1")
+	if m.matrix.active != matrixMembership {
+		t.Fatalf("active = %v", m.matrix.active)
+	}
+	selected = m.matrixRoleCols()[m.matrix.cursors[matrixMembership].col]
+	if selected.Name != start.Name {
+		t.Fatalf("membership column = %+v, want %+v", selected, start)
+	}
+}
+
 func TestRoleMenuGrantOpensPrivilegeMatrix(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
@@ -230,6 +259,12 @@ func TestMatrixSpaceTogglesPrivilege(t *testing.T) {
 	m = enableReadWrite(t, m)
 	m = openMatrix(t, m)
 	m, _ = press(t, m, "2")
+	for i, role := range m.matrixRoleRows() {
+		if role.Name == "reporting" {
+			m.matrix.cursors[matrixPrivileges].row = i
+			break
+		}
+	}
 	m, cmd := press(t, m, "space")
 	m = runCmd(t, m, cmd)
 	if admin.calls != 1 || admin.last != "RevokePrivileges" {

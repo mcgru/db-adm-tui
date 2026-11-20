@@ -501,8 +501,60 @@ func (m *Model) switchMatrix(active matrixKind) {
 	if active < matrixMembership || active > matrixPrivileges {
 		return
 	}
+	from := m.matrix.active
+	if from == active {
+		m.clampMatrix()
+		return
+	}
+	candidates := m.matrixSwitchCandidates(from)
 	m.matrix.active = active
+	switch active {
+	case matrixPrivileges:
+		rows := m.matrixRoleRows()
+		if index := firstRoleIndex(rows, candidates); index >= 0 {
+			oldVisual := m.matrix.cursors[from].row - m.matrix.cursors[from].rowOffset
+			m.matrix.cursors[active].row = index
+			m.matrix.cursors[active].rowOffset = index - oldVisual
+		}
+	case matrixMembership:
+		cols := m.matrixRoleCols()
+		if index := firstRoleIndex(cols, candidates); index >= 0 {
+			oldVisual := m.matrix.cursors[from].col - m.matrix.cursors[from].colOffset
+			m.matrix.cursors[active].col = index
+			m.matrix.cursors[active].colOffset = index - oldVisual
+		}
+	}
 	m.clampMatrix()
+}
+
+// matrixSwitchCandidates prefers the principal in the current column (the
+// user/role being toggled) and falls back to the selected row role.
+func (m Model) matrixSwitchCandidates(from matrixKind) []domain.RoleRef {
+	cursor := m.matrix.cursors[from]
+	var candidates []domain.RoleRef
+	switch from {
+	case matrixMembership:
+		if cols := m.matrixRoleCols(); cursor.col >= 0 && cursor.col < len(cols) {
+			candidates = append(candidates, cols[cursor.col])
+		}
+		if rows := m.matrixRoleRows(); cursor.row >= 0 && cursor.row < len(rows) {
+			candidates = append(candidates, rows[cursor.row])
+		}
+	case matrixPrivileges:
+		if rows := m.matrixRoleRows(); cursor.row >= 0 && cursor.row < len(rows) {
+			candidates = append(candidates, rows[cursor.row])
+		}
+	}
+	return candidates
+}
+
+func firstRoleIndex(refs []domain.RoleRef, candidates []domain.RoleRef) int {
+	for _, candidate := range candidates {
+		if index := roleIndex(refs, candidate.Key()); index >= 0 {
+			return index
+		}
+	}
+	return -1
 }
 
 func (m *Model) moveMatrixCell(rowDelta, colDelta int) {
