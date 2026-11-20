@@ -229,7 +229,8 @@ grant/assign/revoke forms are replaced by the matrices. The engine/app
   stack is the manual verification path.
 - **9c user slice implemented:** Native `UserAdmin` ports and PostgreSQL,
   MySQL/MariaDB, and MongoDB adapters; masked create form, host-only field for
-  MySQL, current-database scope for MongoDB, native drop confirmation, and a
+  MySQL, a MongoDB database field that defaults to the current database but can
+  target `admin` or another database, native drop confirmation, and a
   save-as-profile prompt that does not switch the active session. Passwords are
   redacted from audit statements and history.
 - **Credential writer implemented:** `~/.pgpass`, `~/.mypass`, and

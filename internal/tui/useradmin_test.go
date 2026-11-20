@@ -105,6 +105,51 @@ func TestMySQLUserCreateUsesMyPass(t *testing.T) {
 	}
 }
 
+func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	admin := &fakeUserAdmin{result: domain.MutationResult{Statement: `db.getSiblingDB("admin").createUser({user:"new_mongo", pwd:"***", roles:[]})`}}
+	e.connector.user = admin
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = enableReadWrite(t, m)
+	m = selectUsersGroup(t, m)
+	m, _ = press(t, m, "+")
+	if m.modal != modalUserForm || m.engine() != domain.EngineMongoDB {
+		t.Fatalf("modal=%v engine=%v", m.modal, m.engine())
+	}
+	if m.user.database.Value() != "analytics" {
+		t.Fatalf("default database = %q", m.user.database.Value())
+	}
+	view := StripANSI(m.viewModal())
+	if !strings.Contains(view, "database") || !strings.Contains(view, "analytics") {
+		t.Fatalf("editable database field missing:\n%s", view)
+	}
+	m = typeString(t, m, "new_mongo")
+	m, _ = press(t, m, "tab")
+	if m.user.focus != 3 {
+		t.Fatalf("focus after name = %d, want database", m.user.focus)
+	}
+	m.user.database.SetValue("admin")
+	m.user.database.CursorEnd()
+	m, _ = press(t, m, "tab")
+	m = typeString(t, m, "mongo-secret")
+	m, cmd := press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != "admin" {
+		t.Fatalf("admin = %+v", admin)
+	}
+	if m.modal != modalUserSave {
+		t.Fatalf("save modal = %v", m.modal)
+	}
+	if m.user.saveProfile.Database != "admin" || m.user.saveProfile.Label != "new_mongo@admin" {
+		t.Fatalf("save profile = %+v", m.user.saveProfile)
+	}
+	if m.user.saveProfile.Source == nil || m.user.saveProfile.Source.Kind != domain.SourceMongoFile ||
+		!strings.Contains(m.user.saveProfile.Source.Path, ".mongo.new_mongo-in-admin") {
+		t.Fatalf("credential source = %+v", m.user.saveProfile.Source)
+	}
+}
+
 func TestUserDropConfirmation(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)

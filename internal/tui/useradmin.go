@@ -22,6 +22,7 @@ const (
 type userState struct {
 	name     textinput.Model
 	host     textinput.Model
+	database textinput.Model
 	password textinput.Model
 	focus    int
 	formErr  string
@@ -44,6 +45,7 @@ func newUserState() userState {
 	return userState{
 		name:     newInput("user", false),
 		host:     newInput("%", false),
+		database: newInput("database", false),
 		password: newInput("password", true),
 	}
 }
@@ -71,6 +73,9 @@ func (m Model) startUserAdd() (tea.Model, tea.Cmd) {
 	}
 	m.user = newUserState()
 	m.user.host.SetValue("%")
+	if m.engine() == domain.EngineMongoDB {
+		m.user.database.SetValue(m.currentDatabase())
+	}
 	m.user.focus = 0
 	m.focusUserField()
 	m.modal = modalUserForm
@@ -93,8 +98,11 @@ func (m Model) startUserRemove() (tea.Model, tea.Cmd) {
 
 func (m Model) userFields() []int {
 	fields := []int{0}
-	if m.engine() == domain.EngineMySQL {
+	switch m.engine() {
+	case domain.EngineMySQL:
 		fields = append(fields, 1)
+	case domain.EngineMongoDB:
+		fields = append(fields, 3)
 	}
 	return append(fields, 2)
 }
@@ -102,6 +110,7 @@ func (m Model) userFields() []int {
 func (m *Model) focusUserField() {
 	m.user.name.Blur()
 	m.user.host.Blur()
+	m.user.database.Blur()
 	m.user.password.Blur()
 	switch m.user.focus {
 	case 0:
@@ -113,6 +122,9 @@ func (m *Model) focusUserField() {
 	case 2:
 		m.user.password.Focus()
 		m.user.password.CursorEnd()
+	case 3:
+		m.user.database.Focus()
+		m.user.database.CursorEnd()
 	}
 }
 
@@ -157,6 +169,9 @@ func (m Model) handleUserFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case 2:
 		updated, _ := m.user.password.Update(msg)
 		m.user.password = updated
+	case 3:
+		updated, _ := m.user.database.Update(msg)
+		m.user.database = updated
 	}
 	return m, nil
 }
@@ -181,6 +196,15 @@ func (m Model) submitUserForm() (tea.Model, tea.Cmd) {
 		host = "%"
 	}
 	database := m.currentDatabase()
+	if m.engine() == domain.EngineMongoDB {
+		database = strings.TrimSpace(m.user.database.Value())
+		if database == "" {
+			m.user.formErr = "enter the MongoDB database for the user"
+			m.user.focus = 3
+			m.focusUserField()
+			return m, nil
+		}
+	}
 	spec := domain.UserSpec{
 		Engine: m.engine(), Database: database, Name: name, Host: host, Password: password,
 	}
@@ -306,12 +330,19 @@ func (m Model) viewUserForm() string {
 	inner := width - 4
 	var body []string
 	body = append(body, m.styles.Muted.Render("engine ")+m.styles.Text.Render(m.engine().DisplayName()))
-	body = append(body, m.styles.Muted.Render("database ")+m.styles.Text.Render(oneLine(m.currentDatabase())))
+	if m.engine() == domain.EngineMongoDB {
+		body = append(body, m.inputLine("database", m.user.database.View(), m.user.focus == 3, inner))
+	} else {
+		body = append(body, m.styles.Muted.Render("database ")+m.styles.Text.Render(oneLine(m.currentDatabase())))
+	}
 	body = append(body, m.inputLine("name", m.user.name.View(), m.user.focus == 0, inner))
 	if m.engine() == domain.EngineMySQL {
 		body = append(body, m.inputLine("host", m.user.host.View(), m.user.focus == 1, inner))
 	}
 	body = append(body, m.inputLine("password", m.user.password.View(), m.user.focus == 2, inner))
+	for _, line := range wrapText("roles: after create use Ctrl+X Ctrl+R → 1 Principal × Role", inner) {
+		body = append(body, m.styles.Muted.Render(line))
+	}
 	if m.user.formErr != "" {
 		body = append(body, "", m.styles.Error.Render(Truncate(m.user.formErr, inner)))
 	}

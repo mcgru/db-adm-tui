@@ -228,8 +228,10 @@ Create a user from `Security → users → +`:
   `LOGIN` and no extra grants; use the access matrix afterwards.
 - **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
   The account is created as `'user'@'host'` with no extra grants.
-- **MongoDB:** enter a user name and password in the current database. The user
-  is created with an empty role list; use the matrix to assign roles.
+- **MongoDB:** enter a user name, target database, and password. The database
+  field defaults to the current database; press `Tab` and change it to `admin`
+  (or another database) when needed. The user is created with an empty role
+  list; use the matrix to assign roles.
 
 The password is masked in the form. It is written to the matching credential
 file only after the native account is created:

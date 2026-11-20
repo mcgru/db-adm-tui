@@ -1275,6 +1275,7 @@ func (m *Model) resizeInputs() {
 	m.statementInput.SetWidth(modalWidth(m.width, 70) - 6)
 	m.user.name.SetWidth(newWidth)
 	m.user.host.SetWidth(newWidth)
+	m.user.database.SetWidth(newWidth)
 	m.user.password.SetWidth(newWidth)
 	m.editLabel.SetWidth(newWidth)
 	m.editHost.SetWidth(newWidth)
