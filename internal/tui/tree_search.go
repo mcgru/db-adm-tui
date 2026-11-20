@@ -4,12 +4,17 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/mcgru/db-adm-tui/internal/tui/keymap"
 )
+
+// treeSearchDoubleTap is the window for the second slash that inserts the
+// selected node name instead of a literal slash or dot.
+const treeSearchDoubleTap = 500 * time.Millisecond
 
 func (m *Model) openTreeSearch() {
 	if m.screen != ScreenWorkspace || m.focus != FocusTree {
@@ -20,6 +25,7 @@ func (m *Model) openTreeSearch() {
 		return
 	}
 	m.tree.searchPrompt = true
+	m.tree.searchOpened = time.Now()
 	m.tree.searchCursor = len([]rune(m.tree.searchPattern))
 }
 
@@ -27,6 +33,7 @@ func (m *Model) clearTreeSearch() {
 	m.tree.searchPrompt = false
 	m.tree.searchPattern = ""
 	m.tree.searchCursor = 0
+	m.tree.searchOpened = time.Time{}
 }
 
 func (m Model) treeSearchVisible() bool {
@@ -56,6 +63,27 @@ func treeRowSearchText(row treeRow) string {
 		parts = append(parts, oneLine(row.Node.Ref.Schema+"."+row.Node.Name))
 	}
 	return strings.Join(parts, " ")
+}
+
+// treeSearchInsertValue inserts the selected node value at the search cursor.
+// A short double slash inserts the plain name; Ins inserts the qualified
+// schema.name form when a schema exists.
+func (m *Model) treeSearchInsertValue(full bool) bool {
+	node, ok := m.tree.selectedNode()
+	if !ok {
+		return false
+	}
+	value := oneLine(node.Name)
+	if full && node.Ref.Schema != "" {
+		value = oneLine(node.Ref.Schema) + "." + value
+	}
+	if value == "" {
+		return false
+	}
+	m.tree.searchPattern, m.tree.searchCursor = insertFilterText(
+		m.tree.searchPattern, m.tree.searchCursor, value)
+	m.tree.searchOpened = time.Time{}
+	return true
 }
 
 func (m *Model) nextTreeMatch(delta int) tea.Cmd {
@@ -123,6 +151,14 @@ func (m Model) handleTreeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, boo
 		case keymap.Cancel:
 			m.clearTreeSearch()
 			return m, nil, true
+		case keymap.Search:
+			if time.Since(m.tree.searchOpened) <= treeSearchDoubleTap && m.treeSearchInsertValue(false) {
+				return m, nil, true
+			}
+		case keymap.InsertSelected:
+			if m.treeSearchInsertValue(true) {
+				return m, nil, true
+			}
 		case keymap.Confirm:
 			if m.tree.searchPattern == "" {
 				m.clearTreeSearch()
@@ -139,6 +175,7 @@ func (m Model) handleTreeSearchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, boo
 			return m, nil, true
 		}
 	}
+	m.tree.searchOpened = time.Time{}
 	m.tree.searchPattern, m.tree.searchCursor = editFilterText(m.tree.searchPattern, m.tree.searchCursor, msg)
 	if matches := m.treeSearchMatches(); len(matches) > 0 {
 		m.tree.selected = matches[0]

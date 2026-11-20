@@ -119,11 +119,11 @@ func (m Model) handleEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case keymap.Confirm:
 			return m.submitEdit()
-		case keymap.Tab:
+		case keymap.Tab, keymap.Down:
 			m.editFocus = m.nextEditField(1)
 			m.focusEditField()
 			return m, nil
-		case keymap.ShiftTab:
+		case keymap.ShiftTab, keymap.Up:
 			m.editFocus = m.nextEditField(-1)
 			m.focusEditField()
 			return m, nil

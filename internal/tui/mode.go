@@ -20,6 +20,30 @@ func (m *Model) openModeConfirm() {
 	m.modal = modalMode
 }
 
+// toggleMode performs the same read-only/read-write transition for the
+// Ctrl+X Ctrl+W chord and for the direct tree shortcut.
+func (m Model) toggleMode() (tea.Model, tea.Cmd) {
+	if m.session == nil {
+		return m, nil
+	}
+	if m.modeBusy {
+		return m, nil
+	}
+	if m.queryRunning {
+		m.setMessage(levelInfo, "query running — Esc cancels first")
+		return m, nil
+	}
+	if m.session.ResultsOpen() {
+		m.setMessage(levelInfo, "results open — Esc to release")
+		return m, nil
+	}
+	if m.session.ReadOnly() {
+		m.openModeConfirm()
+		return m, nil
+	}
+	return m, m.startModeSwitch(true)
+}
+
 func (m Model) handleModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	action, ok := keymap.Lookup(msg.String())
 	if !ok {
@@ -29,7 +53,7 @@ func (m Model) handleModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case keymap.Cancel:
 		m.modal = modalNone
 		return m, nil
-	case keymap.Confirm:
+	case keymap.Confirm, keymap.EditProfile, keymap.TreeMode, keymap.ToggleMode:
 		m.modal = modalNone
 		if m.session == nil || !m.session.ReadOnly() {
 			return m, nil

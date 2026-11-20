@@ -108,16 +108,7 @@ func (m Model) startRoleRemove() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) startRoleEdit() (tea.Model, tea.Cmd) {
-	node, ok := m.tree.selectedNode()
-	if !ok || node.Kind != domain.KindRole {
-		m.setMessage(levelInfo, "select a role to edit")
-		return m, nil
-	}
-	if !m.roleWritable() {
-		return m, nil
-	}
-	role := roleRefFromNode(node)
-	return m.openMatrix(matrixPrivileges, &role)
+	return m.startTreeMatrix(matrixPrivileges)
 }
 
 func roleRefFromNode(node domain.Node) domain.RoleRef {

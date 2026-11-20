@@ -352,10 +352,10 @@ func (m Model) handleUserFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.modal = modalNone
 			m.user = newUserState()
 			return m, nil
-		case keymap.Tab:
+		case keymap.Tab, keymap.Down:
 			m.nextUserField(1)
 			return m, nil
-		case keymap.ShiftTab:
+		case keymap.ShiftTab, keymap.Up:
 			m.nextUserField(-1)
 			return m, nil
 		case keymap.Confirm:
@@ -552,20 +552,20 @@ func (m Model) viewUserForm() string {
 	if m.engine() != domain.EngineMongoDB {
 		body = append(body, m.styles.Muted.Render("database ")+m.styles.Text.Render(oneLine(m.currentDatabase())))
 	}
-	body = append(body, m.inputLine("name", m.user.name.View(), m.user.focus == 0, inner))
+	body = append(body, m.inputLine("name:", m.user.name.View(), m.user.focus == 0, inner))
 	if m.engine() == domain.EngineMySQL {
-		body = append(body, m.inputLine("host", m.user.host.View(), m.user.focus == 1, inner))
+		body = append(body, m.inputLine("host:", m.user.host.View(), m.user.focus == 1, inner))
 	}
-	body = append(body, m.inputLine("password", m.user.password.View(), m.user.focus == 2, inner))
+	body = append(body, m.inputLine("password:", m.user.password.View(), m.user.focus == 2, inner))
 	if m.engine() == domain.EngineMongoDB {
-		body = append(body, m.inputLine("auth.db", m.user.database.View(), m.user.focus == 3, inner))
+		body = append(body, m.inputLine("auth.db:", m.user.database.View(), m.user.focus == 3, inner))
 		for _, line := range wrapText("auth database: stores the MongoDB user; it does not grant access", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
 		for _, line := range wrapText("Space cycles: "+strings.Join(m.mongoUserDatabases(), ", "), inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
-		body = append(body, m.inputLine("hosts", m.user.hosts.View(), m.user.focus == 4, inner))
+		body = append(body, m.inputLine("hosts:", m.user.hosts.View(), m.user.focus == 4, inner))
 		for _, line := range wrapText("comma-separated host:port list for the credential URI", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
@@ -576,7 +576,7 @@ func (m Model) viewUserForm() string {
 	if m.user.formErr != "" {
 		body = append(body, "", m.styles.Error.Render(Truncate(m.user.formErr, inner)))
 	}
-	body = append(body, "", m.actionLine("Enter", "create", "Tab", "next field"))
+	body = append(body, "", m.actionLine("Enter", "create", "Tab/↑↓", "next field"))
 	body = append(body, m.styles.Muted.Render("Esc cancel"))
 	return modalBox("new user", body, width, m.styles)
 }

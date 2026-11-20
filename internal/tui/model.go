@@ -594,12 +594,13 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			if p, ok := m.currentPickerProfile(); ok {
 				m.openEditModal(p)
 			}
+			return m, nil
+		}
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.startTreeMatrix(matrixMembership)
 		}
 		if m.screen == ScreenWorkspace && m.rowDataTab() {
 			return m.startRowEdit()
-		}
-		if m.screen == ScreenWorkspace && m.focus == FocusTree {
-			return m.startRoleEdit()
 		}
 	case keymap.Add:
 		if m.screen == ScreenWorkspace {
@@ -622,17 +623,22 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		switch node.Kind {
 		case domain.KindSecurity, domain.KindUsers:
 			return m.startUserAdd()
-		case domain.KindDatabase, domain.KindCollection, domain.KindTable:
-			if m.engine() == domain.EngineMongoDB {
-				return m.openMatrixWithDB(matrixMembership, nil, m.matrixEnsureDatabase())
-			}
-			m.setMessage(levelInfo, "select Security/users to add a user")
+		case domain.KindDatabase, domain.KindSchema, domain.KindCollection, domain.KindTable:
+			return m.startTreeMatrix(matrixMembership)
 		default:
-			m.setMessage(levelInfo, "select Security/users or a database/collection")
+			m.setMessage(levelInfo, "select Security/users or a database/schema/table/collection")
 		}
 	case keymap.HomeDatabase:
 		if m.screen == ScreenWorkspace && m.focus == FocusTree {
 			return m.startUserHome()
+		}
+	case keymap.MatrixPrivileges:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.startTreeMatrix(matrixPrivileges)
+		}
+	case keymap.TreeMode:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.toggleMode()
 		}
 	case keymap.Remove:
 		if m.screen == ScreenPicker && !m.connecting {
@@ -874,6 +880,14 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.openBufferFilter()
+	case keymap.InsertSelected:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			if !m.tree.searchPrompt {
+				m.openTreeSearch()
+			}
+			m.treeSearchInsertValue(true)
+			return m, nil
+		}
 	case keymap.ServerFilter:
 		return m, m.openServerFilter()
 	case keymap.More:
@@ -922,25 +936,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			return m.openMatrixWithDB(matrixMembership, nil, m.matrixEnsureDatabase())
 		}
 	case keymap.ToggleMode:
-		if m.screen != ScreenWorkspace || m.session == nil {
+		if m.screen != ScreenWorkspace {
 			return m, nil
 		}
-		if m.modeBusy {
-			return m, nil
-		}
-		if m.queryRunning {
-			m.setMessage(levelInfo, "query running — Esc cancels first")
-			return m, nil
-		}
-		if m.session.ResultsOpen() {
-			m.setMessage(levelInfo, "results open — Esc to release")
-			return m, nil
-		}
-		if m.session.ReadOnly() {
-			m.openModeConfirm()
-			return m, nil
-		}
-		return m, m.startModeSwitch(true)
+		return m.toggleMode()
 	case keymap.ResizeTreeLeft:
 		m.resizeTree(-2)
 	case keymap.ResizeTreeRight:

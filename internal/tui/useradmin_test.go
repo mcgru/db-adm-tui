@@ -130,10 +130,12 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 		t.Fatalf("database choices = %+v", choices)
 	}
 	view := StripANSI(m.viewModal())
-	if !strings.Contains(view, "auth.db") || !strings.Contains(view, "admin") ||
+	if !strings.Contains(view, "auth.db:") || !strings.Contains(view, "admin") ||
+		!strings.Contains(view, "name:") || !strings.Contains(view, "password:") ||
+		!strings.Contains(view, "hosts:") ||
 		!strings.Contains(view, "auth database: stores the MongoDB user") ||
 		!strings.Contains(view, "Space cycles: admin") ||
-		!strings.Contains(view, "hosts") || !strings.Contains(view, "comma-separated host:port") {
+		!strings.Contains(view, "comma-separated host:port") {
 		t.Fatalf("editable auth fields missing:\n%s", view)
 	}
 	nameAt := strings.Index(view, "name")
@@ -217,5 +219,40 @@ func TestUserDropConfirmation(t *testing.T) {
 	}
 	if m.modal != modalNone || !strings.Contains(m.message, "user removed") {
 		t.Fatalf("modal=%v message=%q", m.modal, m.message)
+	}
+}
+
+func TestUserFormArrowNavigation(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = enableReadWrite(t, m)
+	m = selectUsersGroup(t, m)
+	m, _ = press(t, m, "+")
+	if m.modal != modalUserForm {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	if m.user.focus != 0 {
+		t.Fatalf("initial focus = %d, want name", m.user.focus)
+	}
+	m, _ = press(t, m, "down")
+	if m.user.focus != 2 {
+		t.Fatalf("down from name = %d, want password", m.user.focus)
+	}
+	m, _ = press(t, m, "down")
+	if m.user.focus != 3 {
+		t.Fatalf("down from password = %d, want auth.db", m.user.focus)
+	}
+	m, _ = press(t, m, "down")
+	if m.user.focus != 4 {
+		t.Fatalf("down from auth.db = %d, want hosts", m.user.focus)
+	}
+	m, _ = press(t, m, "down")
+	if m.user.focus != 0 {
+		t.Fatalf("down from hosts = %d, want wrap to name", m.user.focus)
+	}
+	m, _ = press(t, m, "up")
+	if m.user.focus != 4 {
+		t.Fatalf("up from name = %d, want hosts", m.user.focus)
 	}
 }

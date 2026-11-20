@@ -76,7 +76,7 @@ func TestMatrixOpensAndSwitches(t *testing.T) {
 		t.Fatalf("active = %v", m.matrix.active)
 	}
 	view := StripANSI(m.viewMatrix())
-	for _, want := range []string{"Role × Principal", "u:app_ro", "r:reporting", "[x]"} {
+	for _, want := range []string{"Role × Principal", "app_ro", "r:reporting", "[x]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -169,12 +169,12 @@ func TestMatrixPrincipalLabels(t *testing.T) {
 		ref  domain.RoleRef
 		want string
 	}{
-		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "admin", Name: "root@admin"}, "u:root"},
-		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "appdb", Name: "app_user@appdb"}, "u:app_user@appdb"},
+		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "admin", Name: "root@admin"}, "root"},
+		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindUser, Database: "appdb", Name: "app_user@appdb"}, "app_user@appdb"},
 		{domain.RoleRef{Engine: domain.EngineMongoDB, Kind: domain.KindRole, Database: "appdb", Name: "readWrite@appdb"}, "r:readWrite@appdb"},
-		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@%"}, "u:app"},
-		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@db1"}, "u:app@db1"},
-		{domain.RoleRef{Engine: domain.EnginePostgreSQL, Kind: domain.KindUser, Name: "app_ro"}, "u:app_ro"},
+		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@%"}, "app"},
+		{domain.RoleRef{Engine: domain.EngineMySQL, Kind: domain.KindUser, Name: "app@db1"}, "app@db1"},
+		{domain.RoleRef{Engine: domain.EnginePostgreSQL, Kind: domain.KindUser, Name: "app_ro"}, "app_ro"},
 	}
 	for _, tc := range cases {
 		if got := matrixPrincipalLabel(tc.ref); got != tc.want {
@@ -203,7 +203,7 @@ func TestMatrixShowsFullTruncatedColumnLabel(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
 	engine := domain.EnginePostgreSQL
-	user := domain.RoleRef{Engine: engine, Name: "very_long_principal_name", Kind: domain.KindUser}
+	user := domain.RoleRef{Engine: engine, Name: "very_long_principal_name_x", Kind: domain.KindUser}
 	role := domain.RoleRef{Engine: engine, Name: "reporting", Kind: domain.KindRole}
 	e.connector.matrix = &fakeRoleMatrix{
 		membership: domain.RoleMatrix{
@@ -216,7 +216,7 @@ func TestMatrixShowsFullTruncatedColumnLabel(t *testing.T) {
 	m = enableReadWrite(t, m)
 	m = openMatrix(t, m)
 	view := StripANSI(m.viewMatrix())
-	if !strings.Contains(view, "column u:very_long_principal_name") {
+	if !strings.Contains(view, "column very_long_principal_name_x") {
 		t.Fatalf("full truncated column label missing:\n%s", view)
 	}
 }
@@ -449,5 +449,120 @@ func TestRoleDropConfirmation(t *testing.T) {
 	m = runCmd(t, m, cmd)
 	if admin.calls != 1 || admin.last != "DropRole" || m.modal != modalNone {
 		t.Fatalf("calls=%d last=%q modal=%v", admin.calls, admin.last, m.modal)
+	}
+}
+
+func TestTreeShortcutsOpenMatrixPanels(t *testing.T) {
+	m := workspace(t)
+	m = enableReadWrite(t, m)
+
+	m = selectKind(t, m, domain.KindTable)
+	m, _ = press(t, m, "e")
+	if m.screen != ScreenMatrix || m.matrix.active != matrixMembership {
+		t.Fatalf("e opened screen=%v tab=%v, want membership", m.screen, m.matrix.active)
+	}
+	m, _ = press(t, m, "esc")
+	if m.screen != ScreenWorkspace {
+		t.Fatalf("esc left screen=%v", m.screen)
+	}
+
+	m = selectKind(t, m, domain.KindTable)
+	m, _ = press(t, m, "r")
+	if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
+		t.Fatalf("r opened screen=%v tab=%v, want privileges", m.screen, m.matrix.active)
+	}
+	m, _ = press(t, m, "esc")
+
+	m = selectKind(t, m, domain.KindTable)
+	m, _ = press(t, m, "u")
+	if m.screen != ScreenMatrix || m.matrix.active != matrixMembership {
+		t.Fatalf("u opened screen=%v tab=%v, want membership", m.screen, m.matrix.active)
+	}
+	m, _ = press(t, m, "esc")
+
+	m = selectKind(t, m, domain.KindSchema)
+	m, _ = press(t, m, "r")
+	if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
+		t.Fatalf("schema r opened screen=%v tab=%v, want privileges", m.screen, m.matrix.active)
+	}
+}
+
+func TestMatrixCtrlArrowsJumpWithinRowAndColumn(t *testing.T) {
+	m := workspace(t)
+	m = enableReadWrite(t, m)
+	m = openMatrix(t, m)
+	rows := m.matrixRowCount()
+	cols := m.matrixColCount()
+	if rows < 2 || cols < 2 {
+		t.Fatalf("fake matrix rows=%d cols=%d", rows, cols)
+	}
+	cursor := &m.matrix.cursors[matrixMembership]
+	cursor.row = 0
+	cursor.col = 1
+	m, _ = press(t, m, "ctrl+down")
+	if cursor.row != rows-1 || cursor.col != 1 {
+		t.Fatalf("ctrl+down cursor=%d,%d want %d,1", cursor.row, cursor.col, rows-1)
+	}
+	m, _ = press(t, m, "ctrl+up")
+	if cursor.row != 0 || cursor.col != 1 {
+		t.Fatalf("ctrl+up cursor=%d,%d want 0,1", cursor.row, cursor.col)
+	}
+	m, _ = press(t, m, "ctrl+right")
+	if cursor.row != 0 || cursor.col != cols-1 {
+		t.Fatalf("ctrl+right cursor=%d,%d want 0,%d", cursor.row, cursor.col, cols-1)
+	}
+	m, _ = press(t, m, "ctrl+left")
+	if cursor.row != 0 || cursor.col != 0 {
+		t.Fatalf("ctrl+left cursor=%d,%d want 0,0", cursor.row, cursor.col)
+	}
+}
+
+func TestMatrixFreezesDatabaseAndSchemaColumns(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	engine := domain.EnginePostgreSQL
+	role := domain.RoleRef{Engine: engine, Name: "reporting", Kind: domain.KindRole}
+	objects := []domain.ObjectRef{
+		{Engine: engine, Kind: domain.KindDatabase, Database: "orders", Name: "orders"},
+		{Engine: engine, Kind: domain.KindSchema, Database: "orders", Schema: "public", Name: "public"},
+	}
+	for _, name := range []string{"t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8"} {
+		objects = append(objects, domain.ObjectRef{
+			Engine: engine, Kind: domain.KindTable, Database: "orders", Schema: "public", Name: name,
+		})
+	}
+	e.connector.matrix = &fakeRoleMatrix{
+		privileges: domain.PrivilegeMatrix{
+			Principals: []domain.RoleRef{role},
+			Objects:    objects,
+			Cells:      map[string]map[string][]string{role.Key(): {}},
+		},
+	}
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
+	m = enableReadWrite(t, m)
+	m.width = 140
+	m = openMatrix(t, m)
+	m, _ = press(t, m, "2")
+	if got := m.matrixFrozenCols(); got != 2 {
+		t.Fatalf("frozen columns = %d, want 2", got)
+	}
+	cursor := &m.matrix.cursors[matrixPrivileges]
+	cursor.col = len(objects) - 1
+	m.ensureMatrixVisible()
+	visible := m.matrixVisibleCols()
+	if len(visible) < 2 || visible[0] != 0 || visible[1] != 1 {
+		t.Fatalf("visible columns = %v, want frozen db/schema first", visible)
+	}
+	if visible[len(visible)-1] != len(objects)-1 {
+		t.Fatalf("visible columns = %v, want the selected last object", visible)
+	}
+	view := StripANSI(m.viewMatrix())
+	if !strings.Contains(view, "[db] orders") || !strings.Contains(view, "[schema] public") {
+		t.Fatalf("frozen headers disappeared while scrolling:\n%s", view)
+	}
+
+	m.width = 80
+	if got := m.matrixFrozenCols(); got != 0 {
+		t.Fatalf("narrow matrix froze %d columns, want normal scrolling", got)
 	}
 }

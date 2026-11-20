@@ -142,3 +142,25 @@ func TestMongoGuardOnlyNoticeAndSwitch(t *testing.T) {
 		t.Fatalf("Mongo mode did not switch:\n%s", StripANSI(m.View().Content))
 	}
 }
+
+func TestTreeWOpensModeConfirmAndEAccepts(t *testing.T) {
+	m := workspace(t)
+	if m.session == nil || !m.session.ReadOnly() {
+		t.Fatal("workspace did not start read-only")
+	}
+	m, _ = press(t, m, "w")
+	if m.modal != modalMode {
+		t.Fatalf("w modal = %v", m.modal)
+	}
+	m, cmd := press(t, m, "e")
+	if m.modal != modalNone {
+		t.Fatalf("e did not close the mode modal: %v", m.modal)
+	}
+	if cmd == nil {
+		t.Fatal("e did not start the read-write switch")
+	}
+	m = runCmd(t, m, cmd)
+	if m.session.ReadOnly() {
+		t.Fatal("session stayed read-only")
+	}
+}

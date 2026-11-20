@@ -124,3 +124,37 @@ func TestTreeSearchLeavesMainPaneFilterAlone(t *testing.T) {
 		t.Fatalf("data prompt = %v", m.data.prompt)
 	}
 }
+
+func TestTreeSearchDoubleSlashInsertsSelectedName(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindTable)
+	node, ok := m.tree.selectedNode()
+	if !ok || node.Name == "" {
+		t.Fatal("no table selected")
+	}
+	m, _ = press(t, m, "/")
+	m, _ = press(t, m, "/")
+	if m.tree.searchPattern != node.Name {
+		t.Fatalf("double slash pattern = %q, want %q", m.tree.searchPattern, node.Name)
+	}
+	if !m.tree.searchPrompt {
+		t.Fatal("double slash closed the search prompt")
+	}
+}
+
+func TestTreeSearchInsertKeyInsertsQualifiedName(t *testing.T) {
+	m := workspace(t)
+	m = selectKind(t, m, domain.KindTable)
+	node, ok := m.tree.selectedNode()
+	if !ok || node.Ref.Schema == "" {
+		t.Fatalf("selected table has no schema: %+v", node)
+	}
+	m, _ = press(t, m, "insert")
+	if !m.tree.searchPrompt {
+		t.Fatal("Ins did not open the tree search prompt")
+	}
+	want := node.Ref.Schema + "." + node.Name
+	if m.tree.searchPattern != want {
+		t.Fatalf("Ins pattern = %q, want %q", m.tree.searchPattern, want)
+	}
+}

@@ -846,6 +846,8 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "delete":
 		return tea.KeyPressMsg{Code: tea.KeyDelete}
+	case "insert":
+		return tea.KeyPressMsg{Code: tea.KeyInsert}
 	case "space":
 		return tea.KeyPressMsg{Text: " ", Code: tea.KeySpace}
 	case "f1":

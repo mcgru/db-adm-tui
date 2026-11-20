@@ -169,6 +169,35 @@ func (m Model) matrixEnsureDatabase() string {
 	}
 }
 
+// startTreeMatrix opens the access matrix from the tree selection. Database,
+// schema, table, and collection nodes open the scoped matrix; a role opens the
+// matrix focused on that role.
+func (m Model) startTreeMatrix(active matrixKind) (tea.Model, tea.Cmd) {
+	node, ok := m.tree.selectedNode()
+	if !ok {
+		m.setMessage(levelInfo, "select a database, schema, table, collection, or role")
+		return m, nil
+	}
+	switch node.Kind {
+	case domain.KindRole:
+		if active == matrixMembership {
+			// The tree shortcut on a role keeps the established privilege view.
+			active = matrixPrivileges
+		}
+		role := roleRefFromNode(node)
+		return m.openMatrix(active, &role)
+	case domain.KindDatabase, domain.KindSchema, domain.KindTable, domain.KindCollection:
+		return m.openMatrixWithDB(active, nil, m.matrixEnsureDatabase())
+	default:
+		if active == matrixPrivileges {
+			m.setMessage(levelInfo, "select a database, schema, table, collection, or role for privileges")
+		} else {
+			m.setMessage(levelInfo, "select a database, schema, table, or collection")
+		}
+		return m, nil
+	}
+}
+
 func (m *Model) loadMatrix() tea.Cmd {
 	if m.session == nil {
 		return nil
@@ -345,9 +374,10 @@ func matrixRoleLabel(ref domain.RoleRef) string {
 	return rolePrefix(ref) + oneLine(ref.Name)
 }
 
-// matrixPrincipalLabel is the compact column label. MongoDB users in admin are
-// shown without @admin; users in another database keep @database. MySQL users
-// hide the default % host.
+// matrixPrincipalLabel is the compact column label. Users have no prefix;
+// MongoDB users in admin are shown without @admin, and users in another
+// database keep @database. MySQL users hide the default % host. Roles keep
+// r:/R: so they remain distinguishable from user columns.
 func matrixPrincipalLabel(ref domain.RoleRef) string {
 	if ref.Kind == domain.KindUser && ref.Engine == domain.EngineMongoDB {
 		name := oneLine(ref.Name)
@@ -359,14 +389,13 @@ func matrixPrincipalLabel(ref domain.RoleRef) string {
 			name = name[:index]
 		}
 		if database == "" || database == "admin" {
-			return "u:" + name
+			return name
 		}
-		return "u:" + name + "@" + database
+		return name + "@" + database
 	}
 	if ref.Kind == domain.KindUser && ref.Engine == domain.EngineMySQL {
 		name := oneLine(ref.Name)
-		name = strings.TrimSuffix(name, "@%")
-		return "u:" + name
+		return strings.TrimSuffix(name, "@%")
 	}
 	return rolePrefix(ref) + oneLine(ref.Name)
 }
@@ -376,7 +405,7 @@ func rolePrefix(ref domain.RoleRef) string {
 	case ref.Builtin:
 		return "R:"
 	case ref.Kind == domain.KindUser:
-		return "u:"
+		return ""
 	case ref.Kind == domain.KindRole:
 		return "r:"
 	default:
@@ -474,6 +503,73 @@ func (m Model) matrixPrincipalWidth() int {
 	return width
 }
 
+// matrixFrozenCols keeps the leading database and schema columns visible on
+// the privileges panel while tables and collections scroll horizontally. The
+// freeze is disabled when the window cannot also show at least two scrolling
+// object columns.
+func (m Model) matrixFrozenCols() int {
+	if m.matrix.active != matrixPrivileges {
+		return 0
+	}
+	cols := m.matrixObjectCols()
+	frozen := 0
+	for _, ref := range cols {
+		if ref.Kind != domain.KindDatabase && ref.Kind != domain.KindSchema {
+			break
+		}
+		frozen++
+	}
+	if frozen == 0 || frozen >= len(cols) {
+		return 0
+	}
+	_, capacity := m.matrixViewport()
+	if capacity < frozen+2 {
+		return 0
+	}
+	return frozen
+}
+
+// matrixVisibleCols returns the frozen leading columns followed by the
+// horizontally scrolled object columns.
+func (m Model) matrixVisibleCols() []int {
+	total := m.matrixColCount()
+	if total == 0 {
+		return nil
+	}
+	_, capacity := m.matrixViewport()
+	if capacity > total {
+		capacity = total
+	}
+	frozen := m.matrixFrozenCols()
+	if frozen > capacity {
+		frozen = capacity
+	}
+	visible := make([]int, 0, capacity)
+	for col := 0; col < frozen; col++ {
+		visible = append(visible, col)
+	}
+	scrollCapacity := capacity - frozen
+	if scrollCapacity < 1 {
+		return visible
+	}
+	cursor := m.matrix.cursors[m.matrix.active]
+	start := cursor.colOffset
+	if start < frozen {
+		start = frozen
+	}
+	if start >= total {
+		start = total - 1
+	}
+	end := start + scrollCapacity
+	if end > total {
+		end = total
+	}
+	for col := start; col < end; col++ {
+		visible = append(visible, col)
+	}
+	return visible
+}
+
 func (m Model) matrixViewport() (rows, cols int) {
 	innerHeight := m.height - 4
 	used := len(m.matrixHeaderLines(m.width-4)) + 1 // tabs/hint + column header
@@ -536,18 +632,40 @@ func (m *Model) ensureMatrixVisible() {
 	if cursor.rowOffset < 0 {
 		cursor.rowOffset = 0
 	}
-	if cursor.col < cursor.colOffset {
-		cursor.colOffset = cursor.col
-	}
-	if cursor.col >= cursor.colOffset+cols {
-		cursor.colOffset = cursor.col - cols + 1
-	}
-	maxColOffset := colCount - cols
-	if maxColOffset < 0 {
-		maxColOffset = 0
-	}
-	if cursor.colOffset > maxColOffset {
-		cursor.colOffset = maxColOffset
+	if frozen := m.matrixFrozenCols(); frozen > 0 {
+		scrollCols := cols - frozen
+		if cursor.col >= frozen {
+			if cursor.col < cursor.colOffset {
+				cursor.colOffset = cursor.col
+			}
+			if cursor.col >= cursor.colOffset+scrollCols {
+				cursor.colOffset = cursor.col - scrollCols + 1
+			}
+		}
+		if cursor.colOffset < frozen {
+			cursor.colOffset = frozen
+		}
+		maxColOffset := colCount - scrollCols
+		if maxColOffset < frozen {
+			maxColOffset = frozen
+		}
+		if cursor.colOffset > maxColOffset {
+			cursor.colOffset = maxColOffset
+		}
+	} else {
+		if cursor.col < cursor.colOffset {
+			cursor.colOffset = cursor.col
+		}
+		if cursor.col >= cursor.colOffset+cols {
+			cursor.colOffset = cursor.col - cols + 1
+		}
+		maxColOffset := colCount - cols
+		if maxColOffset < 0 {
+			maxColOffset = 0
+		}
+		if cursor.colOffset > maxColOffset {
+			cursor.colOffset = maxColOffset
+		}
 	}
 	if cursor.colOffset < 0 {
 		cursor.colOffset = 0
@@ -659,6 +777,28 @@ func (m *Model) edgeMatrix(rowEnd, colEnd bool) {
 	m.clampMatrix()
 }
 
+// edgeMatrixColumn jumps to the start or end of the selected column while
+// keeping the current column. edgeMatrixRow does the same for the selected row.
+func (m *Model) edgeMatrixColumn(end bool) {
+	cursor := &m.matrix.cursors[m.matrix.active]
+	if end {
+		cursor.row = m.matrixRowCount() - 1
+	} else {
+		cursor.row = 0
+	}
+	m.clampMatrix()
+}
+
+func (m *Model) edgeMatrixRow(end bool) {
+	cursor := &m.matrix.cursors[m.matrix.active]
+	if end {
+		cursor.col = m.matrixColCount() - 1
+	} else {
+		cursor.col = 0
+	}
+	m.clampMatrix()
+}
+
 func (m Model) handleMatrixKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	cursor := &m.matrix.cursors[m.matrix.active]
 	if cursor.filterPrompt {
@@ -695,6 +835,14 @@ func (m Model) handleMatrixKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.pageMatrix(-1)
 	case keymap.PageDown:
 		m.pageMatrix(1)
+	case keymap.ResizeQueryUp:
+		m.edgeMatrixColumn(false)
+	case keymap.ResizeQueryDown:
+		m.edgeMatrixColumn(true)
+	case keymap.ResizeTreeLeft:
+		m.edgeMatrixRow(false)
+	case keymap.ResizeTreeRight:
+		m.edgeMatrixRow(true)
 	case keymap.Home, keymap.RangeStart:
 		m.edgeMatrix(false, false)
 	case keymap.End, keymap.RangeEnd:
@@ -1304,18 +1452,14 @@ func (m Model) matrixBodyLines(width int) []string {
 	}
 	principalWidth := m.matrixPrincipalWidth()
 	cellWidth := m.matrixCellWidth()
-	rowViewport, colViewport := m.matrixViewport()
-	colStart := cursor.colOffset
-	colEnd := colStart + colViewport
-	if colEnd > cols {
-		colEnd = cols
-	}
+	rowViewport, _ := m.matrixViewport()
+	visibleCols := m.matrixVisibleCols()
 	firstHeader := "principal/role"
 	if m.matrix.active == matrixMembership {
 		firstHeader = "role"
 	}
 	header := Pad(m.styles.Header.Render(firstHeader), principalWidth) + " "
-	for col := colStart; col < colEnd; col++ {
+	for _, col := range visibleCols {
 		label := Truncate(m.matrixColLabel(col), cellWidth)
 		style := m.styles.Header
 		if col == cursor.col {
@@ -1336,7 +1480,7 @@ func (m Model) matrixBodyLines(width int) []string {
 			style = m.styles.Accent.Bold(true)
 		}
 		line := style.Render(Pad(label, principalWidth)) + " "
-		for col := colStart; col < colEnd; col++ {
+		for _, col := range visibleCols {
 			cell := m.matrixCellText(row, col)
 			rendered := m.styles.Text.Render(Pad(cell, cellWidth))
 			if row == cursor.row && col == cursor.col {

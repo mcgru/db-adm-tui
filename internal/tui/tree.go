@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/mcgru/db-adm-tui/internal/domain"
 )
@@ -38,6 +39,7 @@ type treeState struct {
 	searchPrompt  bool
 	searchPattern string
 	searchCursor  int
+	searchOpened  time.Time
 }
 
 func newTree() treeState {

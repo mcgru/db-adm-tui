@@ -341,6 +341,9 @@ SELECT CURRENT_DATE;`,
 Right expands the node.
 Left collapses it.
 / searches loaded/expanded tree names; typing jumps to the first match; Enter jumps to it; n/N walk matches.
+Double / inserts the selected name; Ins inserts the full value such as schema.table.
+On a database, schema, table, or collection, e/u opens the membership matrix and r opens privileges.
+w asks to switch r/o to r/w from the tree.
 Ctrl+D disconnects.`,
 
 	"details": `Select an object and press 1.
@@ -384,7 +387,8 @@ Down walks back toward the current draft.
 Consecutive duplicate statements are collapsed.`,
 
 	"mode": `The badge starts r/o.
-Ctrl+X Ctrl+W asks before enabling r/w.
+Ctrl+X Ctrl+W asks before enabling r/w; with tree focus, w does the same.
+Enter, e, or w accepts the confirmation.
 Ctrl+X Ctrl+W again returns to r/o immediately.
 Esc releases an open Results cursor before switching.`,
 
@@ -396,6 +400,8 @@ Esc clears the filter.`,
 	"security": `Expand Security to see users and roles.
 In read-write mode press Ctrl+X Ctrl+R to open the access matrix.
 Tab or 1/2 switches Principal x Role and Principal/Role x Object.
+Ctrl+Up/Down jump within the selected column; Ctrl+Left/Right within the selected row.
+The leading [db]/[schema] columns stay frozen while tables/collections scroll when width allows.
 Space toggles a cell, e opens native privilege details, / filters, Esc closes.
 Use + on the roles group to create a role; role + - can drop one.
 Select a principal and open Privileges for native grants and memberships.`,
