@@ -337,7 +337,8 @@ full name is shown after `Tab switch` in the header.
 - `Space` grants or revokes the selected membership.
 - `e` opens membership details; `Space`/`Enter` toggles the cell.
 - `/` filters principal and role names.
-- `Tab`/`Shift+Tab`, `1`/`2` switch matrix panels.
+- `Tab`/`Shift+Tab`, `1`/`2` switch matrix panels; the selected principal
+  follows across panels and the target tries to keep the same screen position.
 - `Esc` closes the matrix, or clears an active filter prompt first.
 
 In this example, `Space` on `reporting × app_operator` writes a native

@@ -95,13 +95,13 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.6.0.md`](docs/release-notes-v1.6.0.md) — latest
-  profile editing/deletion and matrix feedback notes;
-  [`v1.5.3`](docs/release-notes-v1.5.3.md) covers the MongoDB auth database and
-  statement completion, [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix
-  orientation, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope.
-  Русская версия:
-  [`docs/release-notes-v1.6.0.ru.md`](docs/release-notes-v1.6.0.ru.md).
+- [`docs/release-notes-v1.6.1.md`](docs/release-notes-v1.6.1.md) — latest
+  matrix panel-switch notes; [`v1.6.0`](docs/release-notes-v1.6.0.md) covers
+  profile editing/deletion and matrix feedback,
+  [`v1.5.3`](docs/release-notes-v1.5.3.md) the MongoDB auth database and
+  statement completion, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature
+  scope. Русская версия:
+  [`docs/release-notes-v1.6.1.ru.md`](docs/release-notes-v1.6.1.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -204,6 +204,9 @@ shows the `Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges
 tab.
 
 Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
+Switching keeps the selected principal: the membership column user/role becomes
+the matching privileges row, and switching back returns to that principal's
+column. The target panel also tries to keep it at the same screen position.
 Each panel keeps its own cursor, scroll position, and filter. Arrows move the
 cell cursor, `Home`/`End` jump to an edge, `PageUp`/`PageDown` move a page,
 `Space` toggles the default access for the cell, `e` opens details, `/` filters
