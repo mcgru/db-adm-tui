@@ -74,7 +74,7 @@ func (m Model) startRoleAdd() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.openRoleMenu(node, true)
-	case domain.KindUsers:
+	case domain.KindSecurity, domain.KindUsers:
 		return m.startUserAdd()
 	case domain.KindUser:
 		m.setMessage(levelInfo, "select the users group to create a user")

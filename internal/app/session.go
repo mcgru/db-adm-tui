@@ -627,6 +627,7 @@ func (s *Session) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.
 	}
 	if spec.Engine == domain.EngineMongoDB {
 		target.MongoHosts = spec.MongoHosts
+		target.MongoAuthDatabase = spec.Database
 		target.MongoOptions = mongoCredentialOptions(p, spec.Database)
 	}
 	source, credErr := s.resolver.SaveCredential(target)

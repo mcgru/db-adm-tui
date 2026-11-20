@@ -75,7 +75,11 @@ func (c *connection) Close() error {
 
 func buildURI(p domain.Profile, password string) string {
 	if p.Source != nil && p.Source.Selector != "" && strings.HasPrefix(p.Source.Selector, "mongodb://") {
-		return injectCredentials(p.Source.Selector, p.User, password)
+		selector := p.Source.Selector
+		if p.AuthDatabase != "" {
+			selector = withMongoAuthSource(selector, p.AuthDatabase)
+		}
+		return injectCredentials(selector, p.User, password)
 	}
 	u := url.URL{
 		Scheme: "mongodb",
@@ -84,6 +88,11 @@ func buildURI(p domain.Profile, password string) string {
 	if p.Database != "" {
 		u.Path = "/" + p.Database
 	}
+	if p.AuthDatabase != "" && p.AuthDatabase != p.Database {
+		query := url.Values{}
+		query.Set("authSource", p.AuthDatabase)
+		u.RawQuery = query.Encode()
+	}
 	switch {
 	case password != "":
 		u.User = url.UserPassword(p.User, password)
@@ -91,6 +100,21 @@ func buildURI(p domain.Profile, password string) string {
 		u.User = url.User(p.User)
 	}
 	return u.String()
+}
+
+func withMongoAuthSource(selector, auth string) string {
+	index := strings.Index(selector, "?")
+	base := selector
+	query := url.Values{}
+	if index >= 0 {
+		base = selector[:index]
+		parsed, err := url.ParseQuery(selector[index+1:])
+		if err == nil {
+			query = parsed
+		}
+	}
+	query.Set("authSource", auth)
+	return base + "?" + query.Encode()
 }
 
 // injectCredentials replays a non-secret selector with the resolved password.

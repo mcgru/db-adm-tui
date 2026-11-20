@@ -34,6 +34,14 @@ type userState struct {
 	saveProfile domain.Profile
 }
 
+type userHomeState struct {
+	user    domain.RoleRef
+	profile domain.Profile
+	choices []string
+	index   int
+	err     string
+}
+
 type userDoneMsg struct {
 	gen      uint64
 	action   userAction
@@ -68,8 +76,8 @@ func (m *Model) userWritable() bool {
 
 func (m Model) startUserAdd() (tea.Model, tea.Cmd) {
 	node, ok := m.tree.selectedNode()
-	if !ok || node.Kind != domain.KindUsers {
-		m.setMessage(levelInfo, "select the users group to create a user")
+	if !ok || (node.Kind != domain.KindUsers && node.Kind != domain.KindSecurity) {
+		m.setMessage(levelInfo, "select Security or the users group to create a user")
 		return m, nil
 	}
 	if !m.userWritable() {
@@ -85,6 +93,135 @@ func (m Model) startUserAdd() (tea.Model, tea.Cmd) {
 	m.focusUserField()
 	m.modal = modalUserForm
 	return m, nil
+}
+
+func (m Model) startUserHome() (tea.Model, tea.Cmd) {
+	if m.engine() != domain.EngineMongoDB {
+		m.setMessage(levelInfo, "home.db is available for MongoDB profiles")
+		return m, nil
+	}
+	node, ok := m.tree.selectedNode()
+	if !ok || node.Kind != domain.KindUser {
+		m.setMessage(levelInfo, "select a MongoDB user to set home.db")
+		return m, nil
+	}
+	name := node.Name
+	authDatabase := node.Ref.Database
+	if index := strings.LastIndex(name, "@"); index >= 0 {
+		if authDatabase == "" {
+			authDatabase = name[index+1:]
+		}
+		name = name[:index]
+	}
+	var match domain.Profile
+	found := false
+	for _, view := range m.profiles {
+		p := view.Profile
+		if p.Engine != domain.EngineMongoDB || p.User != name {
+			continue
+		}
+		if p.EffectiveAuthDatabase() == authDatabase {
+			match = p
+			found = true
+			break
+		}
+		if !found {
+			match = p
+			found = true
+		}
+	}
+	if !found {
+		m.setMessage(levelInfo, "no saved profile for "+name+"; save a profile first")
+		return m, nil
+	}
+	choices := m.mongoUserDatabases()
+	if match.Database != "" {
+		present := false
+		for _, choice := range choices {
+			if choice == match.Database {
+				present = true
+				break
+			}
+		}
+		if !present {
+			choices = append(choices, match.Database)
+		}
+	}
+	index := 0
+	for i, choice := range choices {
+		if choice == match.Database {
+			index = i
+			break
+		}
+	}
+	m.userHome = userHomeState{
+		user:    domain.RoleRef{Engine: domain.EngineMongoDB, Database: authDatabase, Name: name, Kind: domain.KindUser},
+		profile: match,
+		choices: choices,
+		index:   index,
+	}
+	m.modal = modalUserHome
+	return m, nil
+}
+
+func (m *Model) closeUserHome() {
+	m.modal = modalNone
+	m.userHome = userHomeState{}
+}
+
+func (m Model) handleUserHomeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	action, ok := keymap.Lookup(msg.String())
+	if !ok {
+		return m, nil
+	}
+	switch action {
+	case keymap.Cancel:
+		m.closeUserHome()
+	case keymap.Space:
+		if len(m.userHome.choices) > 0 {
+			m.userHome.index = (m.userHome.index + 1) % len(m.userHome.choices)
+		}
+	case keymap.Confirm:
+		if len(m.userHome.choices) == 0 {
+			m.userHome.err = "no databases available"
+			return m, nil
+		}
+		updated := m.userHome.profile
+		authDatabase := updated.EffectiveAuthDatabase()
+		updated.Database = m.userHome.choices[m.userHome.index]
+		updated.AuthDatabase = authDatabase
+		if err := m.svc.UpdateProfile(context.Background(), updated.Key(), updated); err != nil {
+			m.userHome.err = oneLine(err.Error())
+			return m, nil
+		}
+		label := updated.Label
+		m.closeUserHome()
+		m.reloadProfiles(context.Background(), "")
+		m.setMessage(levelSuccess, "home.db saved · "+oneLine(label)+" · "+updated.Database)
+	}
+	return m, nil
+}
+
+func (m Model) viewUserHome() string {
+	width := modalWidth(m.width, 62)
+	inner := width - 4
+	var body []string
+	body = append(body, m.styles.Muted.Render("user ")+m.styles.Text.Render(oneLine(m.userHome.user.Name+"@"+m.userHome.user.Database)))
+	body = append(body, m.styles.Muted.Render("profile ")+m.styles.Text.Render(oneLine(m.userHome.profile.Label)))
+	body = append(body, m.styles.Muted.Render("auth.db ")+m.styles.Text.Render(oneLine(m.userHome.profile.EffectiveAuthDatabase())))
+	if len(m.userHome.choices) > 0 {
+		body = append(body, m.styles.Header.Render("home.db · Space cycles"))
+		body = append(body, m.styles.Select.Render(Pad(Truncate("> "+m.userHome.choices[m.userHome.index], inner), inner)))
+		for _, line := range wrapText(strings.Join(m.userHome.choices, ", "), inner) {
+			body = append(body, m.styles.Muted.Render(line))
+		}
+	}
+	if m.userHome.err != "" {
+		body = append(body, m.styles.Error.Render(Truncate(m.userHome.err, inner)))
+	}
+	body = append(body, "", m.actionLine("Enter", "save", "Space", "cycle"))
+	body = append(body, m.styles.Muted.Render("Esc cancel"))
+	return modalBox("home database", body, width, m.styles)
 }
 
 func (m Model) startUserRemove() (tea.Model, tea.Cmd) {
@@ -380,6 +517,9 @@ func (m Model) userProfile(name, database string, source *domain.Source) domain.
 		AllowNoTLS: p.AllowNoTLS,
 		Source:     source,
 	}
+	if p.Engine == domain.EngineMongoDB {
+		profile.AuthDatabase = database
+	}
 	return profile
 }
 
@@ -418,7 +558,7 @@ func (m Model) viewUserForm() string {
 	}
 	body = append(body, m.inputLine("password", m.user.password.View(), m.user.focus == 2, inner))
 	if m.engine() == domain.EngineMongoDB {
-		body = append(body, m.inputLine("database", m.user.database.View(), m.user.focus == 3, inner))
+		body = append(body, m.inputLine("auth.db", m.user.database.View(), m.user.focus == 3, inner))
 		for _, line := range wrapText("auth database: stores the MongoDB user; it does not grant access", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}

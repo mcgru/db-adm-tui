@@ -16,14 +16,15 @@ import (
 // written to a local credential source. Password is never persisted anywhere
 // except the source file.
 type CredentialTarget struct {
-	Engine       domain.Engine
-	Host         string
-	Port         int
-	Database     string
-	User         string
-	Password     string
-	MongoHosts   string
-	MongoOptions string
+	Engine            domain.Engine
+	Host              string
+	Port              int
+	Database          string
+	User              string
+	Password          string
+	MongoHosts        string
+	MongoAuthDatabase string
+	MongoOptions      string
 	// SourcePath is an optional profile source path (for example a custom
 	// PGPASSFILE). It is expanded and used instead of the default path.
 	SourcePath string
@@ -155,8 +156,12 @@ func (r *Resolver) saveMongoCredential(target CredentialTarget) (domain.Source, 
 	if strings.TrimSpace(target.Database) == "" {
 		return domain.Source{}, credentialError("the MongoDB database is empty")
 	}
+	filenameDatabase := strings.TrimSpace(target.MongoAuthDatabase)
+	if filenameDatabase == "" {
+		filenameDatabase = target.Database
+	}
 	path := filepath.Join(r.home,
-		".mongo."+safeCredentialName(target.User)+"-in-"+safeCredentialName(target.Database))
+		".mongo."+safeCredentialName(target.User)+"-in-"+safeCredentialName(filenameDatabase))
 	uri := mongoCredentialURI(target)
 	lines, err := readCredentialLines(path)
 	if err != nil {

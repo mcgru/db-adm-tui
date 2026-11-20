@@ -59,8 +59,9 @@ type matrixState struct {
 	privilegesLoading bool
 	privilegesErr     string
 
-	objects []domain.ObjectRef
-	scope   string
+	objects  []domain.ObjectRef
+	scope    string
+	ensureDB string
 
 	cursors [2]matrixCursor
 	details matrixDetails
@@ -88,6 +89,10 @@ func newMatrixState() matrixState {
 }
 
 func (m Model) openMatrix(active matrixKind, focus *domain.RoleRef) (tea.Model, tea.Cmd) {
+	return m.openMatrixWithDB(active, focus, "")
+}
+
+func (m Model) openMatrixWithDB(active matrixKind, focus *domain.RoleRef, ensureDB string) (tea.Model, tea.Cmd) {
 	if m.session == nil {
 		m.setMessage(levelError, "no active connection")
 		return m, nil
@@ -104,6 +109,14 @@ func (m Model) openMatrix(active matrixKind, focus *domain.RoleRef) (tea.Model, 
 	m.pendingChord = false
 	m.matrix = newMatrixState()
 	m.matrix.active = active
+	m.matrix.ensureDB = ensureDB
+	if focus == nil && ensureDB != "" && m.engine() == domain.EngineMongoDB && active == matrixMembership {
+		role := domain.RoleRef{
+			Engine: domain.EngineMongoDB, Database: ensureDB,
+			Name: "read@" + ensureDB, Kind: domain.KindRole, Builtin: true,
+		}
+		focus = &role
+	}
 	if focus != nil {
 		m.matrix.pendingRole = *focus
 		m.matrix.pendingMatrix = active
@@ -111,6 +124,49 @@ func (m Model) openMatrix(active matrixKind, focus *domain.RoleRef) (tea.Model, 
 	}
 	m.matrix.objects, m.matrix.scope = m.matrixObjects()
 	return m, m.loadMatrix()
+}
+
+func (m *Model) ensureMatrixDatabaseRoles() {
+	database := strings.TrimSpace(m.matrix.ensureDB)
+	if database == "" || m.engine() != domain.EngineMongoDB {
+		return
+	}
+	for _, name := range []string{"read", "readWrite"} {
+		ref := domain.RoleRef{
+			Engine: domain.EngineMongoDB, Database: database,
+			Name: name + "@" + database, Kind: domain.KindRole, Builtin: true,
+		}
+		if roleIndex(m.matrix.membership.Roles, ref.Key()) < 0 {
+			m.matrix.membership.Roles = append(m.matrix.membership.Roles, ref)
+		}
+	}
+	sort.SliceStable(m.matrix.membership.Roles, func(i, j int) bool {
+		if m.matrix.membership.Roles[i].Database != m.matrix.membership.Roles[j].Database {
+			return m.matrix.membership.Roles[i].Database < m.matrix.membership.Roles[j].Database
+		}
+		return m.matrix.membership.Roles[i].Name < m.matrix.membership.Roles[j].Name
+	})
+}
+
+func (m Model) matrixEnsureDatabase() string {
+	if m.engine() != domain.EngineMongoDB {
+		return ""
+	}
+	node, ok := m.tree.selectedNode()
+	if !ok {
+		return ""
+	}
+	switch node.Kind {
+	case domain.KindDatabase:
+		if node.Ref.Database != "" {
+			return node.Ref.Database
+		}
+		return node.Name
+	case domain.KindTable, domain.KindCollection:
+		return node.Ref.Database
+	default:
+		return ""
+	}
 }
 
 func (m *Model) loadMatrix() tea.Cmd {
@@ -160,6 +216,7 @@ func (m Model) handleMatrixMembership(msg matrixMembershipMsg) (tea.Model, tea.C
 	if !m.matrix.privilegesLoading {
 		m.matrix.busy = false
 	}
+	m.ensureMatrixDatabaseRoles()
 	m.applyMatrixPendingFocus()
 	m.clampMatrix()
 	return m, nil

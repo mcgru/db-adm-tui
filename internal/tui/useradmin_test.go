@@ -130,7 +130,7 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 		t.Fatalf("database choices = %+v", choices)
 	}
 	view := StripANSI(m.viewModal())
-	if !strings.Contains(view, "database") || !strings.Contains(view, "admin") ||
+	if !strings.Contains(view, "auth.db") || !strings.Contains(view, "admin") ||
 		!strings.Contains(view, "auth database: stores the MongoDB user") ||
 		!strings.Contains(view, "Space cycles: admin") ||
 		!strings.Contains(view, "hosts") || !strings.Contains(view, "comma-separated host:port") {
@@ -138,11 +138,11 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	}
 	nameAt := strings.Index(view, "name")
 	passwordAt := strings.Index(view, "password")
-	databaseAt := strings.Index(view, "database")
+	authAt := strings.Index(view, "auth.db")
 	hostsAt := strings.Index(view, "hosts")
-	if nameAt < 0 || passwordAt < 0 || databaseAt < 0 || hostsAt < 0 ||
-		!(nameAt < passwordAt && passwordAt < databaseAt && databaseAt < hostsAt) {
-		t.Fatalf("form order is not name, password, database, hosts:\n%s", view)
+	if nameAt < 0 || passwordAt < 0 || authAt < 0 || hostsAt < 0 ||
+		!(nameAt < passwordAt && passwordAt < authAt && authAt < hostsAt) {
+		t.Fatalf("form order is not name, password, auth.db, hosts:\n%s", view)
 	}
 	m = typeString(t, m, "new_mongo")
 	m, _ = press(t, m, "tab")

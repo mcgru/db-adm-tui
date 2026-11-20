@@ -45,12 +45,13 @@ type Source struct {
 
 // Profile is one saved connection. It never contains a password.
 type Profile struct {
-	Label    string `json:"label"`
-	Engine   Engine `json:"engine"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Database string `json:"database"`
-	User     string `json:"user"`
+	Label        string `json:"label"`
+	Engine       Engine `json:"engine"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	Database     string `json:"database"`
+	AuthDatabase string `json:"auth_database,omitempty"`
+	User         string `json:"user"`
 	// AllowNoTLS permits a PostgreSQL connection to fall back to a plaintext
 	// attempt after the TLS attempt fails. TLS is always tried first.
 	AllowNoTLS bool       `json:"allow_no_tls,omitempty"`
@@ -105,6 +106,29 @@ func (p Profile) Key() string {
 		p.Database,
 		p.User,
 	}, "|")
+}
+
+// EffectiveAuthDatabase returns the MongoDB authentication database. It
+// prefers the explicit field, then authSource in the source selector, then the
+// home database.
+func (p Profile) EffectiveAuthDatabase() string {
+	if p.Engine != EngineMongoDB {
+		return ""
+	}
+	if p.AuthDatabase != "" {
+		return p.AuthDatabase
+	}
+	if p.Source != nil && p.Source.Selector != "" {
+		selector := p.Source.Selector
+		if index := strings.Index(selector, "?"); index >= 0 {
+			if query, err := url.ParseQuery(selector[index+1:]); err == nil {
+				if auth := query.Get("authSource"); auth != "" {
+					return auth
+				}
+			}
+		}
+	}
+	return p.Database
 }
 
 // Addr returns host:port in dial-ready form.
@@ -213,6 +237,10 @@ func (p Profile) Normalize() Profile {
 	p.Label = strings.TrimSpace(p.Label)
 	p.Host = strings.TrimSpace(p.Host)
 	p.Database = strings.TrimSpace(p.Database)
+	p.AuthDatabase = strings.TrimSpace(p.AuthDatabase)
+	if p.Engine != EngineMongoDB {
+		p.AuthDatabase = ""
+	}
 	p.User = strings.TrimSpace(p.User)
 	if p.Label == "" {
 		p.Label = DefaultLabel(p.Database, p.Host)

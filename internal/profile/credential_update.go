@@ -137,15 +137,24 @@ func (r *Resolver) updateMongoCredential(old, next domain.Profile) (*domain.Sour
 		}
 	}
 	host, port := splitMongoAddress(hosts[0])
-	options := mongoEditOptions(selector, old.Source.Selector, next.Database)
+	authDatabase := strings.TrimSpace(next.AuthDatabase)
+	if authDatabase == "" {
+		authDatabase = next.EffectiveAuthDatabase()
+	}
+	if authDatabase == "" {
+		authDatabase = next.Database
+	}
+	options := mongoEditOptions(selector, old.Source.Selector, authDatabase)
 	source, err := r.SaveCredential(CredentialTarget{
 		Engine: domain.EngineMongoDB, Host: host, Port: port,
 		Database: next.Database, User: next.User, Password: secret,
-		MongoHosts: strings.Join(hosts, ","), MongoOptions: options,
+		MongoHosts: strings.Join(hosts, ","), MongoAuthDatabase: authDatabase,
+		MongoOptions: options,
 	})
 	if err != nil {
 		return nil, err
 	}
+	source.Selector = mongoSelectorURI(next.User, hosts, next.Database, options)
 	oldPath, err := r.expand(old.Source.Path)
 	if err != nil {
 		return nil, credentialError("the credential source path is not valid")
@@ -177,6 +186,19 @@ func (r *Resolver) updateMongoCredential(old, next domain.Profile) (*domain.Sour
 		}
 	}
 	return &source, nil
+}
+
+func mongoSelectorURI(user string, hosts []string, database, options string) string {
+	u := url.URL{
+		Scheme:   "mongodb",
+		Host:     strings.Join(hosts, ","),
+		Path:     "/" + database,
+		RawQuery: options,
+	}
+	if user != "" {
+		u.User = url.User(user)
+	}
+	return domain.SanitizeMongoSelector(u.String())
 }
 
 func splitMongoAddress(address string) (string, int) {

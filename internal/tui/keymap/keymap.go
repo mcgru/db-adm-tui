@@ -47,6 +47,8 @@ const (
 	NextMatch       Action = "next-match"
 	Add             Action = "add"
 	Remove          Action = "remove"
+	AddUser         Action = "add-user"
+	HomeDatabase    Action = "home-database"
 	DeleteProfile   Action = "delete-profile"
 	ResizeTreeLeft  Action = "resize-tree-left"
 	ResizeTreeRight Action = "resize-tree-right"
@@ -94,6 +96,9 @@ var single = map[string]Action{
 	"`": ExpandJSON, "ё": ExpandJSON,
 	"+": Add, "=": Add,
 	"-": Remove,
+	"u": AddUser, "г": AddUser,
+	"ctrl+n": AddUser, "ctrl+т": AddUser,
+	"h": HomeDatabase, "р": HomeDatabase,
 
 	"ctrl+a":     FetchAll,
 	"delete":     DeleteProfile,

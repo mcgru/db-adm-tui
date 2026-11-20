@@ -34,6 +34,27 @@ func TestBuildURIIsSafeAndComplete(t *testing.T) {
 	}
 }
 
+func TestBuildURIUsesAuthDatabase(t *testing.T) {
+	p := domain.Profile{
+		Engine: domain.EngineMongoDB, Host: "mongo1", Port: 27017,
+		Database: "appdb", AuthDatabase: "admin", User: "app_user",
+	}
+	uri := buildURI(p, "secret")
+	if !strings.Contains(uri, "authSource=admin") || !strings.Contains(uri, "/appdb") {
+		t.Fatalf("uri = %s", uri)
+	}
+	p.Source = &domain.Source{
+		Kind:     domain.SourceMongoFile,
+		Selector: "mongodb://app_user@mongo1:27017,mongo2:27018/appdb?replicaSet=rs0",
+	}
+	uri = buildURI(p, "secret")
+	for _, want := range []string{"mongo2:27018", "authSource=admin", "replicaSet=rs0", "/appdb"} {
+		if !strings.Contains(uri, want) {
+			t.Fatalf("selector URI missing %q: %s", want, uri)
+		}
+	}
+}
+
 func TestBuildURIPreservesSourceSelector(t *testing.T) {
 	p := domain.Profile{
 		Engine: domain.EngineMongoDB, Host: "mongo1", Port: 27017,

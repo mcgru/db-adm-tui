@@ -19,6 +19,7 @@ const (
 	editPort
 	editDatabase
 	editUser
+	editAuth
 	editTLS
 )
 
@@ -33,6 +34,7 @@ func (m *Model) openEditModal(p domain.Profile) {
 	m.editPort.SetValue(strconv.Itoa(p.Port))
 	m.editDatabase.SetValue(p.Database)
 	m.editUser.SetValue(p.User)
+	m.editAuth.SetValue(p.EffectiveAuthDatabase())
 	m.editAllowNoTLS = p.AllowNoTLS
 	m.editFocus = editLabel
 	m.editErr = ""
@@ -48,6 +50,7 @@ func (m *Model) closeEditModal() {
 	m.editPort.SetValue("")
 	m.editDatabase.SetValue("")
 	m.editUser.SetValue("")
+	m.editAuth.SetValue("")
 	m.editAllowNoTLS = false
 	m.editFocus = editLabel
 	m.editErr = ""
@@ -55,6 +58,9 @@ func (m *Model) closeEditModal() {
 
 func (m Model) editFields() []editField {
 	fields := []editField{editLabel, editHost, editPort, editDatabase, editUser}
+	if m.editProfile.Engine == domain.EngineMongoDB {
+		fields = append(fields, editAuth)
+	}
 	if m.editProfile.Engine == domain.EnginePostgreSQL {
 		fields = append(fields, editTLS)
 	}
@@ -67,6 +73,7 @@ func (m *Model) focusEditField() {
 	m.editPort.Blur()
 	m.editDatabase.Blur()
 	m.editUser.Blur()
+	m.editAuth.Blur()
 	switch m.editFocus {
 	case editHost:
 		m.editHost.Focus()
@@ -80,6 +87,9 @@ func (m *Model) focusEditField() {
 	case editUser:
 		m.editUser.Focus()
 		m.editUser.CursorEnd()
+	case editAuth:
+		m.editAuth.Focus()
+		m.editAuth.CursorEnd()
 	case editTLS:
 		// The TLS fallback is a checkbox, not a text field.
 	default:
@@ -140,6 +150,9 @@ func (m Model) handleEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case editUser:
 		updated, _ := m.editUser.Update(msg)
 		m.editUser = updated
+	case editAuth:
+		updated, _ := m.editAuth.Update(msg)
+		m.editAuth = updated
 	default:
 		updated, _ := m.editLabel.Update(msg)
 		m.editLabel = updated
@@ -161,6 +174,12 @@ func (m Model) submitEdit() (tea.Model, tea.Cmd) {
 	p.Port = port
 	p.Database = strings.TrimSpace(m.editDatabase.Value())
 	p.User = strings.TrimSpace(m.editUser.Value())
+	if p.Engine == domain.EngineMongoDB {
+		p.AuthDatabase = strings.TrimSpace(m.editAuth.Value())
+		if p.AuthDatabase == "" {
+			p.AuthDatabase = p.Database
+		}
+	}
 	if p.Engine == domain.EnginePostgreSQL {
 		p.AllowNoTLS = m.editAllowNoTLS
 	}
@@ -251,14 +270,21 @@ func (m Model) viewDeleteProfile() string {
 func (m Model) viewEdit() string {
 	width := modalWidth(m.width, 60)
 	inner := width - 4
+	databaseLabel := "database"
+	if m.editProfile.Engine == domain.EngineMongoDB {
+		databaseLabel = "home.db"
+	}
 	body := []string{
 		m.editInfoLine("engine", m.editProfile.Engine.DisplayName(), inner),
 		m.editInfoLine("source", m.editProfile.SourceLabel(), inner),
 		m.inputLine("label", m.editLabel.View(), m.editFocus == editLabel, inner),
 		m.inputLine("host", m.editHost.View(), m.editFocus == editHost, inner),
 		m.inputLine("port", m.editPort.View(), m.editFocus == editPort, inner),
-		m.inputLine("database", m.editDatabase.View(), m.editFocus == editDatabase, inner),
+		m.inputLine(databaseLabel, m.editDatabase.View(), m.editFocus == editDatabase, inner),
 		m.inputLine("user", m.editUser.View(), m.editFocus == editUser, inner),
+	}
+	if m.editProfile.Engine == domain.EngineMongoDB {
+		body = append(body, m.mutedInputLine("auth.db", m.editAuth.View(), m.editFocus == editAuth, inner))
 	}
 	if m.editProfile.Engine == domain.EnginePostgreSQL {
 		body = append(body, m.editToggleLine())
@@ -274,6 +300,20 @@ func (m Model) viewEdit() string {
 	}
 	body = append(body, "", m.actionLine("Enter", "save", "Esc", "cancel"))
 	return modalBox("edit profile", body, width, m.styles)
+}
+
+func (m Model) mutedInputLine(label, view string, focused bool, width int) string {
+	marker := "  "
+	if focused {
+		marker = "> "
+	}
+	const labelWidth = 9
+	valueWidth := width - 2 - labelWidth - 1
+	if valueWidth < 1 {
+		valueWidth = 1
+	}
+	view = Truncate(view, valueWidth)
+	return m.styles.Muted.Render(marker+Pad(label, labelWidth)) + " " + view
 }
 
 func (m Model) editInfoLine(label, value string, width int) string {

@@ -57,6 +57,7 @@ const (
 	modalUserForm
 	modalUserConfirm
 	modalUserSave
+	modalUserHome
 	modalRowInsert
 	modalRowEdit
 	modalRowDelete
@@ -183,6 +184,7 @@ type Model struct {
 	role            roleState
 	matrix          matrixState
 	user            userState
+	userHome        userHomeState
 	rowInsert       rowInsertState
 	rowEdit         rowEditState
 	rowDelete       rowDeleteState
@@ -260,6 +262,7 @@ type Model struct {
 	editPort        textinput.Model
 	editDatabase    textinput.Model
 	editUser        textinput.Model
+	editAuth        textinput.Model
 	editAllowNoTLS  bool
 	editFocus       editField
 	editErr         string
@@ -302,6 +305,7 @@ func New(svc *app.Service) Model {
 	m.editPort = newInput("5432", false)
 	m.editDatabase = newInput("database", false)
 	m.editUser = newInput("user", false)
+	m.editAuth = newMutedInput("auth.db")
 	m.resizeInputs()
 	m.reloadProfiles(context.Background(), "")
 	return m
@@ -327,6 +331,19 @@ func newInput(placeholder string, secret bool) textinput.Model {
 		input.EchoMode = textinput.EchoPassword
 		input.EchoCharacter = '•'
 	}
+	return input
+}
+
+func newMutedInput(placeholder string) textinput.Model {
+	input := newInput(placeholder, false)
+	styles := input.Styles()
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.Nightshift.Muted))
+	styles.Focused.Text = muted
+	styles.Blurred.Text = muted
+	styles.Focused.Placeholder = muted
+	styles.Blurred.Placeholder = muted
+	styles.Cursor.Color = lipgloss.Color(theme.Nightshift.Muted)
+	input.SetStyles(styles)
 	return input
 }
 
@@ -466,6 +483,8 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleUserConfirmKey(msg)
 	case modalUserSave:
 		return m.handleUserSaveKey(msg)
+	case modalUserHome:
+		return m.handleUserHomeKey(msg)
 	case modalRowInsert:
 		return m.handleRowInsertKey(msg)
 	case modalRowEdit:
@@ -547,6 +566,12 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.tree.searchPattern != "" && !m.tree.searchPrompt {
 			return m, m.nextTreeMatch(1)
 		}
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			if node, ok := m.tree.selectedNode(); ok &&
+				(node.Kind == domain.KindSecurity || node.Kind == domain.KindUsers) {
+				return m.startUserAdd()
+			}
+		}
 		if m.filterKeepsNewKey() {
 			if (m.data.bufferPattern != "" || m.data.serverFilter != nil) && m.data.prompt == promptNone {
 				return m, m.nextMatch(1)
@@ -585,6 +610,29 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 				return m.startRowAdd()
 			}
 			m.setMessage(levelInfo, "row changes are available in the Data tab")
+		}
+	case keymap.AddUser:
+		if m.screen != ScreenWorkspace || m.focus != FocusTree {
+			return m, nil
+		}
+		node, ok := m.tree.selectedNode()
+		if !ok {
+			return m, nil
+		}
+		switch node.Kind {
+		case domain.KindSecurity, domain.KindUsers:
+			return m.startUserAdd()
+		case domain.KindDatabase, domain.KindCollection, domain.KindTable:
+			if m.engine() == domain.EngineMongoDB {
+				return m.openMatrixWithDB(matrixMembership, nil, m.matrixEnsureDatabase())
+			}
+			m.setMessage(levelInfo, "select Security/users to add a user")
+		default:
+			m.setMessage(levelInfo, "select Security/users or a database/collection")
+		}
+	case keymap.HomeDatabase:
+		if m.screen == ScreenWorkspace && m.focus == FocusTree {
+			return m.startUserHome()
 		}
 	case keymap.Remove:
 		if m.screen == ScreenPicker && !m.connecting {
@@ -871,7 +919,7 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m, m.nextMatch(-1)
 	case keymap.Matrix:
 		if m.screen == ScreenWorkspace {
-			return m.openMatrix(matrixMembership, nil)
+			return m.openMatrixWithDB(matrixMembership, nil, m.matrixEnsureDatabase())
 		}
 	case keymap.ToggleMode:
 		if m.screen != ScreenWorkspace || m.session == nil {
@@ -1300,6 +1348,7 @@ func (m *Model) resizeInputs() {
 	m.editPort.SetWidth(newWidth)
 	m.editDatabase.SetWidth(newWidth)
 	m.editUser.SetWidth(newWidth)
+	m.editAuth.SetWidth(newWidth)
 }
 
 func (m Model) regions() layout.Regions {
@@ -1384,6 +1433,8 @@ func (m Model) viewModal() string {
 		return m.viewUserConfirm()
 	case modalUserSave:
 		return m.viewUserSave()
+	case modalUserHome:
+		return m.viewUserHome()
 	case modalRowInsert:
 		return m.viewRowInsert()
 	case modalRowEdit:
@@ -1428,6 +1479,8 @@ func (m *Model) dismissModal() {
 	case modalUserForm, modalUserConfirm, modalUserSave:
 		m.modal = modalNone
 		m.user = newUserState()
+	case modalUserHome:
+		m.closeUserHome()
 	case modalRowInsert, modalRowEdit, modalRowDelete:
 		m.modal = modalNone
 	}

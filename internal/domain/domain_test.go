@@ -62,6 +62,25 @@ func TestProfileAllowNoTLSAliases(t *testing.T) {
 	}
 }
 
+func TestProfileEffectiveAuthDatabase(t *testing.T) {
+	p := Profile{
+		Engine: EngineMongoDB, Database: "appdb",
+		Source: &Source{Kind: SourceMongoFile, Path: "~/.mongo.u-in-admin",
+			Selector: "mongodb://u@mongo1:27017,mongo2:27018/appdb?authSource=admin&replicaSet=rs0"},
+	}
+	if got := p.EffectiveAuthDatabase(); got != "admin" {
+		t.Fatalf("selector auth = %q", got)
+	}
+	p.AuthDatabase = "appdb"
+	if got := p.EffectiveAuthDatabase(); got != "appdb" {
+		t.Fatalf("explicit auth = %q", got)
+	}
+	p.Engine = EnginePostgreSQL
+	if got := p.EffectiveAuthDatabase(); got != "" {
+		t.Fatalf("postgres auth = %q", got)
+	}
+}
+
 func TestProfileKeyIsDeterministicAndSourceAware(t *testing.T) {
 	base := Profile{Engine: EnginePostgreSQL, Host: "DB1", Port: 5432, Database: "orders", User: "app_ro"}
 	if base.Key() != base.Key() {

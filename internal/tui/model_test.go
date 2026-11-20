@@ -502,6 +502,126 @@ func TestPickerDashDeletesMongoProfileKeepsFile(t *testing.T) {
 	}
 }
 
+func TestEditMongoProfileHomeAndAuthDatabases(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "analytics")
+	m, _ = press(t, m, "e")
+	if m.modal != modalEdit {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	view := StripANSI(m.viewModal())
+	if !strings.Contains(view, "home.db") || !strings.Contains(view, "auth.db") {
+		t.Fatalf("home/auth fields missing:\n%s", view)
+	}
+	homeAt := strings.Index(view, "home.db")
+	authAt := strings.Index(view, "auth.db")
+	if homeAt < 0 || authAt < 0 || homeAt >= authAt {
+		t.Fatalf("auth.db is not below home.db:\n%s", view)
+	}
+	if m.editAuth.Value() != "analytics" {
+		t.Fatalf("auth.db = %q", m.editAuth.Value())
+	}
+	m.editDatabase.SetValue("appdb")
+	m.editAuth.SetValue("admin")
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone {
+		t.Fatalf("modal stayed open: %v err=%q", m.modal, m.editErr)
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loaded {
+		if p.Label == "analytics" {
+			if p.Database != "appdb" || p.AuthDatabase != "admin" {
+				t.Fatalf("profile databases = home %q auth %q", p.Database, p.AuthDatabase)
+			}
+			return
+		}
+	}
+	t.Fatal("analytics profile not found")
+}
+
+func TestUserHomeDatabasePicker(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = selectUsersGroup(t, m)
+	m = selectKind(t, m, domain.KindUser)
+	m, _ = press(t, m, "h")
+	if m.modal != modalUserHome {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	if len(m.userHome.choices) < 2 {
+		t.Fatalf("choices = %+v", m.userHome.choices)
+	}
+	m, _ = press(t, m, "space")
+	choice := m.userHome.choices[m.userHome.index]
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone {
+		t.Fatalf("modal = %v err=%q", m.modal, m.userHome.err)
+	}
+	loaded, err := e.store.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range loaded {
+		if p.User == "analyst" && p.Engine == domain.EngineMongoDB {
+			if p.Database != choice || p.AuthDatabase != "analytics" {
+				t.Fatalf("home/auth = %q/%q, want %q/analytics", p.Database, p.AuthDatabase, choice)
+			}
+			return
+		}
+	}
+	t.Fatal("analyst profile not found")
+}
+
+func TestUserAddKeybindings(t *testing.T) {
+	m := workspace(t)
+	m = enableReadWrite(t, m)
+	m = selectKind(t, m, domain.KindSecurity)
+	for _, key := range []string{"n", "u", "ctrl+n"} {
+		m, _ = press(t, m, key)
+		if m.modal != modalUserForm {
+			t.Fatalf("%s did not open the user form: modal=%v message=%q", key, m.modal, m.message)
+		}
+		m, _ = press(t, m, "esc")
+	}
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	m = selectKind(t, m, domain.KindUsers)
+	m, _ = press(t, m, "u")
+	if m.modal != modalUserForm {
+		t.Fatalf("users + u did not open the user form: %v", m.modal)
+	}
+}
+
+func TestCollectionUMatrixAddsReadRoles(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	e.connector.matrix = defaultFakeMatrix(domain.EngineMongoDB)
+	m := workspaceFrom(t, selectLabel(t, e.model(t), "analytics"))
+	m = enableReadWrite(t, m)
+	m = selectKind(t, m, domain.KindCollection)
+	m, cmd := press(t, m, "u")
+	m = runCmd(t, m, cmd)
+	if m.screen != ScreenMatrix || m.matrix.active != matrixMembership {
+		t.Fatalf("screen=%v active=%v message=%q", m.screen, m.matrix.active, m.message)
+	}
+	want := map[string]bool{"read@analytics": false, "readWrite@analytics": false}
+	for _, role := range m.matrix.membership.Roles {
+		if _, ok := want[role.Name]; ok {
+			want[role.Name] = true
+		}
+	}
+	for name, found := range want {
+		if !found {
+			t.Fatalf("%s missing from roles: %+v", name, m.matrix.membership.Roles)
+		}
+	}
+}
+
 func TestEditProfileCancelKeepsProfile(t *testing.T) {
 	e := newTestEnv(t)
 	seedStandard(t, e)
