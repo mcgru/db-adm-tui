@@ -94,10 +94,10 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.4.1.md`](docs/release-notes-v1.4.1.md) — latest
-  patch release notes; [`v1.4.0`](docs/release-notes-v1.4.0.md) has the feature
-  scope, safety rules, and known limitations. Русская версия:
-  [`docs/release-notes-v1.4.1.ru.md`](docs/release-notes-v1.4.1.ru.md).
+- [`docs/release-notes-v1.4.2.md`](docs/release-notes-v1.4.2.md) — latest
+  patch notes; [`v1.4.0`](docs/release-notes-v1.4.0.md) has the feature scope,
+  safety rules, and known limitations. Русская версия:
+  [`docs/release-notes-v1.4.2.ru.md`](docs/release-notes-v1.4.2.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
