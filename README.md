@@ -95,13 +95,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.6.1.md`](docs/release-notes-v1.6.1.md) — latest
-  matrix panel-switch notes; [`v1.6.0`](docs/release-notes-v1.6.0.md) covers
-  profile editing/deletion and matrix feedback,
-  [`v1.5.3`](docs/release-notes-v1.5.3.md) the MongoDB auth database and
-  statement completion, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature
-  scope. Русская версия:
-  [`docs/release-notes-v1.6.1.ru.md`](docs/release-notes-v1.6.1.ru.md).
+- [`docs/release-notes-v1.7.0.md`](docs/release-notes-v1.7.0.md) — latest
+  MongoDB replica-set and user-host notes;
+  [`v1.6.1`](docs/release-notes-v1.6.1.md) covers matrix panel switching,
+  [`v1.6.0`](docs/release-notes-v1.6.0.md) profile editing/deletion, and
+  [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
+  [`docs/release-notes-v1.7.0.ru.md`](docs/release-notes-v1.7.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -244,10 +243,12 @@ Create a user from `Security → users → +`:
   `LOGIN` and no extra grants; use the access matrix afterwards.
 - **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
   The account is created as `'user'@'host'` with no extra grants.
-- **MongoDB:** enter a user name, password, and authentication database. The
-  form order is name → password → database; the database defaults to `admin`.
-  On the database field, `Space` cycles through `admin` and the databases
-  loaded in the tree; a custom target can still be typed. The auth database
+- **MongoDB:** enter a user name, password, authentication database, and host
+  list. The form order is name → password → database → hosts; the auth database
+  defaults to `admin`, and `Space` cycles through `admin` and the databases
+  loaded in the tree. The hosts field defaults to the current profile's full
+  host list, including a replica set; edit it as comma-separated `host:port`
+  entries when the new credential should use another shape. The auth database
   stores the MongoDB user; it does not grant access to that database. The user
   is created with an empty role list; use the matrix to assign roles.
 
@@ -556,8 +557,9 @@ changes the profile key, but the old entry is replaced instead of orphaned, and
 the matching `.pgpass`/`.mypass` line is moved to the new tuple with the same
 password (the old line is commented). A MongoDB URI is rewritten to its
 canonical `.mongo.<USER>-in-<DATABASE>` file with `authSource` rebound to the new
-database; the old file is kept. Label- or TLS-only edits do not rewrite source
-files.
+database; its replica-set host list and non-secret options are preserved unless
+the host field was intentionally changed. The old file is kept. Label- or
+TLS-only edits do not rewrite source files.
 
 Press `Del` or `-` at the picker to delete the selected profile. The
 confirmation names the profile and its source; only the profile entry is

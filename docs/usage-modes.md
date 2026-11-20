@@ -286,10 +286,12 @@ The form asks for:
 
 - PostgreSQL: a login role name and password;
 - MySQL/MariaDB: a user name, host (`%` by default), and password;
-- MongoDB: a user name, password, and authentication database. The database
-  defaults to `admin`; on that field `Space` cycles through `admin` and the
-  databases loaded in the tree, and a custom target can still be typed. It is
-  where the user is stored and authenticated, not a database access grant.
+- MongoDB: a user name, password, authentication database, and host list. The
+  database defaults to `admin`; on that field `Space` cycles through `admin` and
+  the databases loaded in the tree, and a custom target can still be typed. The
+  hosts field defaults to the profile's full replica-set list and accepts
+  comma-separated `host:port` entries. It is where the user is stored and
+  authenticated, not a database access grant.
 
 The password field is masked. On success the native user is created first and
 the password is written to the matching source file:
