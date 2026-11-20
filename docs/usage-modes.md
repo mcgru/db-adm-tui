@@ -359,10 +359,13 @@ app_writer             —             —           INSERT+2   —
 ```
 
 - `Space` toggles the default native privilege for that cell.
-- `e` opens the full native privilege multi-select.
+- `e` or `Enter` opens the full native privilege multi-select.
 - `Ctrl+A` selects every listed privilege, or clears them all when everything is
   already selected.
 - `Enter` applies the diff between the current cell and the selected list.
+- `e` or `Esc` closes the details without applying.
+- PostgreSQL database columns cover every visible database for `CONNECT`;
+  views and column-level privileges are not editable.
 - Built-in MongoDB roles are read-only.
 
 Default privileges:

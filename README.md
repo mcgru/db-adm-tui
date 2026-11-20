@@ -95,12 +95,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.7.0.md`](docs/release-notes-v1.7.0.md) — latest
-  MongoDB replica-set and user-host notes;
-  [`v1.6.1`](docs/release-notes-v1.6.1.md) covers matrix panel switching,
-  [`v1.6.0`](docs/release-notes-v1.6.0.md) profile editing/deletion, and
+- [`docs/release-notes-v1.8.0.md`](docs/release-notes-v1.8.0.md) — latest
+  matrix details and PostgreSQL database-scope notes;
+  [`v1.7.0`](docs/release-notes-v1.7.0.md) covers MongoDB replica hosts,
+  [`v1.6.1`](docs/release-notes-v1.6.1.md) matrix panel switching, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.7.0.ru.md`](docs/release-notes-v1.7.0.ru.md).
+  [`docs/release-notes-v1.8.0.ru.md`](docs/release-notes-v1.8.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -195,8 +195,9 @@ The matrix has two panels:
   columns hide the default `%` host.
 - `2 Principal/Role × Object` — privileges. Rows are roles, plus users for
   PostgreSQL and MySQL so direct grants stay visible. Columns are the current
-  database/schema scope and the tables, views, or collections loaded in the
-  tree. MongoDB shows role rows only.
+  schema/table scope and, for PostgreSQL, **all databases** for `CONNECT`
+  grants. Views and column-level privileges are not editable; MongoDB uses
+  collection columns and role rows only.
 
 The Details tab for `Security`, `users`, `roles`, and individual principals
 shows the `Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges
@@ -208,10 +209,12 @@ the matching privileges row, and switching back returns to that principal's
 column. The target panel also tries to keep it at the same screen position.
 Each panel keeps its own cursor, scroll position, and filter. Arrows move the
 cell cursor, `Home`/`End` jump to an edge, `PageUp`/`PageDown` move a page,
-`Space` toggles the default access for the cell, `e` opens details, `/` filters
-rows and columns, and `Esc` closes the matrix (or clears an active filter
-prompt first). If the focused column label is truncated to fit its cell, the
-full current name is shown after `Tab switch` in the matrix header.
+`Space` toggles the default access for the cell, `e` or `Enter` opens details,
+`/` filters rows and columns, and `Esc` closes the matrix (or clears an active
+filter prompt first). In details, `e` or `Esc` closes; `Enter` applies
+privileges or toggles the membership. If the focused column label is truncated
+to fit its cell, the full current name is shown after `Tab switch` in the matrix
+header.
 
 For a privilege cell, `Space` toggles the engine default (`CONNECT` on
 PostgreSQL databases, `USAGE` on schemas, `SELECT` on SQL tables, `find` on

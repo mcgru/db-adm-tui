@@ -768,11 +768,12 @@ db.getSiblingDB("appdb").getUser("app_user").roles
 **Шаги:**
 1. Откройте матрицу, панель `2`.
 2. `/` → `app_tmp_role`.
-3. Для ячейки `[db] appdb` нажмите `Space` — выдать `CONNECT`.
+3. Для ячейки `[db] appdb` нажмите `Space` — выдать `CONNECT`;
+   для `[db] analytics` также выдайте `CONNECT`.
 4. Для ячейки `[schema] app` нажмите `Space` — выдать `USAGE`.
-5. Для ячейки `customers` нажмите `e`. Нажмите `Ctrl+A` — выбрать все,
-   ещё раз `Ctrl+A` — снять все. Затем выберите `SELECT`, `INSERT`,
-   `UPDATE`, нажмите `Enter`.
+5. Для ячейки `customers` нажмите `Enter` (или `e`). Нажмите `Ctrl+A` —
+   выбрать все, ещё раз `Ctrl+A` — снять все. Затем выберите `SELECT`,
+   `INSERT`, `UPDATE`, нажмите `Enter`.
 6. Проверьте native:
 
 ```sql
@@ -782,7 +783,7 @@ WHERE grantee = 'app_tmp_role'
 ORDER BY table_schema, table_name, privilege_type;
 
 SELECT datname, datacl
-FROM pg_database WHERE datname = 'appdb';
+FROM pg_database WHERE datname IN ('appdb', 'analytics');
 
 SELECT nspname, nspacl
 FROM pg_namespace WHERE nspname = 'app';
@@ -795,8 +796,10 @@ FROM pg_namespace WHERE nspname = 'app';
 
 **Ожидаемо:**
 - `Space` меняет default `CONNECT`/`USAGE`/`SELECT`;
-- `Ctrl+A` в `e` выбирает все или снимает все;
-- `e` применяет только diff;
+- столбцы баз содержат все видимые базы, а не только текущую;
+- `Ctrl+A` в деталях выбирает все или снимает все;
+- `Enter` применяет только diff, `e`/`Esc` закрывают без применения;
+- views и column-level привилегии не редактируются;
 - native ACL содержит только выбранные привилегии;
 - после очистки роль удаляется.
 
