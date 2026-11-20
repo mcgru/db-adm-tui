@@ -286,12 +286,15 @@ The form asks for:
 
 - PostgreSQL: a login role name and password;
 - MySQL/MariaDB: a user name, host (`%` by default), and password;
-- MongoDB: a user name, password, authentication database, and host list. The
-  database defaults to `admin`; on that field `Space` cycles through `admin` and
-  the databases loaded in the tree, and a custom target can still be typed. The
+- MongoDB: a user name, password, auth.db, and host list. The auth database
+  defaults to `admin`; on that field `Space` cycles through `admin` and the
+  databases loaded in the tree, and a custom target can still be typed. The
   hosts field defaults to the profile's full replica-set list and accepts
   comma-separated `host:port` entries. It is where the user is stored and
-  authenticated, not a database access grant.
+  authenticated, not a database access grant. Create from `Security`/`users`
+  with `+`, `n`, `u`, or `Ctrl+N`. On a user, `h` selects `home.db` from the
+  loaded databases with `Space`; this is the URI/default database, while
+  `auth.db` remains the authentication source.
 
 The password field is masked. On success the native user is created first and
 the password is written to the matching source file:
@@ -337,10 +340,14 @@ user columns hide the default `%` host. If a focused column is truncated, the
 full name is shown after `Tab switch` in the header.
 
 - `Space` grants or revokes the selected membership.
-- `e` opens membership details; `Space`/`Enter` toggles the cell.
+- `e`/`Enter` opens membership details; `Space`/`Enter` toggles the cell;
+  `e`/`Esc` closes.
 - `/` filters principal and role names.
 - `Tab`/`Shift+Tab`, `1`/`2` switch matrix panels; the selected principal
   follows across panels and the target tries to keep the same screen position.
+- On a MongoDB database or collection, `u` or `Ctrl+X Ctrl+R` ensures the
+  built-in `read@db` and `readWrite@db` rows are present before opening this
+  matrix.
 - `Esc` closes the matrix, or clears an active filter prompt first.
 
 In this example, `Space` on `reporting × app_operator` writes a native

@@ -60,11 +60,14 @@ The tool starts on the profile picker.
 | `/` or `.` | Tree: quick search over loaded/expanded nodes. Data/Results: inline literal filter over loaded rows; `n`/`N` walk matches |
 | `Ctrl+F` | Data tab: server-side regexp on the focused column or field |
 | `Ctrl+X` then `i` | Toggle the session search case between insensitive and sensitive |
-| `n` | New connection at the picker; next tree-search or filtered Data view match |
+| `n` | New connection at the picker; next tree-search or filtered Data view match; Security/users: create a user |
 | `N` | Previous tree-search or filtered Data view match (wraps) |
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role |
-| `+` | Tree roles/users: create, grant, or assign. Data tab: insert a row/document. Requires `r/w` |
+| `u` | Security/users: create a user. MongoDB database/collection: open Role × Principal with `read@db`/`readWrite@db` rows |
+| `Ctrl+N` | Same as `u`: add a user from Security/users |
+| `h` | On a MongoDB user: choose `home.db` for the saved profile |
+| `+` | Security/users: create a user. Tree roles: create/grant/assign. Data tab: insert a row/document. Requires `r/w` |
 | `-` | Picker: delete the selected profile. Tree roles/users: revoke, remove, or drop. Data tab: delete the current or selected rows. Requires `r/w` for tree/Data |
 | `Del` | Picker: delete the selected profile with confirmation; the credential source file is kept |
 | `Space` | Select an import row; open/expand a tree node; Data tab: toggle row selection for batch update/delete |
@@ -95,12 +98,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.8.1.md`](docs/release-notes-v1.8.1.md) — latest
-  matrix scope notes; [`v1.7.0`](docs/release-notes-v1.7.0.md) covers MongoDB
-  replica hosts, [`v1.6.1`](docs/release-notes-v1.6.1.md) matrix panel
-  switching, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope.
-  Русская версия:
-  [`docs/release-notes-v1.8.1.ru.md`](docs/release-notes-v1.8.1.ru.md).
+- [`docs/release-notes-v1.9.0.md`](docs/release-notes-v1.9.0.md) — latest
+  MongoDB home/auth and user-action notes;
+  [`v1.8.1`](docs/release-notes-v1.8.1.md) covers matrix scope,
+  [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
+  [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
+  [`docs/release-notes-v1.9.0.ru.md`](docs/release-notes-v1.9.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -202,7 +205,9 @@ The matrix has two panels:
 
 The Details tab for `Security`, `users`, `roles`, and individual principals
 shows the `Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges
-tab.
+tab. On a MongoDB database or collection, `u` or `Ctrl+X Ctrl+R` opens the
+membership matrix and ensures `read@<db>` and `readWrite@<db>` rows exist, so
+the built-in roles can be assigned immediately.
 
 Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
 Switching keeps the selected principal: the membership column user/role becomes
@@ -248,13 +253,21 @@ Create a user from `Security → users → +`:
 - **MySQL/MariaDB:** enter a user name, host (`%` is the default), and password.
   The account is created as `'user'@'host'` with no extra grants.
 - **MongoDB:** enter a user name, password, authentication database, and host
-  list. The form order is name → password → database → hosts; the auth database
+  list. The form order is name → password → auth.db → hosts; the auth database
   defaults to `admin`, and `Space` cycles through `admin` and the databases
   loaded in the tree. The hosts field defaults to the current profile's full
   host list, including a replica set; edit it as comma-separated `host:port`
   entries when the new credential should use another shape. The auth database
   stores the MongoDB user; it does not grant access to that database. The user
   is created with an empty role list; use the matrix to assign roles.
+
+Create users from `Security` or `users` with `+`, `n`, `u`, or `Ctrl+N`
+(Russian physical equivalents included). A new user is created in the selected
+auth database with no roles. On a MongoDB user node, `h` opens a `home.db`
+picker: `Space` cycles the loaded databases and `Enter` writes the choice to the
+matching saved profile. `home.db` is the default database in the URI; `auth.db`
+is the authentication database (`authSource`). The profile edit form shows
+`home.db` above the muted `auth.db` field.
 
 The password is masked in the form. It is written to the matching credential
 file only after the native account is created:
@@ -555,6 +568,8 @@ plaintext retry. Auth, permission, and configuration errors are not retried.
 
 Press `e` at the picker to edit the selected profile. Label, host, port,
 database, and user are editable; the engine and credential source stay fixed.
+For MongoDB the database field is `home.db`, followed by a muted `auth.db`
+field; `home.db` is the URI/default database and `auth.db` is `authSource`.
 For PostgreSQL the form also toggles `allow_no_tls`. Changing a connection field
 changes the profile key, but the old entry is replaced instead of orphaned, and
 `created_at` / `last_used` survive the edit. When the connection tuple changes,
