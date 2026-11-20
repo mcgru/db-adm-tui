@@ -72,6 +72,7 @@ func TestSingleActions(t *testing.T) {
 		"Т":          NextMatch,
 		"f1":         Help,
 		"ctrl+a":     FetchAll,
+		"delete":     DeleteProfile,
 		"ctrl+f":     ServerFilter,
 		"`":          ExpandJSON,
 		"ё":          ExpandJSON,

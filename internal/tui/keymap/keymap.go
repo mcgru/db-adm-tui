@@ -47,6 +47,7 @@ const (
 	NextMatch       Action = "next-match"
 	Add             Action = "add"
 	Remove          Action = "remove"
+	DeleteProfile   Action = "delete-profile"
 	ResizeTreeLeft  Action = "resize-tree-left"
 	ResizeTreeRight Action = "resize-tree-right"
 	ResizeQueryUp   Action = "resize-query-up"
@@ -95,6 +96,7 @@ var single = map[string]Action{
 	"-": Remove,
 
 	"ctrl+a":     FetchAll,
+	"delete":     DeleteProfile,
 	"ctrl+f":     ServerFilter,
 	"ctrl+space": Completion, "ctrl+@": Completion,
 	"ctrl+f1":   ContextHelp,

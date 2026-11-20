@@ -182,6 +182,72 @@ func (m Model) submitEdit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) openDeleteProfileModal() (tea.Model, tea.Cmd) {
+	if m.screen != ScreenPicker || m.connecting {
+		return m, nil
+	}
+	p, ok := m.currentPickerProfile()
+	if !ok {
+		m.setMessage(levelInfo, "select a profile to delete")
+		return m, nil
+	}
+	m.deleteProfile = p
+	m.deleteErr = ""
+	m.modal = modalDeleteProfile
+	return m, nil
+}
+
+func (m *Model) closeDeleteProfileModal() {
+	m.modal = modalNone
+	m.deleteProfile = domain.Profile{}
+	m.deleteErr = ""
+}
+
+func (m Model) handleDeleteProfileKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	action, ok := keymap.Lookup(msg.String())
+	if !ok {
+		return m, nil
+	}
+	switch action {
+	case keymap.Cancel:
+		m.closeDeleteProfileModal()
+	case keymap.Confirm:
+		key := m.deleteProfile.Key()
+		label := m.deleteProfile.Label
+		if err := m.svc.DeleteProfile(context.Background(), key); err != nil {
+			m.deleteErr = oneLine(err.Error())
+			return m, nil
+		}
+		m.closeDeleteProfileModal()
+		delete(m.rowErrors, key)
+		m.reloadProfiles(context.Background(), "")
+		m.setMessage(levelSuccess, "profile deleted · "+oneLine(label)+" · credential source kept")
+	}
+	return m, nil
+}
+
+func (m Model) viewDeleteProfile() string {
+	width := modalWidth(m.width, 64)
+	inner := width - 4
+	var body []string
+	text := "Delete profile " + oneLine(m.deleteProfile.Label) + "?"
+	for _, line := range wrapText(text, inner) {
+		body = append(body, m.styles.Text.Render(line))
+	}
+	source := oneLine(m.deleteProfile.SourceLabel())
+	if source != "" {
+		for _, line := range wrapText("source "+source+" is kept on disk", inner) {
+			body = append(body, m.styles.Muted.Render(line))
+		}
+	}
+	body = append(body, m.styles.Muted.Render("Only the profile entry is removed."))
+	if m.deleteErr != "" {
+		body = append(body, "", m.styles.Error.Render(Truncate(m.deleteErr, inner)))
+	}
+	body = append(body, "", m.actionLine("Enter", "delete", "Esc", "cancel"))
+	return modalBox("delete profile", body, width, m.styles)
+}
+
 func (m Model) viewEdit() string {
 	width := modalWidth(m.width, 60)
 	inner := width - 4

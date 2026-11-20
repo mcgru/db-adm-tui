@@ -200,7 +200,15 @@ func TestMatrixSpaceTogglesMembership(t *testing.T) {
 	m := workspaceFrom(t, selectLabel(t, e.model(t), "prod-ro"))
 	m = enableReadWrite(t, m)
 	m = openMatrix(t, m)
+	row := m.matrix.cursors[matrixMembership].row
+	col := m.matrix.cursors[matrixMembership].col
+	if got := m.matrixCellText(row, col); got != "[x]" {
+		t.Fatalf("initial cell = %q", got)
+	}
 	m, cmd := press(t, m, "space")
+	if got := m.matrixCellText(row, col); got != "[ ]" {
+		t.Fatalf("cell was not updated immediately: %q", got)
+	}
 	m = runCmd(t, m, cmd)
 	if admin.calls != 1 || admin.last != "RevokeRole" {
 		t.Fatalf("calls=%d last=%q", admin.calls, admin.last)

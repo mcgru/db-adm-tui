@@ -185,6 +185,7 @@ func (m Model) viewPicker(regions layout.Regions) string {
 		m.styles.Accent.Render("n") + " new",
 		m.styles.Accent.Render("i") + " import",
 		m.styles.Accent.Render("e") + " edit",
+		m.styles.Accent.Render("Del/-") + " delete",
 		m.styles.Accent.Render("?") + " help",
 		m.styles.Accent.Render("Ctrl+Q") + " quit",
 	}, " · ")

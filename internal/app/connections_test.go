@@ -525,6 +525,7 @@ func TestSaveProfileNeverStoresSecret(t *testing.T) {
 
 func TestUpdateProfileReplacesKeyAndPreservesMetadata(t *testing.T) {
 	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
 	created := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	last := time.Date(2026, 2, 3, 10, 0, 0, 0, time.UTC)
 	p := domain.Profile{

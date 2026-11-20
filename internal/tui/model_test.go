@@ -422,8 +422,83 @@ func TestEditProfileModalSaves(t *testing.T) {
 	if got.Source == nil || got.Source.Kind != domain.SourcePgpass {
 		t.Fatalf("source lost: %+v", got.Source)
 	}
+	pgpass, err := os.ReadFile(filepath.Join(e.home, ".pgpass"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(pgpass), "#db1.internal:5432:orders:app_ro:pgsecret") ||
+		!strings.Contains(string(pgpass), "db2.internal:5432:orders:app_ro:pgsecret") {
+		t.Fatalf("source entry was not moved:\n%s", pgpass)
+	}
 	if p, ok := m.currentPickerProfile(); !ok || p.Label != "prod-ro-2" {
 		t.Fatalf("selection did not follow the profile: %+v", p)
+	}
+}
+
+func TestPickerDeleteProfileKeepsSource(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	sourcePath := filepath.Join(e.home, ".pgpass")
+	before, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := len(m.profiles)
+	m, _ = press(t, m, "delete")
+	if m.modal != modalDeleteProfile {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	view := StripANSI(m.viewModal())
+	for _, want := range []string{"Delete profile prod-ro?", "source ~/.pgpass is kept on disk", "Only the profile entry is removed"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("confirmation missing %q:\n%s", want, view)
+		}
+	}
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone || len(m.profiles) != count-1 {
+		t.Fatalf("modal=%v profiles=%d, want %d", m.modal, len(m.profiles), count-1)
+	}
+	for _, view := range m.profiles {
+		if view.Profile.Label == "prod-ro" {
+			t.Fatal("deleted profile still listed")
+		}
+	}
+	after, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("profile delete changed the source file:\n%s", after)
+	}
+}
+
+func TestPickerDashDeletesMongoProfileKeepsFile(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "analytics")
+	sourcePath := filepath.Join(e.home, ".mongo.analyst")
+	before, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ = press(t, m, "-")
+	if m.modal != modalDeleteProfile {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	if view := StripANSI(m.viewModal()); !strings.Contains(view, "source ~/.mongo.analyst is kept on disk") {
+		t.Fatalf("mongo source note missing:\n%s", view)
+	}
+	m, _ = press(t, m, "enter")
+	if m.modal != modalNone {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	after, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("profile delete changed the Mongo source file:\n%s", after)
 	}
 }
 

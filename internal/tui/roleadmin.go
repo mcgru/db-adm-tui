@@ -238,7 +238,7 @@ func (m Model) handleRoleDone(msg roleDoneMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.setMessage(levelError, text)
-			return m, nil
+			return m, m.reloadMatrix()
 		}
 		m.matrix.details = matrixDetails{}
 		m.matrixDirty = true

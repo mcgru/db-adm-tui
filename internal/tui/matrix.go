@@ -119,11 +119,12 @@ func (m *Model) loadMatrix() tea.Cmd {
 	}
 	m.matrixGen++
 	gen := m.matrixGen
+	// Keep already-loaded cells visible while a mutation refreshes the matrix.
+	// The initial open starts from an empty state, so it still shows a loading
+	// notice until the first page arrives.
 	m.matrix.membershipLoading = true
-	m.matrix.membershipLoaded = false
 	m.matrix.membershipErr = ""
 	m.matrix.privilegesLoading = true
-	m.matrix.privilegesLoaded = false
 	m.matrix.privilegesErr = ""
 	session := m.session
 	objects := append([]domain.ObjectRef(nil), m.matrix.objects...)
@@ -657,10 +658,17 @@ func (m Model) toggleMatrixCell() (tea.Model, tea.Cmd) {
 		granted := m.matrix.membership.Members[member.Key()][role.Key()]
 		membership := domain.RoleMembership{Role: role, Member: member}
 		if granted {
+			if roles := m.matrix.membership.Members[member.Key()]; roles != nil {
+				delete(roles, role.Key())
+			}
 			return m.startMatrixMutation(roleUnassign, func(session *app.Session) (domain.MutationResult, error) {
 				return session.RevokeRole(context.Background(), membership)
 			})
 		}
+		if m.matrix.membership.Members[member.Key()] == nil {
+			m.matrix.membership.Members[member.Key()] = map[string]bool{}
+		}
+		m.matrix.membership.Members[member.Key()][role.Key()] = true
 		return m.startMatrixMutation(roleAssign, func(session *app.Session) (domain.MutationResult, error) {
 			return session.GrantRole(context.Background(), membership)
 		})
@@ -682,11 +690,18 @@ func (m Model) toggleMatrixCell() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	grant := domain.PrivilegeGrant{Role: principal, Target: object, Privileges: []string{privilege}}
-	if hasPrivilege(m.matrix.privileges.Cells[principal.Key()][object.Key()], privilege) {
+	cells := m.matrix.privileges.Cells
+	if cells[principal.Key()] == nil {
+		cells[principal.Key()] = map[string][]string{}
+	}
+	values := cells[principal.Key()][object.Key()]
+	if hasPrivilege(values, privilege) {
+		cells[principal.Key()][object.Key()] = withoutPrivilege(values, privilege)
 		return m.startMatrixMutation(roleRevoke, func(session *app.Session) (domain.MutationResult, error) {
 			return session.RevokePrivileges(context.Background(), grant)
 		})
 	}
+	cells[principal.Key()][object.Key()] = append(values, privilege)
 	return m.startMatrixMutation(roleGrant, func(session *app.Session) (domain.MutationResult, error) {
 		return session.GrantPrivileges(context.Background(), grant)
 	})
@@ -724,6 +739,16 @@ func hasPrivilege(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func withoutPrivilege(values []string, want string) []string {
+	kept := values[:0]
+	for _, value := range values {
+		if !strings.EqualFold(value, want) {
+			kept = append(kept, value)
+		}
+	}
+	return kept
 }
 
 func (m Model) openMatrixDetails() (tea.Model, tea.Cmd) {

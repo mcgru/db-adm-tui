@@ -46,6 +46,7 @@ const (
 	modalPassword
 	modalSave
 	modalEdit
+	modalDeleteProfile
 	modalStatement
 	modalHelp
 	modalMode
@@ -262,6 +263,9 @@ type Model struct {
 	editAllowNoTLS  bool
 	editFocus       editField
 	editErr         string
+
+	deleteProfile domain.Profile
+	deleteErr     string
 }
 
 // New builds the root model around the application service and loads stored
@@ -442,6 +446,8 @@ func (m Model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleSaveKey(msg)
 	case modalEdit:
 		return m.handleEditKey(msg)
+	case modalDeleteProfile:
+		return m.handleDeleteProfileKey(msg)
 	case modalStatement:
 		return m.handleStatementKey(msg)
 	case modalHelp:
@@ -581,6 +587,9 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 			m.setMessage(levelInfo, "row changes are available in the Data tab")
 		}
 	case keymap.Remove:
+		if m.screen == ScreenPicker && !m.connecting {
+			return m.openDeleteProfileModal()
+		}
 		if m.screen == ScreenWorkspace {
 			if m.focus == FocusTree {
 				return m.startRoleRemove()
@@ -589,6 +598,10 @@ func (m Model) apply(action keymap.Action) (tea.Model, tea.Cmd) {
 				return m.startRowRemove()
 			}
 			m.setMessage(levelInfo, "row changes are available in the Data tab")
+		}
+	case keymap.DeleteProfile:
+		if m.screen == ScreenPicker && !m.connecting {
+			return m.openDeleteProfileModal()
 		}
 	case keymap.Help:
 		m.setMessage(levelInfo, "help — story 9")
@@ -1348,6 +1361,8 @@ func (m Model) viewModal() string {
 		return m.viewSave()
 	case modalEdit:
 		return m.viewEdit()
+	case modalDeleteProfile:
+		return m.viewDeleteProfile()
 	case modalStatement:
 		return m.viewStatement()
 	case modalHelp:
@@ -1393,6 +1408,8 @@ func (m *Model) dismissModal() {
 		m.modal = modalNone
 	case modalEdit:
 		m.closeEditModal()
+	case modalDeleteProfile:
+		m.closeDeleteProfileModal()
 	case modalStatement:
 		m.closeStatementModal()
 	case modalHelp:

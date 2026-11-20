@@ -448,6 +448,11 @@ func (s *Service) UpdateProfile(ctx context.Context, originalKey string, p domai
 	if !found {
 		return domain.NewError(domain.KindConfig, "update-profile", "the profile no longer exists")
 	}
+	updatedSource, err := s.resolver.UpdateCredential(old, p)
+	if err != nil {
+		return err
+	}
+	p.Source = updatedSource
 	if p.Key() != originalKey {
 		for _, stored := range existing {
 			if stored.Key() == p.Key() {
@@ -480,6 +485,30 @@ func (s *Service) UpdateProfile(ctx context.Context, originalKey string, p domai
 		return list[i].Key() < list[j].Key()
 	})
 	return s.store.Save(ctx, list)
+}
+
+// DeleteProfile removes one saved profile. Credential source files are never
+// modified or deleted; only the profile entry is removed.
+func (s *Service) DeleteProfile(ctx context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	list, err := s.store.Load(ctx)
+	if err != nil {
+		return err
+	}
+	kept := make([]domain.Profile, 0, len(list))
+	found := false
+	for _, stored := range list {
+		if stored.Key() == key {
+			found = true
+			continue
+		}
+		kept = append(kept, stored)
+	}
+	if !found {
+		return domain.NewError(domain.KindConfig, "delete-profile", "the profile no longer exists")
+	}
+	return s.store.Save(ctx, kept)
 }
 
 // SaveLastObject records where the user left off in the workspace. It is

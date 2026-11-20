@@ -21,4 +21,4 @@ No profiles yet. Press n to create one, or i to import from ~/.pgpass,
                                                                                 
                                                                                 
                                                                                 
-Enter connect · n new · i import · e edit · ? help · Ctrl+Q quit                
+Enter connect · n new · i import · e edit · Del/- delete · ? help · Ctrl+Q quit 
