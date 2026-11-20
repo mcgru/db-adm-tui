@@ -94,11 +94,12 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.5.1.md`](docs/release-notes-v1.5.1.md) — latest
-  MongoDB form notes; [`v1.5.0`](docs/release-notes-v1.5.0.md) covers the matrix
-  orientation, and [`v1.4.0`](docs/release-notes-v1.4.0.md) has the feature
-  scope and known limitations. Русская версия:
-  [`docs/release-notes-v1.5.1.ru.md`](docs/release-notes-v1.5.1.ru.md).
+- [`docs/release-notes-v1.5.2.md`](docs/release-notes-v1.5.2.md) — latest
+  statement-editor notes; [`v1.5.1`](docs/release-notes-v1.5.1.md) covers the
+  MongoDB form, [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix orientation,
+  and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская
+  версия:
+  [`docs/release-notes-v1.5.2.ru.md`](docs/release-notes-v1.5.2.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -468,9 +469,10 @@ accepting a function term such as `COUNT`, `COALESCE`, `ObjectId`, or `ISODate`
 adds `()` with the cursor inside unless an opening parenthesis is already
 present.
 
-`Ctrl+X Ctrl+E` opens the current statement in a one-field edit modal with the
-cursor at the start. `Enter` executes and closes it; `Esc` cancels and leaves the
-query bar unchanged. Completion and context help work inside the modal.
+`Ctrl+X Ctrl+E` opens the current statement in a one-field edit modal with a
+compact `SQL> ` or `MQL> ` prompt and the cursor immediately after it. `Enter`
+executes and closes it; `Esc` cancels and leaves the query bar unchanged.
+Completion and context help work inside the modal.
 
 `Ctrl+F1` opens offline help for the word under the cursor in the query bar or
 edit modal, or for the focused tree/details/data/results element. Every
