@@ -169,9 +169,10 @@ func (m Model) matrixEnsureDatabase() string {
 	}
 }
 
-// startTreeMatrix opens the access matrix from the tree selection. Database,
-// schema, table, and collection nodes open the scoped matrix; a role opens the
-// matrix focused on that role.
+// startTreeMatrix opens the access matrix from the tree selection. Security,
+// users, and roles groups open an unscoped panel; database, schema, table, and
+// collection nodes open the scoped matrix; a role opens the matrix focused on
+// that role.
 func (m Model) startTreeMatrix(active matrixKind) (tea.Model, tea.Cmd) {
 	node, ok := m.tree.selectedNode()
 	if !ok {
@@ -179,6 +180,8 @@ func (m Model) startTreeMatrix(active matrixKind) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch node.Kind {
+	case domain.KindSecurity, domain.KindUsers, domain.KindRoles:
+		return m.openMatrix(active, nil)
 	case domain.KindRole:
 		if active == matrixMembership {
 			// The tree shortcut on a role keeps the established privilege view.

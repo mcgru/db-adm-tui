@@ -404,6 +404,7 @@ Ctrl+Up/Down jump within the selected column; Ctrl+Left/Right within the selecte
 The leading [db]/[schema] columns stay frozen while tables/collections scroll when width allows.
 Space toggles a cell, e opens native privilege details, / filters, Esc closes.
 Use + on the roles group to create a role; role + - can drop one.
+On Security, users, or roles, e opens membership and r opens privileges.
 Select a principal and open Privileges for native grants and memberships.`,
 
 	"status": `The bottom line shows counts, elapsed query time, errors, and cancellation hints.

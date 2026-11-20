@@ -485,6 +485,28 @@ func TestTreeShortcutsOpenMatrixPanels(t *testing.T) {
 	if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
 		t.Fatalf("schema r opened screen=%v tab=%v, want privileges", m.screen, m.matrix.active)
 	}
+	m, _ = press(t, m, "esc")
+
+	m = selectKind(t, m, domain.KindSecurity)
+	m, cmd := press(t, m, "right")
+	m = settle(t, m, cmd)
+	for _, kind := range []domain.ObjectKind{
+		domain.KindSecurity, domain.KindUsers, domain.KindRoles,
+	} {
+		m = selectKind(t, m, kind)
+		m, _ = press(t, m, "e")
+		if m.screen != ScreenMatrix || m.matrix.active != matrixMembership {
+			t.Fatalf("%s e opened screen=%v tab=%v, want membership", kind, m.screen, m.matrix.active)
+		}
+		m, _ = press(t, m, "esc")
+
+		m = selectKind(t, m, kind)
+		m, _ = press(t, m, "r")
+		if m.screen != ScreenMatrix || m.matrix.active != matrixPrivileges {
+			t.Fatalf("%s r opened screen=%v tab=%v, want privileges", kind, m.screen, m.matrix.active)
+		}
+		m, _ = press(t, m, "esc")
+	}
 }
 
 func TestMatrixCtrlArrowsJumpWithinRowAndColumn(t *testing.T) {
