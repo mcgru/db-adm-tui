@@ -25,6 +25,11 @@ actually possible.
 | Create/drop user | blocked | yes, with native admin rights |
 | Row/document insert/update/delete | blocked | yes, one cell or a selected row set |
 
+At the profile picker, `e` edits the selected profile and `Del` or `-` deletes
+it with confirmation. Deleting a profile never deletes or modifies its
+`.pgpass`, `.mypass`, or `.mongo.*` source file. Editing a connection field
+moves the matching source entry to the new tuple with the same password.
+
 ## Read-only mode (`r/o`)
 
 Connect normally; no extra key is needed. The top line shows `r/o`.

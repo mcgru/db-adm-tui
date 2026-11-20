@@ -65,7 +65,8 @@ The tool starts on the profile picker.
 | `i` | Import from `~/.pgpass`, `~/.mypass`, and `~/.mongo.*` |
 | `e` | Edit the selected profile at the picker; edit the focused Data cell; with a role selected in the tree, open the privilege matrix focused on that role |
 | `+` | Tree roles/users: create, grant, or assign. Data tab: insert a row/document. Requires `r/w` |
-| `-` | Tree roles/users: revoke, remove, or drop. Data tab: delete the current or selected rows. Requires `r/w` |
+| `-` | Picker: delete the selected profile. Tree roles/users: revoke, remove, or drop. Data tab: delete the current or selected rows. Requires `r/w` for tree/Data |
+| `Del` | Picker: delete the selected profile with confirmation; the credential source file is kept |
 | `Space` | Select an import row; open/expand a tree node; Data tab: toggle row selection for batch update/delete |
 | `Tab` / `Shift+Tab` | Move focus: workspace zones; fields in a modal |
 | `1` / `2` / `3` / `4`, `[` / `]` | Select a context tab by position; tabs differ by object |
@@ -94,12 +95,13 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.5.3.md`](docs/release-notes-v1.5.3.md) — latest
-  MongoDB auth-database and statement completion notes;
-  [`v1.5.2`](docs/release-notes-v1.5.2.md) covers the compact statement prompt,
-  [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix orientation, and
-  [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.5.3.ru.md`](docs/release-notes-v1.5.3.ru.md).
+- [`docs/release-notes-v1.6.0.md`](docs/release-notes-v1.6.0.md) — latest
+  profile editing/deletion and matrix feedback notes;
+  [`v1.5.3`](docs/release-notes-v1.5.3.md) covers the MongoDB auth database and
+  statement completion, [`v1.5.0`](docs/release-notes-v1.5.0.md) the matrix
+  orientation, and [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope.
+  Русская версия:
+  [`docs/release-notes-v1.6.0.ru.md`](docs/release-notes-v1.6.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -547,7 +549,17 @@ Press `e` at the picker to edit the selected profile. Label, host, port,
 database, and user are editable; the engine and credential source stay fixed.
 For PostgreSQL the form also toggles `allow_no_tls`. Changing a connection field
 changes the profile key, but the old entry is replaced instead of orphaned, and
-`created_at` / `last_used` survive the edit.
+`created_at` / `last_used` survive the edit. When the connection tuple changes,
+the matching `.pgpass`/`.mypass` line is moved to the new tuple with the same
+password (the old line is commented). A MongoDB URI is rewritten to its
+canonical `.mongo.<USER>-in-<DATABASE>` file with `authSource` rebound to the new
+database; the old file is kept. Label- or TLS-only edits do not rewrite source
+files.
+
+Press `Del` or `-` at the picker to delete the selected profile. The
+confirmation names the profile and its source; only the profile entry is
+removed. The `.pgpass`, `.mypass`, or `.mongo.*` source file is never modified
+or deleted by a profile delete.
 
 If `profiles.json` is corrupt or unreadable, the picker shows
 `Profile storage is unreadable. Showing no profiles.` and stays usable; `n` and
