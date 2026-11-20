@@ -577,6 +577,24 @@ func (s *Session) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.
 	if spec.Database == "" {
 		spec.Database = p.Database
 	}
+	if spec.Engine == domain.EngineMongoDB {
+		raw := strings.TrimSpace(spec.MongoHosts)
+		if raw == "" {
+			if p.Source != nil {
+				if hosts := profile.MongoSelectorHosts(p.Source.Selector); len(hosts) > 0 {
+					raw = strings.Join(hosts, ",")
+				}
+			}
+		}
+		if raw == "" {
+			raw = p.Addr()
+		}
+		hosts, err := profile.ParseMongoHosts(raw)
+		if err != nil {
+			return domain.UserResult{}, domain.NewError(domain.KindConfig, "user", err.Error())
+		}
+		spec.MongoHosts = strings.Join(hosts, ",")
+	}
 	if sameAsCurrentUser(p, spec) {
 		return domain.UserResult{}, domain.NewError(domain.KindGuard, "user", "cannot create the currently connected user")
 	}
@@ -608,6 +626,7 @@ func (s *Session) CreateUser(ctx context.Context, spec domain.UserSpec) (domain.
 		target.User, _ = splitMySQLCredentialUser(spec.Name)
 	}
 	if spec.Engine == domain.EngineMongoDB {
+		target.MongoHosts = spec.MongoHosts
 		target.MongoOptions = mongoCredentialOptions(p, spec.Database)
 	}
 	source, credErr := s.resolver.SaveCredential(target)

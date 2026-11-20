@@ -51,6 +51,23 @@ func TestParseMongoBytesKeepsReplicaSetAndOptions(t *testing.T) {
 	}
 }
 
+func TestParseMongoHostsAndSelector(t *testing.T) {
+	hosts, err := ParseMongoHosts("mongo1:27017, mongo2:27018,mongo3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(hosts, ",") != "mongo1:27017,mongo2:27018,mongo3:27017" {
+		t.Fatalf("hosts = %+v", hosts)
+	}
+	if _, err := ParseMongoHosts("mongo1:bad"); err == nil {
+		t.Fatal("invalid port accepted")
+	}
+	selector := "mongodb://analyst@mongo1:27017,mongo2:27018/analytics?authSource=admin"
+	if got := strings.Join(MongoSelectorHosts(selector), ","); got != "mongo1:27017,mongo2:27018" {
+		t.Fatalf("selector hosts = %q", got)
+	}
+}
+
 func TestParseMongoBytesMalformedNamesFile(t *testing.T) {
 	mf := ParseMongoBytes("~/.mongo.bad", "mongodb://mongo1:notaport/analytics\n")
 	if mf.Err == "" || mf.Entry != nil {

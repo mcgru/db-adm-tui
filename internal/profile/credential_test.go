@@ -127,6 +127,24 @@ func TestSaveMySQLCredentialUsesMyPass(t *testing.T) {
 	}
 }
 
+func TestMongoCredentialURIPreservesHostList(t *testing.T) {
+	uri := mongoCredentialURI(CredentialTarget{
+		Engine: domain.EngineMongoDB, Host: "mongo1", Port: 27017,
+		MongoHosts: "mongo1:27017,mongo2:27018",
+		Database:   "appdb", User: "app_user", Password: "secret",
+		MongoOptions: "authSource=admin&replicaSet=rs0",
+	})
+	for _, want := range []string{
+		"mongodb://app_user:secret@mongo1:27017,mongo2:27018/appdb",
+		"authSource=admin",
+		"replicaSet=rs0",
+	} {
+		if !strings.Contains(uri, want) {
+			t.Fatalf("URI missing %q: %s", want, uri)
+		}
+	}
+}
+
 func TestSaveMongoCredentialRotates(t *testing.T) {
 	home := t.TempDir()
 	resolver := NewResolverAt(home, filepath.Join(home, ".pgpass"))

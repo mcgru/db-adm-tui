@@ -77,6 +77,41 @@ func TestUpdateCredentialLabelOnlyIsNoop(t *testing.T) {
 	}
 }
 
+func TestUpdateCredentialMongoKeepsReplicaHosts(t *testing.T) {
+	home := t.TempDir()
+	oldPath := filepath.Join(home, ".mongo.old-in-olddb")
+	oldURI := "mongodb://old:secret@mongo1:27017,mongo2:27018/olddb?authSource=admin&replicaSet=rs0"
+	if err := os.WriteFile(oldPath, []byte(oldURI+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	resolver := NewResolverAt(home, filepath.Join(home, ".pgpass"))
+	old := domain.Profile{
+		Engine: domain.EngineMongoDB, Host: "mongo1", Port: 27017,
+		Database: "olddb", User: "old",
+		Source: &domain.Source{Kind: domain.SourceMongoFile, Path: "~/.mongo.old-in-olddb"},
+	}
+	next := old
+	next.Database = "newdb"
+	next.User = "new"
+	source, err := resolver.UpdateCredential(old, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source == nil || !strings.Contains(source.Path, ".mongo.new-in-newdb") {
+		t.Fatalf("source = %+v", source)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".mongo.new-in-newdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, want := range []string{"mongo1:27017,mongo2:27018", "authSource=newdb", "replicaSet=rs0"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("new URI missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestUpdateCredentialMovesMongoFile(t *testing.T) {
 	home := t.TempDir()
 	oldPath := filepath.Join(home, ".mongo.old-in-olddb")

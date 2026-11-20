@@ -175,6 +175,52 @@ func parseMongoURI(raw string, line int) (MongoEntry, error) {
 	return entry, nil
 }
 
+// ParseMongoHosts accepts a comma-separated host[:port] list and returns
+// canonical host:port entries. A missing port uses the MongoDB default 27017.
+func ParseMongoHosts(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("the host list is empty")
+	}
+	parts := strings.Split(raw, ",")
+	hosts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, fmt.Errorf("the host list contains an empty host")
+		}
+		host, port, err := splitMongoHost(part)
+		if err != nil {
+			return nil, fmt.Errorf("the host list is not valid")
+		}
+		hosts = append(hosts, net.JoinHostPort(host, strconv.Itoa(port)))
+	}
+	return hosts, nil
+}
+
+// MongoSelectorHosts returns the canonical host:port list from a MongoDB
+// selector URI, or nil when the selector is absent or malformed.
+func MongoSelectorHosts(selector string) []string {
+	raw := strings.TrimSpace(selector)
+	if !strings.HasPrefix(raw, "mongodb://") {
+		return nil
+	}
+	rest := strings.TrimPrefix(raw, "mongodb://")
+	if at := strings.Index(rest, "@"); at >= 0 {
+		if slash := strings.Index(rest, "/"); slash < 0 || at < slash {
+			rest = rest[at+1:]
+		}
+	}
+	if index := strings.IndexAny(rest, "/?"); index >= 0 {
+		rest = rest[:index]
+	}
+	hosts, err := ParseMongoHosts(rest)
+	if err != nil {
+		return nil
+	}
+	return hosts
+}
+
 func decodeMongoUserInfo(value string) string {
 	decoded, err := url.PathUnescape(value)
 	if err != nil {

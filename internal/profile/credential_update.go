@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -119,11 +120,28 @@ func (r *Resolver) updateMongoCredential(old, next domain.Profile) (*domain.Sour
 	if strings.TrimSpace(next.Database) == "" || strings.TrimSpace(next.User) == "" {
 		return nil, credentialError("the MongoDB user or database is empty")
 	}
+	hosts := MongoSelectorHosts(selector)
+	if len(hosts) == 0 {
+		hosts = MongoSelectorHosts(old.Source.Selector)
+	}
+	hostChanged := !strings.EqualFold(next.Host, old.Host) || next.Port != old.Port
+	if hostChanged || len(hosts) == 0 {
+		if strings.Contains(next.Host, ",") {
+			parsed, err := ParseMongoHosts(next.Host)
+			if err != nil {
+				return nil, credentialError("the MongoDB host list is not valid")
+			}
+			hosts = parsed
+		} else {
+			hosts = []string{net.JoinHostPort(next.Host, strconv.Itoa(next.Port))}
+		}
+	}
+	host, port := splitMongoAddress(hosts[0])
 	options := mongoEditOptions(selector, old.Source.Selector, next.Database)
 	source, err := r.SaveCredential(CredentialTarget{
-		Engine: domain.EngineMongoDB, Host: next.Host, Port: next.Port,
+		Engine: domain.EngineMongoDB, Host: host, Port: port,
 		Database: next.Database, User: next.User, Password: secret,
-		MongoOptions: options,
+		MongoHosts: strings.Join(hosts, ","), MongoOptions: options,
 	})
 	if err != nil {
 		return nil, err
@@ -161,20 +179,30 @@ func (r *Resolver) updateMongoCredential(old, next domain.Profile) (*domain.Sour
 	return &source, nil
 }
 
+func splitMongoAddress(address string) (string, int) {
+	if host, portText, err := net.SplitHostPort(address); err == nil {
+		if port, convErr := strconv.Atoi(portText); convErr == nil {
+			return host, port
+		}
+	}
+	return address, 27017
+}
+
 // mongoEditOptions keeps the non-secret query options and rebinds authSource to
 // the profile's selected authentication database.
 func mongoEditOptions(selector, fallback, database string) string {
 	values := url.Values{}
 	for _, raw := range []string{selector, fallback} {
 		raw = strings.TrimSpace(raw)
-		if raw == "" {
+		index := strings.Index(raw, "?")
+		if index < 0 || index+1 >= len(raw) {
 			continue
 		}
-		parsed, err := url.Parse(raw)
+		parsed, err := url.ParseQuery(raw[index+1:])
 		if err != nil {
 			continue
 		}
-		values = parsed.Query()
+		values = parsed
 		break
 	}
 	for key := range values {

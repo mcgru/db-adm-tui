@@ -22,6 +22,7 @@ type CredentialTarget struct {
 	Database     string
 	User         string
 	Password     string
+	MongoHosts   string
 	MongoOptions string
 	// SourcePath is an optional profile source path (for example a custom
 	// PGPASSFILE). It is expanded and used instead of the default path.
@@ -187,9 +188,13 @@ func (r *Resolver) saveMongoCredential(target CredentialTarget) (domain.Source, 
 }
 
 func mongoCredentialURI(target CredentialTarget) string {
+	authority := strings.TrimSpace(target.MongoHosts)
+	if authority == "" {
+		authority = net.JoinHostPort(target.Host, strconv.Itoa(target.Port))
+	}
 	u := url.URL{
 		Scheme: "mongodb",
-		Host:   net.JoinHostPort(target.Host, strconv.Itoa(target.Port)),
+		Host:   authority,
 		Path:   "/" + target.Database,
 	}
 	u.User = url.UserPassword(target.User, target.Password)

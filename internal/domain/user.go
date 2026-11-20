@@ -7,7 +7,10 @@ type UserSpec struct {
 	Database string
 	Name     string
 	Host     string
-	Password string
+	// MongoHosts is the comma-separated host:port list written to a MongoDB
+	// credential URI. The live user creation still uses the current session.
+	MongoHosts string
+	Password   string
 }
 
 // UserResult is the safe outcome of a user creation. Source points at the

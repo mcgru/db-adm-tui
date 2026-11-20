@@ -10,6 +10,7 @@ import (
 
 	"github.com/mcgru/db-adm-tui/internal/app"
 	"github.com/mcgru/db-adm-tui/internal/domain"
+	"github.com/mcgru/db-adm-tui/internal/profile"
 	"github.com/mcgru/db-adm-tui/internal/tui/keymap"
 )
 
@@ -24,6 +25,7 @@ type userState struct {
 	name     textinput.Model
 	host     textinput.Model
 	database textinput.Model
+	hosts    textinput.Model
 	password textinput.Model
 	focus    int
 	formErr  string
@@ -47,6 +49,7 @@ func newUserState() userState {
 		name:     newInput("user", false),
 		host:     newInput("%", false),
 		database: newInput("database", false),
+		hosts:    newInput("host1:27017,host2:27018", false),
 		password: newInput("password", true),
 	}
 }
@@ -76,6 +79,7 @@ func (m Model) startUserAdd() (tea.Model, tea.Cmd) {
 	m.user.host.SetValue("%")
 	if m.engine() == domain.EngineMongoDB {
 		m.user.database.SetValue("admin")
+		m.user.hosts.SetValue(m.mongoProfileHosts())
 	}
 	m.user.focus = 0
 	m.focusUserField()
@@ -103,7 +107,7 @@ func (m Model) userFields() []int {
 	case domain.EngineMySQL:
 		fields = append(fields, 1, 2)
 	case domain.EngineMongoDB:
-		fields = append(fields, 2, 3)
+		fields = append(fields, 2, 3, 4)
 	default:
 		fields = append(fields, 2)
 	}
@@ -114,6 +118,7 @@ func (m *Model) focusUserField() {
 	m.user.name.Blur()
 	m.user.host.Blur()
 	m.user.database.Blur()
+	m.user.hosts.Blur()
 	m.user.password.Blur()
 	switch m.user.focus {
 	case 0:
@@ -128,6 +133,9 @@ func (m *Model) focusUserField() {
 	case 3:
 		m.user.database.Focus()
 		m.user.database.CursorEnd()
+	case 4:
+		m.user.hosts.Focus()
+		m.user.hosts.CursorEnd()
 	}
 }
 
@@ -153,6 +161,16 @@ func (m Model) mongoUserDatabases() []string {
 	}
 	sort.Strings(choices[1:])
 	return choices
+}
+
+func (m Model) mongoProfileHosts() string {
+	p := m.profileForStatus()
+	if p.Source != nil {
+		if hosts := profile.MongoSelectorHosts(p.Source.Selector); len(hosts) > 0 {
+			return strings.Join(hosts, ",")
+		}
+	}
+	return p.Addr()
 }
 
 func (m *Model) cycleUserDatabase() {
@@ -220,6 +238,9 @@ func (m Model) handleUserFormKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case 3:
 		updated, _ := m.user.database.Update(msg)
 		m.user.database = updated
+	case 4:
+		updated, _ := m.user.hosts.Update(msg)
+		m.user.hosts = updated
 	}
 	return m, nil
 }
@@ -244,6 +265,7 @@ func (m Model) submitUserForm() (tea.Model, tea.Cmd) {
 		host = "%"
 	}
 	database := m.currentDatabase()
+	mongoHosts := ""
 	if m.engine() == domain.EngineMongoDB {
 		database = strings.TrimSpace(m.user.database.Value())
 		if database == "" {
@@ -252,9 +274,18 @@ func (m Model) submitUserForm() (tea.Model, tea.Cmd) {
 			m.focusUserField()
 			return m, nil
 		}
+		hosts, err := profile.ParseMongoHosts(m.user.hosts.Value())
+		if err != nil {
+			m.user.formErr = err.Error()
+			m.user.focus = 4
+			m.focusUserField()
+			return m, nil
+		}
+		mongoHosts = strings.Join(hosts, ",")
 	}
 	spec := domain.UserSpec{
-		Engine: m.engine(), Database: database, Name: name, Host: host, Password: password,
+		Engine: m.engine(), Database: database, Name: name, Host: host,
+		MongoHosts: mongoHosts, Password: password,
 	}
 	m.user.password.SetValue("")
 	return m.startUserMutation(userCreate, name, host, database, func(session *app.Session) (domain.UserResult, error) {
@@ -392,6 +423,10 @@ func (m Model) viewUserForm() string {
 			body = append(body, m.styles.Muted.Render(line))
 		}
 		for _, line := range wrapText("Space cycles: "+strings.Join(m.mongoUserDatabases(), ", "), inner) {
+			body = append(body, m.styles.Muted.Render(line))
+		}
+		body = append(body, m.inputLine("hosts", m.user.hosts.View(), m.user.focus == 4, inner))
+		for _, line := range wrapText("comma-separated host:port list for the credential URI", inner) {
 			body = append(body, m.styles.Muted.Render(line))
 		}
 	}

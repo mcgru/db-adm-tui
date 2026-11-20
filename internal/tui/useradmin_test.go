@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -120,6 +122,9 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	if m.user.database.Value() != "admin" {
 		t.Fatalf("default database = %q", m.user.database.Value())
 	}
+	if m.user.hosts.Value() != "mongo1:27017" {
+		t.Fatalf("default hosts = %q", m.user.hosts.Value())
+	}
 	choices := m.mongoUserDatabases()
 	if len(choices) < 2 || choices[0] != "admin" {
 		t.Fatalf("database choices = %+v", choices)
@@ -127,14 +132,17 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	view := StripANSI(m.viewModal())
 	if !strings.Contains(view, "database") || !strings.Contains(view, "admin") ||
 		!strings.Contains(view, "auth database: stores the MongoDB user") ||
-		!strings.Contains(view, "Space cycles: admin") {
-		t.Fatalf("editable auth database field missing:\n%s", view)
+		!strings.Contains(view, "Space cycles: admin") ||
+		!strings.Contains(view, "hosts") || !strings.Contains(view, "comma-separated host:port") {
+		t.Fatalf("editable auth fields missing:\n%s", view)
 	}
 	nameAt := strings.Index(view, "name")
 	passwordAt := strings.Index(view, "password")
 	databaseAt := strings.Index(view, "database")
-	if nameAt < 0 || passwordAt < 0 || databaseAt < 0 || !(nameAt < passwordAt && passwordAt < databaseAt) {
-		t.Fatalf("form order is not name, password, database:\n%s", view)
+	hostsAt := strings.Index(view, "hosts")
+	if nameAt < 0 || passwordAt < 0 || databaseAt < 0 || hostsAt < 0 ||
+		!(nameAt < passwordAt && passwordAt < databaseAt && databaseAt < hostsAt) {
+		t.Fatalf("form order is not name, password, database, hosts:\n%s", view)
 	}
 	m = typeString(t, m, "new_mongo")
 	m, _ = press(t, m, "tab")
@@ -151,9 +159,16 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	if m.user.database.Value() != target {
 		t.Fatalf("Space selected %q, want %q", m.user.database.Value(), target)
 	}
+	m, _ = press(t, m, "tab")
+	if m.user.focus != 4 {
+		t.Fatalf("focus after database = %d, want hosts", m.user.focus)
+	}
+	m.user.hosts.SetValue("mongo1:27017,mongo2:27018")
+	m.user.hosts.CursorEnd()
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
-	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != target {
+	if admin.calls != 1 || admin.lastSpec.Name != "new_mongo" || admin.lastSpec.Database != target ||
+		admin.lastSpec.MongoHosts != "mongo1:27017,mongo2:27018" {
 		t.Fatalf("admin = %+v", admin)
 	}
 	if m.modal != modalUserSave {
@@ -165,6 +180,14 @@ func TestMongoUserCreateCanTargetAnotherDatabase(t *testing.T) {
 	if m.user.saveProfile.Source == nil || m.user.saveProfile.Source.Kind != domain.SourceMongoFile ||
 		!strings.Contains(m.user.saveProfile.Source.Path, ".mongo.new_mongo-in-"+target) {
 		t.Fatalf("credential source = %+v", m.user.saveProfile.Source)
+	}
+	credentialPath := filepath.Join(e.home, ".mongo.new_mongo-in-"+target)
+	data, err := os.ReadFile(credentialPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "mongo1:27017,mongo2:27018") {
+		t.Fatalf("credential URI lost replica-set hosts:\n%s", data)
 	}
 }
 

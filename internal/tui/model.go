@@ -1293,6 +1293,7 @@ func (m *Model) resizeInputs() {
 	m.user.name.SetWidth(newWidth)
 	m.user.host.SetWidth(newWidth)
 	m.user.database.SetWidth(newWidth)
+	m.user.hosts.SetWidth(newWidth)
 	m.user.password.SetWidth(newWidth)
 	m.editLabel.SetWidth(newWidth)
 	m.editHost.SetWidth(newWidth)
