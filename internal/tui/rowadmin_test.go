@@ -280,6 +280,23 @@ func TestRowEditCellUpdatesOneRow(t *testing.T) {
 	if m.rowEdit.value != "row-001" {
 		t.Fatalf("current value = %q", m.rowEdit.value)
 	}
+	view := StripANSI(m.viewModal())
+	if !strings.Contains(view, "name [val] │ row-001") {
+		t.Fatalf("edit value layout missing:\n%s", view)
+	}
+	if !m.rowEdit.cursorOn {
+		t.Fatal("cursor should start visible")
+	}
+	next, _ := m.Update(rowEditTickMsg{gen: m.rowEditBlink})
+	m = next.(Model)
+	if m.rowEdit.cursorOn {
+		t.Fatal("tick did not hide the cursor")
+	}
+	next, _ = m.Update(rowEditTickMsg{gen: m.rowEditBlink})
+	m = next.(Model)
+	if !m.rowEdit.cursorOn {
+		t.Fatal("second tick did not show the cursor")
+	}
 	m.rowEdit.value = "updated"
 	m.rowEdit.valuePos = len([]rune("updated"))
 	m, cmd := press(t, m, "enter")

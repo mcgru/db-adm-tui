@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -54,6 +55,11 @@ type rowEditState struct {
 	kind     domain.CellKind
 	mongo    bool
 	err      string
+	cursorOn bool
+}
+
+type rowEditTickMsg struct {
+	gen uint64
 }
 
 type rowDeleteState struct {
@@ -213,9 +219,26 @@ func (m Model) startRowEdit() (tea.Model, tea.Cmd) {
 		rows:     rows,
 		kind:     cell.Kind,
 		mongo:    mongo,
+		cursorOn: true,
 	}
+	m.rowEditBlink++
+	gen := m.rowEditBlink
 	m.modal = modalRowEdit
-	return m, nil
+	return m, rowEditTickCmd(gen)
+}
+
+func rowEditTickCmd(gen uint64) tea.Cmd {
+	return tea.Tick(600*time.Millisecond, func(time.Time) tea.Msg {
+		return rowEditTickMsg{gen: gen}
+	})
+}
+
+func (m Model) handleRowEditTick(msg rowEditTickMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.rowEditBlink || m.modal != modalRowEdit {
+		return m, nil
+	}
+	m.rowEdit.cursorOn = !m.rowEdit.cursorOn
+	return m, rowEditTickCmd(msg.gen)
 }
 
 func (m Model) startRowRemove() (tea.Model, tea.Cmd) {
@@ -559,6 +582,7 @@ func (m Model) submitRowInsert() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleRowEditKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.rowEdit.cursorOn = true
 	key := msg.String()
 	if key == "ctrl+n" {
 		m.rowEdit.mode = rowNull
@@ -760,16 +784,15 @@ func (m Model) viewRowEdit() string {
 	}
 	body = append(body, m.styles.Muted.Render("update ")+m.styles.Text.Render(Truncate(target, inner)))
 	mode := "[" + rowModeLabel(m.rowEdit.mode) + "]"
-	value := m.rowEdit.value
+	value := m.rowEditInput()
 	switch m.rowEdit.mode {
 	case rowNull:
 		value = "NULL"
 	case rowDefault:
 		value = "DEFAULT"
-	default:
-		value = m.inlineInput(value, m.rowEdit.valuePos)
 	}
-	line := fmt.Sprintf("%-22s %-8s %s", Truncate(oneLine(m.rowEdit.label), 22), mode, value)
+	label := Truncate(oneLine(m.rowEdit.label), 20)
+	line := label + " " + mode + " │ " + value
 	body = append(body, m.styles.Select.Render(Pad(Truncate(line, inner), inner)))
 	if m.rowEdit.err != "" {
 		body = append(body, m.styles.Error.Render(Truncate(m.rowEdit.err, inner)))
@@ -777,6 +800,27 @@ func (m Model) viewRowEdit() string {
 	body = append(body, "", m.actionLine("Enter", "update", "Ctrl+N", "null"))
 	body = append(body, m.styles.Muted.Render("Ctrl+D default (SQL) · Esc cancel"))
 	return modalBox("update cell", body, width, m.styles)
+}
+
+// rowEditInput renders the prefilled cell value after a separator and marks the
+// insertion point with a solid block cursor. The block blinks while the editor
+// is open.
+func (m Model) rowEditInput() string {
+	value := filterText(m.rowEdit.value)
+	runes := []rune(value)
+	pos := m.rowEdit.valuePos
+	if pos < 0 {
+		pos = 0
+	}
+	if pos > len(runes) {
+		pos = len(runes)
+	}
+	before := m.styles.Text.Render(string(runes[:pos]))
+	after := m.styles.Text.Render(string(runes[pos:]))
+	if !m.rowEdit.cursorOn {
+		return before + after
+	}
+	return before + m.styles.Cursor.Render(" ") + after
 }
 
 func rowModeLabel(mode rowValueMode) string {

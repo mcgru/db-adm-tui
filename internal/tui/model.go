@@ -185,6 +185,7 @@ type Model struct {
 	rowInsert       rowInsertState
 	rowEdit         rowEditState
 	rowDelete       rowDeleteState
+	rowEditBlink    uint64
 	history         []string
 	historyIndex    int
 	historyDraft    string
@@ -391,6 +392,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleUserDone(msg)
 	case rowDoneMsg:
 		return m.handleRowDone(msg)
+	case rowEditTickMsg:
+		return m.handleRowEditTick(msg)
 	case matrixMembershipMsg:
 		return m.handleMatrixMembership(msg)
 	case matrixPrivilegesMsg:
