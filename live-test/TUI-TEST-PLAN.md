@@ -753,7 +753,10 @@ db.getSiblingDB("appdb").getUser("app_user").roles
 
 **Ожидаемо:**
 - grant/revoke отражаются в `usersInfo`;
-- built-in роли в колонках не ломают матрицу;
+- роли находятся в строках слева, пользователи — в столбцах;
+- пользователь `app_user@appdb` подписан с базой, пользователь из `admin` — без
+  `@admin`;
+- built-in роли в строках не ломают матрицу;
 - после drop роль исчезает.
 
 ### MX-06. Privileges PostgreSQL + `e`
@@ -767,7 +770,8 @@ db.getSiblingDB("appdb").getUser("app_user").roles
 2. `/` → `app_tmp_role`.
 3. Для ячейки `[db] appdb` нажмите `Space` — выдать `CONNECT`.
 4. Для ячейки `[schema] app` нажмите `Space` — выдать `USAGE`.
-5. Для ячейки `customers` нажмите `e`, выберите `SELECT`, `INSERT`,
+5. Для ячейки `customers` нажмите `e`. Нажмите `Ctrl+A` — выбрать все,
+   ещё раз `Ctrl+A` — снять все. Затем выберите `SELECT`, `INSERT`,
    `UPDATE`, нажмите `Enter`.
 6. Проверьте native:
 
@@ -791,6 +795,7 @@ FROM pg_namespace WHERE nspname = 'app';
 
 **Ожидаемо:**
 - `Space` меняет default `CONNECT`/`USAGE`/`SELECT`;
+- `Ctrl+A` в `e` выбирает все или снимает все;
 - `e` применяет только diff;
 - native ACL содержит только выбранные привилегии;
 - после очистки роль удаляется.
@@ -804,7 +809,8 @@ FROM pg_namespace WHERE nspname = 'app';
 **Шаги:**
 1. Панель `2`, фильтр `app_tmp_role`.
 2. `[db] appdb` + `Space` — выдать `SELECT`.
-3. `customers` + `e` — выбрать `SELECT`, `INSERT`; `Enter`.
+3. `customers` + `e` — `Ctrl+A` проверить выбор/снятие всех, затем выбрать
+   `SELECT`, `INSERT`; `Enter`.
 4. Проверьте:
 
 ```sql
@@ -822,6 +828,7 @@ WHERE GRANTEE LIKE '%app_tmp_role%';
 
 **Ожидаемо:**
 - hostless-роль корректно отображается и цитируется;
+- `Ctrl+A` в `e` выбирает все или снимает все;
 - diff из `e` применяется;
 - native-таблицы не содержат лишних грантов после очистки.
 
@@ -835,7 +842,8 @@ WHERE GRANTEE LIKE '%app_tmp_role%';
 1. Панель `2`, фильтр `app_tmp_role`.
 2. `[db] appdb` + `Space` — выдать `find`.
 3. `customers` + `Space` — выдать `find`.
-4. `customers` + `e` — добавить `insert`, `update`; `Enter`.
+4. `customers` + `e` — `Ctrl+A` проверить выбор/снятие всех, затем добавить
+   `insert`, `update`; `Enter`.
 5. Проверьте:
 
 ```js
@@ -848,6 +856,7 @@ db.getSiblingDB("appdb").getRole("app_tmp_role")
 
 **Ожидаемо:**
 - в `getRole` privileges видны точные resource/actions;
+- `Ctrl+A` в `e` выбирает все или снимает все;
 - `e` меняет только выбранные действия;
 - после очистки `app_tmp_role` удалена.
 
@@ -906,17 +915,21 @@ db.getSiblingDB("appdb").getRole("app_tmp_role")
 **Профиль:** `live-mongo-admin` в `r/w`.
 
 **Шаги:**
-1. Откройте панель `1` (`Principal × Role`).
+1. Откройте панель `1` (`Role × Principal`).
 2. Убедитесь, что built-in роли (`read@analytics`, `readWrite@appdb`, ...)
-   присутствуют как колонки.
-3. Откройте панель `2` (`Principal/Role × Object`).
-4. Убедитесь, что built-in роли не являются редактируемыми строками.
-5. Убедитесь, что custom roles (`app_writer`, `analytics_read`) присутствуют
+   присутствуют как строки слева, а пользователи — в столбцах.
+3. Перейдите на усечённый столбец: полное имя должно появиться после
+   `Tab switch`.
+4. Откройте панель `2` (`Principal/Role × Object`).
+5. Убедитесь, что built-in роли не являются редактируемыми строками.
+6. Убедитесь, что custom roles (`app_writer`, `analytics_read`) присутствуют
    как строки.
 
 **Ожидаемо:**
-- built-in роли в membership доступны как колонки и их можно выдавать
+- built-in роли в membership доступны как строки и их можно выдавать
   пользователям;
+- пользователи из `admin` подписаны без `@admin`, из других баз — с `@db`;
+- усечённое имя текущего столбца видно целиком после `Tab switch`;
 - в privileges встроенные роли не редактируются;
 - custom roles редактируются через `Space`/`e`.
 

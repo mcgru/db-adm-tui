@@ -316,13 +316,20 @@ Save <user>@<database> as a profile? Enter save · Esc skip
 
 ### Матрица membership
 
-Откройте матрицу через `Ctrl+X Ctrl+R`; `1` выбирает `Principal × Role`:
+Вкладки Details/Privileges для `Security`, `users`, `roles` и отдельных
+principal показывают подсказку `Ctrl+X Ctrl+R`. Откройте матрицу через
+`Ctrl+X Ctrl+R`; `1` выбирает `Role × Principal`:
 
 ```text
-principal      reporting   app_ro   app_role
-app_user          [ ]        [x]      [ ]
-app_operator      [x]        [ ]      [ ]
+role           app_user   app_operator
+reporting        [ ]          [x]
+app_ro           [x]          [ ]
 ```
+
+Роли остаются слева, где помещаются длинные имена и суффиксы баз; пользователи
+образуют компактные столбцы. Пользователи MongoDB в `admin` показываются без
+`@admin`, а MySQL-столбцы скрывают стандартный host `%`. Если имя текущего
+столбца усечено, полное имя показывается после `Tab switch` в заголовке.
 
 - `Space` выдаёт или отзывает выбранный membership.
 - `e` открывает детали membership; `Space`/`Enter` переключает ячейку.
@@ -330,7 +337,7 @@ app_operator      [x]        [ ]      [ ]
 - `Tab`/`Shift+Tab`, `1`/`2` переключают панели матрицы.
 - `Esc` закрывает матрицу или сначала очищает активный фильтр.
 
-В примере `Space` на `app_operator × reporting` выполняет native
+В примере `Space` на `reporting × app_operator` выполняет native
 `GRANT reporting TO app_operator`; повторное переключение — соответствующий
 `REVOKE`.
 
@@ -347,6 +354,7 @@ app_writer             —             —           INSERT+2   —
 
 - `Space` переключает default native privilege для ячейки.
 - `e` открывает полный native multi-select привилегий.
+- `Ctrl+A` выбирает все привилегии списка или снимает все, если выбраны все.
 - `Enter` применяет diff между текущей ячейкой и выбранным списком.
 - Встроенные роли MongoDB доступны только для чтения.
 

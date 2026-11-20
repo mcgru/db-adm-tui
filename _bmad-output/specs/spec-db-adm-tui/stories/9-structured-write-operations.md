@@ -178,16 +178,20 @@ count in history.
 The role UI is two normalized matrices, opened with the reserved
 `Ctrl+X Ctrl+R` chord in `r/w` mode:
 
-1. **Principal × Role** — membership. Rows are users and roles; columns are
-   roles; toggling a cell grants/revokes membership. `e` opens details such as
-   `WITH ADMIN OPTION` / `INHERIT` where the engine exposes them.
+1. **Role × Principal** — membership. Rows are native roles; columns are users
+   and roles; toggling a cell grants/revokes membership. Long role names and
+   database suffixes stay on the left. MongoDB users in `admin` show without
+   `@admin`; users in another database keep `@database`. MySQL user columns hide
+   the default `%` host. `e` opens details such as `WITH ADMIN OPTION` /
+   `INHERIT` where the engine exposes them.
 2. **Principal/role × Object** — privileges. Rows are roles, plus users for
    PostgreSQL/MySQL so direct grants stay visible; MongoDB has role rows only.
    Columns are database/schema/table/collection scopes from the current
    database/schema, with `/` filtering and horizontal scrolling. A cell shows
    the native privilege summary. `Space` toggles the default privilege for that
    target (`CONNECT`/`USAGE`/`SELECT` for SQL; `find` for MongoDB), while `e`
-   opens the full multi-select native privilege list.
+   opens the full multi-select native privilege list; `Ctrl+A` toggles every
+   listed privilege on or off.
 
 `Ctrl+X Ctrl+R` is blocked in `r/o` with the same mode-switch hint as other
 mutations. The current account must have native admin rights; the target user's
@@ -195,8 +199,10 @@ login/password is irrelevant. A `not permitted` result shows a reconnect hint
 (`Ctrl+D`), not an automatic account switch. A read-only “who can administer
 roles” helper is a later enhancement.
 
-**Switching matrices:** `Tab` / `Shift+Tab` move between `Principal × Role` and
-`Principal/Role × Object`, and `1` / `2` select either matrix directly. The
+**Switching matrices:** `Tab` / `Shift+Tab` move between `Role × Principal` and
+`Principal/Role × Object`, and `1` / `2` select either matrix directly. When a
+focused column label is truncated, the full name appears after `Tab switch`.
+The
 matrix header shows both names with the active one highlighted; the footer
 shows `Tab switch · 1 membership · 2 privileges · Space toggle · e details · / filter · Esc close`.
 Each matrix keeps its own cursor, scroll position, and filter while the other is

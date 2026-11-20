@@ -312,13 +312,20 @@ block the drop; the native error is shown unchanged.
 
 ### Membership matrix
 
-Open the matrix with `Ctrl+X Ctrl+R`; `1` selects `Principal × Role`:
+The `Security`, `users`, `roles`, and principal Details/Privileges views show
+the `Ctrl+X Ctrl+R` hint. Open the matrix with `Ctrl+X Ctrl+R`; `1` selects
+`Role × Principal`:
 
 ```text
-principal      reporting   app_ro   app_role
-app_user          [ ]        [x]      [ ]
-app_operator      [x]        [ ]      [ ]
+role           app_user   app_operator
+reporting        [ ]          [x]
+app_ro           [x]          [ ]
 ```
+
+Roles stay on the left, where long names and database suffixes fit; users form
+the compact columns. MongoDB users in `admin` show without `@admin`, and MySQL
+user columns hide the default `%` host. If a focused column is truncated, the
+full name is shown after `Tab switch` in the header.
 
 - `Space` grants or revokes the selected membership.
 - `e` opens membership details; `Space`/`Enter` toggles the cell.
@@ -326,7 +333,7 @@ app_operator      [x]        [ ]      [ ]
 - `Tab`/`Shift+Tab`, `1`/`2` switch matrix panels.
 - `Esc` closes the matrix, or clears an active filter prompt first.
 
-In this example, `Space` on `app_operator × reporting` writes a native
+In this example, `Space` on `reporting × app_operator` writes a native
 `GRANT reporting TO app_operator`; toggling it off writes the matching
 `REVOKE`.
 
@@ -343,6 +350,8 @@ app_writer             —             —           INSERT+2   —
 
 - `Space` toggles the default native privilege for that cell.
 - `e` opens the full native privilege multi-select.
+- `Ctrl+A` selects every listed privilege, or clears them all when everything is
+  already selected.
 - `Enter` applies the diff between the current cell and the selected list.
 - Built-in MongoDB roles are read-only.
 

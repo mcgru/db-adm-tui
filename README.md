@@ -94,10 +94,10 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.4.2.md`](docs/release-notes-v1.4.2.md) — latest
-  patch notes; [`v1.4.0`](docs/release-notes-v1.4.0.md) has the feature scope,
-  safety rules, and known limitations. Русская версия:
-  [`docs/release-notes-v1.4.2.ru.md`](docs/release-notes-v1.4.2.ru.md).
+- [`docs/release-notes-v1.5.0.md`](docs/release-notes-v1.5.0.md) — latest
+  matrix orientation and label notes; [`v1.4.0`](docs/release-notes-v1.4.0.md)
+  has the feature scope, safety rules, and known limitations. Русская версия:
+  [`docs/release-notes-v1.5.0.ru.md`](docs/release-notes-v1.5.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -185,26 +185,35 @@ automatically.
 
 The matrix has two panels:
 
-- `1 Principal × Role` — membership. Rows are users and roles, columns are
-  native roles, and a cell is `[x]` or `[ ]`.
+- `1 Role × Principal` — membership. Rows are native roles, columns are users
+  and roles, and a cell is `[x]` or `[ ]`. Long role names stay on the left;
+  usernames form the compact columns. MongoDB users in `admin` are shown
+  without `@admin`; users in another database keep `@database`. MySQL user
+  columns hide the default `%` host.
 - `2 Principal/Role × Object` — privileges. Rows are roles, plus users for
   PostgreSQL and MySQL so direct grants stay visible. Columns are the current
   database/schema scope and the tables, views, or collections loaded in the
   tree. MongoDB shows role rows only.
+
+The Details tab for `Security`, `users`, `roles`, and individual principals
+shows the `Ctrl+X Ctrl+R` matrix hint. The same hint appears on the Privileges
+tab.
 
 Use `Tab` or `Shift+Tab` to switch panels and `1`/`2` to select one directly.
 Each panel keeps its own cursor, scroll position, and filter. Arrows move the
 cell cursor, `Home`/`End` jump to an edge, `PageUp`/`PageDown` move a page,
 `Space` toggles the default access for the cell, `e` opens details, `/` filters
 rows and columns, and `Esc` closes the matrix (or clears an active filter
-prompt first).
+prompt first). If the focused column label is truncated to fit its cell, the
+full current name is shown after `Tab switch` in the matrix header.
 
 For a privilege cell, `Space` toggles the engine default (`CONNECT` on
 PostgreSQL databases, `USAGE` on schemas, `SELECT` on SQL tables, `find` on
-MongoDB). `e` opens the full native privilege list as a multi-select; apply the
-diff with `Enter`. Built-in MongoDB roles are read-only. Targets and privilege
-names are validated by the engine adapter, and unsupported combinations are
-rejected before execution.
+MongoDB). `e` opens the full native privilege list as a multi-select; `Ctrl+A`
+toggles every listed privilege on or off, and `Enter` applies the diff.
+Built-in MongoDB roles are read-only. Targets and privilege names are validated
+by the engine adapter, and unsupported combinations are rejected before
+execution.
 
 The current connection must hold native admin rights; the target user's login
 and password are never needed. A `not permitted` result is shown as the native
