@@ -353,9 +353,10 @@ truncated, the full name is shown after `Tab switch` in the header.
 - `Tab`/`Shift+Tab`, `1`/`2` switch matrix panels; the selected principal
   follows across panels and the target tries to keep the same screen position.
 - From the tree, `e` or `u` on a database/schema/table/collection opens this
-  panel; `r` opens the privilege panel when applicable. On a MongoDB database
-  or collection, `u` or `Ctrl+X Ctrl+R` also ensures the built-in `read@db` and
-  `readWrite@db` rows are present before opening this matrix.
+  panel; `r` opens the privilege panel when applicable. On `Security`, `users`,
+  or `roles`, `e` opens this panel and `r` opens privileges. On a MongoDB
+  database or collection, `u` or `Ctrl+X Ctrl+R` also ensures the built-in
+  `read@db` and `readWrite@db` rows are present before opening this matrix.
 - `Ctrl+Up`/`Ctrl+Down` jump to the start/end of the selected column;
   `Ctrl+Left`/`Ctrl+Right` jump to the start/end of the selected row.
 - `Esc` closes the matrix, or clears an active filter prompt first.
