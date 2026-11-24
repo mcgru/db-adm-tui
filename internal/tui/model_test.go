@@ -1133,7 +1133,7 @@ func TestConnectCancelClosesStaleSession(t *testing.T) {
 	}
 }
 
-func TestNewConnectionValidatesRequiredFields(t *testing.T) {
+func TestNewConnectionDefaultsAndValidation(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
@@ -1142,17 +1142,67 @@ func TestNewConnectionValidatesRequiredFields(t *testing.T) {
 		t.Fatalf("missing host: err=%q focus=%v", m.newErr, m.newFocus)
 	}
 	m.newHost.SetValue("db1")
-	m, _ = press(t, m, "enter")
-	if m.newErr != "enter a database" || m.newFocus != fieldDatabase {
-		t.Fatalf("missing database: err=%q focus=%v", m.newErr, m.newFocus)
+	p, _, err := m.newProfileFromForm()
+	if err != nil {
+		t.Fatal(err)
 	}
-	m.newDatabase.SetValue("orders")
-	m, _ = press(t, m, "enter")
-	if m.newErr != "enter a user" || m.newFocus != fieldUser {
-		t.Fatalf("missing user: err=%q focus=%v", m.newErr, m.newFocus)
+	if p.User != "postgres" || p.Database != "postgres" {
+		t.Fatalf("PostgreSQL defaults = user %q database %q", p.User, p.Database)
 	}
-	if m.modal != modalNew {
-		t.Fatal("form must stay open")
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, "n")
+	m, _ = press(t, m, "space") // MySQL
+	if m.newUser.Value() != "root" {
+		t.Fatalf("MySQL default user = %q", m.newUser.Value())
+	}
+	m, _ = press(t, m, "space") // MongoDB
+	if m.newUser.Value() != "" || m.newAuth.Value() != "admin" {
+		t.Fatalf("MongoDB defaults = user %q auth %q", m.newUser.Value(), m.newAuth.Value())
+	}
+	m, _ = press(t, m, "space") // PostgreSQL
+	if m.newUser.Value() != "postgres" || m.newDatabase.Value() != "postgres" {
+		t.Fatalf("PostgreSQL cycle defaults = user %q database %q", m.newUser.Value(), m.newDatabase.Value())
+	}
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, "n")
+	m.newUser.SetValue("alice")
+	m.newUserAuto = false
+	m, _ = press(t, m, "space")
+	if m.newUser.Value() != "alice" {
+		t.Fatalf("manual user was overwritten: %q", m.newUser.Value())
+	}
+	m, _ = press(t, m, "esc")
+
+	m, _ = press(t, m, "n")
+	m, _ = press(t, m, "space")
+	m, _ = press(t, m, "space") // MongoDB
+	m.newHost.SetValue("mongo1")
+	m.newDatabase.SetValue("appdb")
+	if _, focus, err := m.newProfileFromForm(); err == nil || focus != fieldUser {
+		t.Fatalf("MongoDB empty user = err=%v focus=%v", err, focus)
+	}
+}
+
+func TestNewConnectionUsesDefaultsOnConnect(t *testing.T) {
+	e := newTestEnv(t)
+	m := e.model(t)
+	m, _ = press(t, m, "n")
+	m.newHost.SetValue("db1")
+	m, cmd := press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if m.modal != modalNew || !m.newNeedsPassword {
+		t.Fatalf("expected password prompt: modal=%v needs=%v err=%q", m.modal, m.newNeedsPassword, m.newErr)
+	}
+	m = typeString(t, m, "secret")
+	m, cmd = press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if m.modal != modalSave {
+		t.Fatalf("modal = %v err=%q", m.modal, m.newErr)
+	}
+	if m.saveProfile.User != "postgres" || m.saveProfile.Database != "postgres" {
+		t.Fatalf("saved defaults = user %q database %q", m.saveProfile.User, m.saveProfile.Database)
 	}
 }
 

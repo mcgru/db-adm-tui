@@ -35,6 +35,9 @@ func (m *Model) openNewModal() {
 	m.newBusy = false
 	m.newErr = ""
 	m.newAllowNoTLS = false
+	m.newUserAuto = false
+	m.newDatabaseAuto = false
+	m.newAuthAuto = false
 	m.newLabel.SetValue("")
 	m.newHost.SetValue("")
 	m.newPort.SetValue(strconv.Itoa(m.newEngine.DefaultPort()))
@@ -57,6 +60,9 @@ func (m *Model) closeNewModal() {
 	m.newAuth.SetValue("")
 	m.newPassword.SetValue("")
 	m.newAllowNoTLS = false
+	m.newUserAuto = false
+	m.newDatabaseAuto = false
+	m.newAuthAuto = false
 	m.newNeedsPassword = false
 	m.newIgnoreSource = false
 	m.newBusy = false
@@ -146,8 +152,33 @@ func (m Model) nextNewField(delta int) newField {
 	return fields[pos]
 }
 
-// cycleNewEngine keeps the port at the engine default unless the user typed a
-// custom value, and resets fields that only apply to the previous engine.
+func defaultNewUser(engine domain.Engine) string {
+	switch engine {
+	case domain.EnginePostgreSQL:
+		return "postgres"
+	case domain.EngineMySQL:
+		return "root"
+	default:
+		return ""
+	}
+}
+
+func defaultNewDatabase(engine domain.Engine) string {
+	if engine == domain.EnginePostgreSQL {
+		return "postgres"
+	}
+	return ""
+}
+
+func defaultNewAuthDatabase(engine domain.Engine) string {
+	if engine == domain.EngineMongoDB {
+		return "admin"
+	}
+	return ""
+}
+
+// cycleNewEngine keeps user, database, auth database, and port at sensible
+// defaults unless the user typed a custom value.
 func (m *Model) cycleNewEngine() {
 	previous := m.newEngine
 	previousPort := strconv.Itoa(previous.DefaultPort())
@@ -163,13 +194,35 @@ func (m *Model) cycleNewEngine() {
 		m.newPort.SetValue(strconv.Itoa(m.newEngine.DefaultPort()))
 		m.newPort.CursorEnd()
 	}
-	if m.newEngine == domain.EngineMongoDB {
-		if strings.TrimSpace(m.newAuth.Value()) == "" {
-			m.newAuth.SetValue(strings.TrimSpace(m.newDatabase.Value()))
-			m.newAuth.CursorEnd()
+	if m.newUserAuto || strings.TrimSpace(m.newUser.Value()) == "" {
+		if user := defaultNewUser(m.newEngine); user != "" {
+			m.newUser.SetValue(user)
+			m.newUser.CursorEnd()
+			m.newUserAuto = true
+		} else if m.newUserAuto {
+			m.newUser.SetValue("")
+			m.newUserAuto = false
 		}
-	} else {
+	}
+	if m.newDatabaseAuto || strings.TrimSpace(m.newDatabase.Value()) == "" {
+		if database := defaultNewDatabase(m.newEngine); database != "" {
+			m.newDatabase.SetValue(database)
+			m.newDatabase.CursorEnd()
+			m.newDatabaseAuto = true
+		} else if m.newDatabaseAuto {
+			m.newDatabase.SetValue("")
+			m.newDatabaseAuto = false
+		}
+	}
+	if m.newEngine == domain.EngineMongoDB {
+		if m.newAuthAuto || strings.TrimSpace(m.newAuth.Value()) == "" {
+			m.newAuth.SetValue(defaultNewAuthDatabase(m.newEngine))
+			m.newAuth.CursorEnd()
+			m.newAuthAuto = true
+		}
+	} else if m.newAuthAuto {
 		m.newAuth.SetValue("")
+		m.newAuthAuto = false
 	}
 	m.newErr = ""
 	m.clearNewPassword()
@@ -195,6 +248,9 @@ func (m Model) newFieldDefinesConnection(field newField) bool {
 }
 
 func (m *Model) updateNewField(msg tea.Msg) bool {
+	beforeUser := m.newUser.Value()
+	beforeDatabase := m.newDatabase.Value()
+	beforeAuth := m.newAuth.Value()
 	switch m.newFocus {
 	case fieldLabel:
 		updated, _ := m.newLabel.Update(msg)
@@ -219,6 +275,15 @@ func (m *Model) updateNewField(msg tea.Msg) bool {
 		m.newPassword = updated
 	default:
 		return false
+	}
+	if m.newUser.Value() != beforeUser {
+		m.newUserAuto = false
+	}
+	if m.newDatabase.Value() != beforeDatabase {
+		m.newDatabaseAuto = false
+	}
+	if m.newAuth.Value() != beforeAuth {
+		m.newAuthAuto = false
 	}
 	return true
 }
@@ -288,15 +353,21 @@ func (m Model) newProfileFromForm() (domain.Profile, newField, error) {
 	}
 	database := strings.TrimSpace(m.newDatabase.Value())
 	if database == "" {
+		database = defaultNewDatabase(m.newEngine)
+	}
+	if database == "" {
 		return domain.Profile{}, fieldDatabase, domain.NewError(domain.KindConfig, "new-profile", "enter a database")
 	}
 	user := strings.TrimSpace(m.newUser.Value())
+	if user == "" {
+		user = defaultNewUser(m.newEngine)
+	}
 	if user == "" {
 		return domain.Profile{}, fieldUser, domain.NewError(domain.KindConfig, "new-profile", "enter a user")
 	}
 	auth := strings.TrimSpace(m.newAuth.Value())
 	if m.newEngine == domain.EngineMongoDB && auth == "" {
-		auth = database
+		auth = defaultNewAuthDatabase(m.newEngine)
 	}
 	p := domain.Profile{
 		Label:        strings.TrimSpace(m.newLabel.Value()),

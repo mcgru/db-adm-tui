@@ -249,6 +249,9 @@ type Model struct {
 	newAuth          textinput.Model
 	newPassword      textinput.Model
 	newAllowNoTLS    bool
+	newUserAuto      bool
+	newDatabaseAuto  bool
+	newAuthAuto      bool
 	newFocus         newField
 	newNeedsPassword bool
 	newIgnoreSource  bool
