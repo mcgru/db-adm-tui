@@ -230,18 +230,25 @@ type Model struct {
 	connectGen      uint64
 	cancel          context.CancelFunc
 
-	modal         modalKind
-	importEntries []app.ImportEntry
-	importStatus  []string
-	importSel     map[string]bool
-	importCursor  int
-	importOffset  int
-	importEmpty   bool
-	importNotice  string
+	modal            modalKind
+	importEntries    []app.ImportEntry
+	importStatus     []string
+	importSel        map[string]bool
+	importCursor     int
+	importOffset     int
+	importEmpty      bool
+	importNotice     string
+	importAllowNoTLS bool
 
-	newURI           textinput.Model
+	newEngine        domain.Engine
 	newLabel         textinput.Model
+	newHost          textinput.Model
+	newPort          textinput.Model
+	newDatabase      textinput.Model
+	newUser          textinput.Model
+	newAuth          textinput.Model
 	newPassword      textinput.Model
+	newAllowNoTLS    bool
 	newFocus         newField
 	newNeedsPassword bool
 	newIgnoreSource  bool
@@ -285,15 +292,20 @@ func New(svc *app.Service) Model {
 		importSel:       map[string]bool{},
 		tree:            newTree(),
 		data:            newDataState(),
-		newFocus:        fieldURI,
+		newFocus:        fieldEngine,
 		caseInsensitive: true,
 		rootLaunch:      os.Geteuid() == 0,
 		treeWidth:       layout.TreeWidth,
 		queryHeight:     layout.QueryLines,
 	}
-	m.newURI = newInput("postgres://user@host:5432/db", false)
-	m.newLabel = newInput("", false)
-	m.newPassword = newInput("", true)
+	m.newEngine = domain.EnginePostgreSQL
+	m.newLabel = newInput("label", false)
+	m.newHost = newInput("host", false)
+	m.newPort = newInput("5432", false)
+	m.newDatabase = newInput("database", false)
+	m.newUser = newInput("user", false)
+	m.newAuth = newMutedInput("auth.db")
+	m.newPassword = newInput("password", true)
 	m.passwordInput = newInput("", true)
 	m.query = newInput("", false)
 	m.statementInput = newInput("", false)
@@ -1323,8 +1335,12 @@ func (m *Model) resizeInputs() {
 	if passwordWidth < 10 {
 		passwordWidth = 10
 	}
-	m.newURI.SetWidth(newWidth)
 	m.newLabel.SetWidth(newWidth)
+	m.newHost.SetWidth(newWidth)
+	m.newPort.SetWidth(newWidth)
+	m.newDatabase.SetWidth(newWidth)
+	m.newUser.SetWidth(newWidth)
+	m.newAuth.SetWidth(newWidth)
 	m.newPassword.SetWidth(newWidth)
 	m.passwordInput.SetWidth(passwordWidth)
 	queryWidth := m.width - 12

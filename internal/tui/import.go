@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/mcgru/db-adm-tui/internal/app"
+	"github.com/mcgru/db-adm-tui/internal/domain"
 	"github.com/mcgru/db-adm-tui/internal/tui/keymap"
 )
 
@@ -26,12 +27,22 @@ func (m *Model) openImportModal() {
 	m.importCursor = 0
 	m.importOffset = 0
 	m.importNotice = ""
+	m.importAllowNoTLS = false
 	m.modal = modalImport
 	m.message = ""
 	m.messageLevel = levelNone
 }
 
+func (m *Model) toggleImportNoTLS() {
+	m.importAllowNoTLS = !m.importAllowNoTLS
+	m.importNotice = ""
+}
+
 func (m Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "е" {
+		m.toggleImportNoTLS()
+		return m, nil
+	}
 	action, ok := keymap.Lookup(msg.String())
 	if !ok {
 		return m, nil
@@ -40,6 +51,8 @@ func (m Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case keymap.Cancel:
 		m.modal = modalNone
 		m.importNotice = ""
+	case keymap.AllowNoTLS:
+		m.toggleImportNoTLS()
 	case keymap.Up:
 		m.importMove(-1)
 	case keymap.Down:
@@ -70,6 +83,9 @@ func (m Model) handleImportKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				continue
 			}
 			if m.importSel[entry.ID] {
+				if entry.Engine == domain.EnginePostgreSQL {
+					entry.AllowNoTLS = m.importAllowNoTLS
+				}
 				selected = append(selected, entry)
 			}
 		}
@@ -147,6 +163,9 @@ func (m Model) importVisibleRows() int {
 		statusLines += len(wrapText(status, inner))
 	}
 	rows := m.height - 8 - statusLines - 1
+	if m.importHasPostgres() {
+		rows--
+	}
 	if m.importNotice != "" {
 		rows--
 	}
@@ -154,6 +173,15 @@ func (m Model) importVisibleRows() int {
 		rows = 1
 	}
 	return rows
+}
+
+func (m Model) importHasPostgres() bool {
+	for _, entry := range m.importEntries {
+		if entry.Engine == domain.EnginePostgreSQL {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) currentImportEntry() (app.ImportEntry, bool) {
@@ -194,6 +222,15 @@ func (m Model) viewImport() string {
 
 	if m.importNotice != "" {
 		body = append(body, m.styles.Error.Render(Truncate(m.importNotice, inner)))
+	}
+	if m.importHasPostgres() {
+		check := "[ ]"
+		if m.importAllowNoTLS {
+			check = "[x]"
+		}
+		body = append(body, m.styles.Accent.Render("t")+" "+
+			m.styles.Muted.Render("no TLS ")+m.styles.Text.Render(check)+
+			m.styles.Muted.Render("  applies to imported PostgreSQL profiles"))
 	}
 	footer := strings.Join([]string{
 		m.styles.Accent.Render("Space") + " select",

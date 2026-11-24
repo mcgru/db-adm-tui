@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -13,37 +15,53 @@ import (
 type newField int
 
 const (
-	fieldURI newField = iota
+	fieldEngine newField = iota
 	fieldLabel
+	fieldHost
+	fieldPort
+	fieldDatabase
+	fieldUser
+	fieldAuth
+	fieldTLS
 	fieldPassword
 )
 
 func (m *Model) openNewModal() {
 	m.modal = modalNew
-	m.newFocus = fieldURI
+	m.newEngine = domain.EnginePostgreSQL
+	m.newFocus = fieldEngine
 	m.newNeedsPassword = false
 	m.newIgnoreSource = false
 	m.newBusy = false
 	m.newErr = ""
-	m.newURI.SetValue("")
+	m.newAllowNoTLS = false
 	m.newLabel.SetValue("")
+	m.newHost.SetValue("")
+	m.newPort.SetValue(strconv.Itoa(m.newEngine.DefaultPort()))
+	m.newDatabase.SetValue("")
+	m.newUser.SetValue("")
+	m.newAuth.SetValue("")
 	m.newPassword.SetValue("")
 	m.newPassword.Blur()
-	m.newLabel.Blur()
-	m.newURI.Focus()
-	m.newURI.CursorEnd()
+	m.focusNewField()
 }
 
 func (m *Model) closeNewModal() {
 	m.modal = modalNone
-	m.newURI.SetValue("")
+	m.newEngine = domain.EnginePostgreSQL
 	m.newLabel.SetValue("")
+	m.newHost.SetValue("")
+	m.newPort.SetValue("")
+	m.newDatabase.SetValue("")
+	m.newUser.SetValue("")
+	m.newAuth.SetValue("")
 	m.newPassword.SetValue("")
+	m.newAllowNoTLS = false
 	m.newNeedsPassword = false
 	m.newIgnoreSource = false
 	m.newBusy = false
 	m.newErr = ""
-	m.newFocus = fieldURI
+	m.newFocus = fieldEngine
 }
 
 func (m *Model) openPasswordModal(p domain.Profile) {
@@ -65,20 +83,144 @@ func (m *Model) closePasswordModal() {
 }
 
 func (m *Model) focusNewField() {
-	m.newURI.Blur()
 	m.newLabel.Blur()
+	m.newHost.Blur()
+	m.newPort.Blur()
+	m.newDatabase.Blur()
+	m.newUser.Blur()
+	m.newAuth.Blur()
 	m.newPassword.Blur()
 	switch m.newFocus {
 	case fieldLabel:
 		m.newLabel.Focus()
 		m.newLabel.CursorEnd()
+	case fieldHost:
+		m.newHost.Focus()
+		m.newHost.CursorEnd()
+	case fieldPort:
+		m.newPort.Focus()
+		m.newPort.CursorEnd()
+	case fieldDatabase:
+		m.newDatabase.Focus()
+		m.newDatabase.CursorEnd()
+	case fieldUser:
+		m.newUser.Focus()
+		m.newUser.CursorEnd()
+	case fieldAuth:
+		m.newAuth.Focus()
+		m.newAuth.CursorEnd()
 	case fieldPassword:
 		m.newPassword.Focus()
 		m.newPassword.CursorEnd()
-	default:
-		m.newURI.Focus()
-		m.newURI.CursorEnd()
+	case fieldEngine, fieldTLS:
+		// Selectors and checkboxes are not text fields.
 	}
+}
+
+func (m Model) newFields() []newField {
+	fields := []newField{
+		fieldEngine, fieldLabel, fieldHost, fieldPort, fieldDatabase, fieldUser,
+	}
+	if m.newEngine == domain.EngineMongoDB {
+		fields = append(fields, fieldAuth)
+	}
+	if m.newEngine == domain.EnginePostgreSQL {
+		fields = append(fields, fieldTLS)
+	}
+	if m.newNeedsPassword {
+		fields = append(fields, fieldPassword)
+	}
+	return fields
+}
+
+func (m Model) nextNewField(delta int) newField {
+	fields := m.newFields()
+	pos := 0
+	for i, f := range fields {
+		if f == m.newFocus {
+			pos = i
+			break
+		}
+	}
+	pos = (pos + delta + len(fields)) % len(fields)
+	return fields[pos]
+}
+
+// cycleNewEngine keeps the port at the engine default unless the user typed a
+// custom value, and resets fields that only apply to the previous engine.
+func (m *Model) cycleNewEngine() {
+	previous := m.newEngine
+	previousPort := strconv.Itoa(previous.DefaultPort())
+	switch previous {
+	case domain.EnginePostgreSQL:
+		m.newEngine = domain.EngineMySQL
+	case domain.EngineMySQL:
+		m.newEngine = domain.EngineMongoDB
+	default:
+		m.newEngine = domain.EnginePostgreSQL
+	}
+	if port := strings.TrimSpace(m.newPort.Value()); port == "" || port == previousPort {
+		m.newPort.SetValue(strconv.Itoa(m.newEngine.DefaultPort()))
+		m.newPort.CursorEnd()
+	}
+	if m.newEngine == domain.EngineMongoDB {
+		if strings.TrimSpace(m.newAuth.Value()) == "" {
+			m.newAuth.SetValue(strings.TrimSpace(m.newDatabase.Value()))
+			m.newAuth.CursorEnd()
+		}
+	} else {
+		m.newAuth.SetValue("")
+	}
+	m.newErr = ""
+	m.clearNewPassword()
+	m.focusNewField()
+}
+
+func (m *Model) clearNewPassword() {
+	if !m.newNeedsPassword && !m.newIgnoreSource && m.newPassword.Value() == "" {
+		return
+	}
+	m.newNeedsPassword = false
+	m.newIgnoreSource = false
+	m.newPassword.SetValue("")
+}
+
+func (m Model) newFieldDefinesConnection(field newField) bool {
+	switch field {
+	case fieldEngine, fieldHost, fieldPort, fieldDatabase, fieldUser, fieldAuth:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Model) updateNewField(msg tea.Msg) bool {
+	switch m.newFocus {
+	case fieldLabel:
+		updated, _ := m.newLabel.Update(msg)
+		m.newLabel = updated
+	case fieldHost:
+		updated, _ := m.newHost.Update(msg)
+		m.newHost = updated
+	case fieldPort:
+		updated, _ := m.newPort.Update(msg)
+		m.newPort = updated
+	case fieldDatabase:
+		updated, _ := m.newDatabase.Update(msg)
+		m.newDatabase = updated
+	case fieldUser:
+		updated, _ := m.newUser.Update(msg)
+		m.newUser = updated
+	case fieldAuth:
+		updated, _ := m.newAuth.Update(msg)
+		m.newAuth = updated
+	case fieldPassword:
+		updated, _ := m.newPassword.Update(msg)
+		m.newPassword = updated
+	default:
+		return false
+	}
+	return true
 }
 
 func (m Model) handleNewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -92,71 +234,101 @@ func (m Model) handleNewKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case keymap.Confirm:
 			return m.submitNew()
-		case keymap.Tab:
+		case keymap.Tab, keymap.Down:
 			if m.newBusy {
 				return m, nil
 			}
 			m.newFocus = m.nextNewField(1)
 			m.focusNewField()
 			return m, nil
-		case keymap.ShiftTab:
+		case keymap.ShiftTab, keymap.Up:
 			if m.newBusy {
 				return m, nil
 			}
 			m.newFocus = m.nextNewField(-1)
 			m.focusNewField()
 			return m, nil
+		case keymap.Space:
+			if m.newBusy {
+				return m, nil
+			}
+			switch m.newFocus {
+			case fieldEngine:
+				m.cycleNewEngine()
+				return m, nil
+			case fieldTLS:
+				m.newAllowNoTLS = !m.newAllowNoTLS
+				m.newErr = ""
+				return m, nil
+			}
 		}
 	}
 	if m.newBusy {
 		return m, nil
 	}
-	beforeURI := m.newURI.Value()
-	switch m.newFocus {
-	case fieldLabel:
-		updated, _ := m.newLabel.Update(msg)
-		m.newLabel = updated
-	case fieldPassword:
-		updated, _ := m.newPassword.Update(msg)
-		m.newPassword = updated
-	default:
-		updated, _ := m.newURI.Update(msg)
-		m.newURI = updated
+	beforeFocus := m.newFocus
+	if !m.updateNewField(msg) {
+		return m, nil
 	}
-	if m.newFocus == fieldURI && m.newURI.Value() != beforeURI && m.newNeedsPassword {
-		m.newNeedsPassword = false
-		m.newIgnoreSource = false
-		m.newPassword.SetValue("")
-		m.newErr = ""
-		m.focusNewField()
+	m.newErr = ""
+	if m.newFocus != fieldPassword && m.newFieldDefinesConnection(beforeFocus) {
+		m.clearNewPassword()
 	}
 	return m, nil
 }
 
-func (m Model) nextNewField(delta int) newField {
-	fields := []newField{fieldURI, fieldLabel}
-	if m.newNeedsPassword {
-		fields = append(fields, fieldPassword)
+func (m Model) newProfileFromForm() (domain.Profile, newField, error) {
+	host := strings.TrimSpace(m.newHost.Value())
+	if host == "" {
+		return domain.Profile{}, fieldHost, domain.NewError(domain.KindConfig, "new-profile", "enter a host")
 	}
-	pos := 0
-	for i, f := range fields {
-		if f == m.newFocus {
-			pos = i
-			break
-		}
+	port, err := strconv.Atoi(strings.TrimSpace(m.newPort.Value()))
+	if err != nil || port < 1 || port > 65535 {
+		return domain.Profile{}, fieldPort, domain.NewError(domain.KindConfig, "new-profile", "port must be a number between 1 and 65535")
 	}
-	pos = (pos + delta + len(fields)) % len(fields)
-	return fields[pos]
+	database := strings.TrimSpace(m.newDatabase.Value())
+	if database == "" {
+		return domain.Profile{}, fieldDatabase, domain.NewError(domain.KindConfig, "new-profile", "enter a database")
+	}
+	user := strings.TrimSpace(m.newUser.Value())
+	if user == "" {
+		return domain.Profile{}, fieldUser, domain.NewError(domain.KindConfig, "new-profile", "enter a user")
+	}
+	auth := strings.TrimSpace(m.newAuth.Value())
+	if m.newEngine == domain.EngineMongoDB && auth == "" {
+		auth = database
+	}
+	p := domain.Profile{
+		Label:        strings.TrimSpace(m.newLabel.Value()),
+		Engine:       m.newEngine,
+		Host:         host,
+		Port:         port,
+		Database:     database,
+		AuthDatabase: auth,
+		User:         user,
+		AllowNoTLS:   m.newEngine == domain.EnginePostgreSQL && m.newAllowNoTLS,
+	}.Normalize()
+	if err := p.Validate(); err != nil {
+		return domain.Profile{}, fieldEngine, err
+	}
+	return p, fieldEngine, nil
 }
 
 func (m Model) submitNew() (tea.Model, tea.Cmd) {
 	if m.newBusy {
 		return m, nil
 	}
-	p, err := m.svc.PrepareNewConnection(context.Background(), m.newURI.Value(), m.newLabel.Value())
+	p, focus, err := m.newProfileFromForm()
+	if err != nil {
+		m.newErr = oneLine(err.Error())
+		m.newFocus = focus
+		m.focusNewField()
+		return m, nil
+	}
+	p, err = m.svc.PrepareNewProfile(context.Background(), p)
 	if err != nil {
 		m.newErr = app.URIErrorMessage(err)
-		m.newFocus = fieldURI
+		m.newFocus = fieldHost
 		m.focusNewField()
 		return m, nil
 	}
@@ -255,27 +427,15 @@ func (m Model) handlePaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 		if m.newBusy {
 			return m, nil
 		}
-		if m.newFocus == fieldURI && m.newNeedsPassword {
-			m.newNeedsPassword = false
-			m.newIgnoreSource = false
-			m.newPassword.SetValue("")
-			m.newErr = ""
-			m.focusNewField()
+		beforeFocus := m.newFocus
+		if !m.updateNewField(msg) {
+			return m, nil
 		}
-		switch m.newFocus {
-		case fieldLabel:
-			updated, cmd := m.newLabel.Update(msg)
-			m.newLabel = updated
-			return m, cmd
-		case fieldPassword:
-			updated, cmd := m.newPassword.Update(msg)
-			m.newPassword = updated
-			return m, cmd
-		default:
-			updated, cmd := m.newURI.Update(msg)
-			m.newURI = updated
-			return m, cmd
+		m.newErr = ""
+		if m.newFocus != fieldPassword && m.newFieldDefinesConnection(beforeFocus) {
+			m.clearNewPassword()
 		}
+		return m, nil
 	case modalPassword:
 		if m.passwordBusy {
 			return m, nil
@@ -356,15 +516,41 @@ func (m Model) finishSave(save bool) (tea.Model, tea.Cmd) {
 func (m Model) viewNewConn() string {
 	width := modalWidth(m.width, 60)
 	inner := width - 4
-	var body []string
-	body = append(body, m.inputLine("uri", m.uriInputView(), m.newFocus == fieldURI, inner))
-	body = append(body, m.inputLine("label", m.newLabel.View(), m.newFocus == fieldLabel, inner))
+	databaseLabel := "database"
+	if m.newEngine == domain.EngineMongoDB {
+		databaseLabel = "home.db"
+	}
+	engineValue := m.newEngine.DisplayName()
+	if m.newFocus == fieldEngine {
+		engineValue += "  Space cycles"
+	}
+	body := []string{
+		m.inputLine("engine", engineValue, m.newFocus == fieldEngine, inner),
+		m.editInfoLine("source", "auto (file when matched, else prompt)", inner),
+		m.inputLine("label", m.newLabel.View(), m.newFocus == fieldLabel, inner),
+		m.inputLine("host", m.newHost.View(), m.newFocus == fieldHost, inner),
+		m.inputLine("port", m.newPort.View(), m.newFocus == fieldPort, inner),
+		m.inputLine(databaseLabel, m.newDatabase.View(), m.newFocus == fieldDatabase, inner),
+		m.inputLine("user", m.newUser.View(), m.newFocus == fieldUser, inner),
+	}
+	if m.newEngine == domain.EngineMongoDB {
+		body = append(body, m.mutedInputLine("auth.db", m.newAuth.View(), m.newFocus == fieldAuth, inner))
+	}
+	if m.newEngine == domain.EnginePostgreSQL {
+		body = append(body, m.toggleLine("no TLS", "TLS first, then plaintext", m.newAllowNoTLS, m.newFocus == fieldTLS))
+	}
 	if m.newNeedsPassword {
 		body = append(body, m.inputLine("password", m.newPassword.View(), m.newFocus == fieldPassword, inner))
 	}
 	body = append(body, "")
-	for _, line := range wrapText("No password in the URI. It is read from ~/.pgpass, ~/.mypass, or ~/.mongo.*, or prompted once.", inner) {
+	for _, line := range wrapText("No password is stored. A matching ~/.pgpass, ~/.mypass, or ~/.mongo.* source is used; otherwise a one-time password is prompted.", inner) {
 		body = append(body, m.styles.Muted.Render(line))
+	}
+	if m.newFocus == fieldEngine {
+		body = append(body, m.styles.Muted.Render("Space cycles engine · port follows the default unless edited"))
+	}
+	if m.newFocus == fieldTLS {
+		body = append(body, m.styles.Muted.Render("Space toggles the no-TLS fallback"))
 	}
 	if m.newErr != "" {
 		body = append(body, "")
@@ -377,6 +563,7 @@ func (m Model) viewNewConn() string {
 		body = append(body, m.styles.Info.Render("connecting…"))
 	}
 	body = append(body, "", m.actionLine("Enter", "connect", "Esc", "cancel"))
+	body = append(body, m.styles.Muted.Render("Tab/↑↓ move between fields"))
 	return modalBox("new connection", body, width, m.styles)
 }
 
@@ -402,14 +589,6 @@ func (m Model) viewSave() string {
 	}
 	body = append(body, "", m.actionLine("Enter", "save", "Esc", "skip"))
 	return modalBox("save profile", body, width, m.styles)
-}
-
-func (m Model) uriInputView() string {
-	value := m.newURI.Value()
-	if redacted := domain.Redact(value); redacted != value {
-		return m.styles.Text.Render(redacted) + m.styles.Accent.Render(" ")
-	}
-	return m.newURI.View()
 }
 
 func (m Model) inputLine(label, view string, focused bool, width int) string {

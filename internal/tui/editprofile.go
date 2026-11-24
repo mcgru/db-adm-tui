@@ -327,18 +327,22 @@ func (m Model) editInfoLine(label, value string, width int) string {
 }
 
 func (m Model) editToggleLine() string {
+	return m.toggleLine("no TLS", "TLS first, then plaintext", m.editAllowNoTLS, m.editFocus == editTLS)
+}
+
+func (m Model) toggleLine(label, note string, checked, focused bool) string {
 	const labelWidth = 9
 	marker := "  "
 	style := m.styles.Muted
-	if m.editFocus == editTLS {
+	if focused {
 		marker = "> "
 		style = m.styles.Accent
 	}
 	check := "[ ]"
-	if m.editAllowNoTLS {
+	if checked {
 		check = "[x]"
 	}
-	return style.Render(marker+Pad("no TLS", labelWidth)) + " " +
+	return style.Render(marker+Pad(label, labelWidth)) + " " +
 		m.styles.Text.Render(check) +
-		m.styles.Muted.Render("  TLS first, then plaintext")
+		m.styles.Muted.Render("  "+note)
 }

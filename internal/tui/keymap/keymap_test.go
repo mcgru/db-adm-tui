@@ -92,6 +92,7 @@ func TestSingleActions(t *testing.T) {
 		"к":          MatrixPrivileges,
 		"w":          TreeMode,
 		"ц":          TreeMode,
+		"t":          AllowNoTLS,
 		"insert":     InsertSelected,
 		"ctrl+left":  ResizeTreeLeft,
 		"ctrl+right": ResizeTreeRight,

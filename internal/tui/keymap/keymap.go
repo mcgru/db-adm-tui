@@ -32,6 +32,7 @@ const (
 	Disconnect       Action = "disconnect"
 	Search           Action = "search"
 	InsertSelected   Action = "insert-selected"
+	AllowNoTLS       Action = "allow-no-tls"
 	More             Action = "more"
 	ExactCount       Action = "exact-count"
 	ToggleMode       Action = "toggle-mode"
@@ -105,6 +106,7 @@ var single = map[string]Action{
 	"h": HomeDatabase, "р": HomeDatabase,
 	"r": MatrixPrivileges, "к": MatrixPrivileges,
 	"w": TreeMode, "ц": TreeMode,
+	"t": AllowNoTLS,
 
 	"ctrl+a":     FetchAll,
 	"delete":     DeleteProfile,

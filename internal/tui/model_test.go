@@ -62,9 +62,10 @@ func TestGoldenModalsAndTooSmall(t *testing.T) {
 	assertGolden(t, "edit-profile.golden", edit.View().Content)
 
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1.internal:5432/orders")
-	m, _ = press(t, m, "tab")
-	m = typeString(t, m, "prod-ro")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1.internal", Port: 5432,
+		Database: "orders", User: "app_ro", Label: "prod-ro",
+	})
 	assertGolden(t, "new-connection.golden", m.View().Content)
 	assertNoSecrets(t, m.View().Content, "pgsecret", "mongosecret")
 
@@ -81,9 +82,10 @@ func TestGoldenModalsAndTooSmall(t *testing.T) {
 
 	m, _ = press(t, m, "esc")
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db9.internal:5432/orders")
-	m, _ = press(t, m, "tab")
-	m = typeString(t, m, "prod-ro2")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db9.internal", Port: 5432,
+		Database: "orders", User: "app_ro", Label: "prod-ro2",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if m.modal != modalNew || !m.newNeedsPassword {
@@ -1131,34 +1133,44 @@ func TestConnectCancelClosesStaleSession(t *testing.T) {
 	}
 }
 
-func TestNewConnectionRejectsPasswordURI(t *testing.T) {
+func TestNewConnectionValidatesRequiredFields(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app:secret@db1:5432/orders")
 	m, _ = press(t, m, "enter")
-	if m.newErr != "Could not connect: the URI must not contain a password." {
-		t.Fatalf("error = %q", m.newErr)
+	if m.newErr != "enter a host" || m.newFocus != fieldHost {
+		t.Fatalf("missing host: err=%q focus=%v", m.newErr, m.newFocus)
+	}
+	m.newHost.SetValue("db1")
+	m, _ = press(t, m, "enter")
+	if m.newErr != "enter a database" || m.newFocus != fieldDatabase {
+		t.Fatalf("missing database: err=%q focus=%v", m.newErr, m.newFocus)
+	}
+	m.newDatabase.SetValue("orders")
+	m, _ = press(t, m, "enter")
+	if m.newErr != "enter a user" || m.newFocus != fieldUser {
+		t.Fatalf("missing user: err=%q focus=%v", m.newErr, m.newFocus)
 	}
 	if m.modal != modalNew {
 		t.Fatal("form must stay open")
 	}
-	assertNoSecrets(t, m.newErr, "secret")
-	assertNoSecrets(t, StripANSI(m.View().Content), "secret")
 }
 
 func TestNewConnectionPromptThenSave(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if m.modal != modalNew || !m.newNeedsPassword {
 		t.Fatalf("expected password field, modal=%v needs=%v err=%q", m.modal, m.newNeedsPassword, m.newErr)
 	}
-	if p, _ := m.svc.PrepareNewConnection(context.Background(), m.newURI.Value(), m.newLabel.Value()); p.Label != "orders@db1" {
-		t.Fatalf("default label = %q", p.Label)
+	if p, _, err := m.newProfileFromForm(); err != nil || p.Label != "orders@db1" {
+		t.Fatalf("default label = %q err=%v", p.Label, err)
 	}
 	m = typeString(t, m, "hunter2")
 	m, cmd = press(t, m, "enter")
@@ -1201,7 +1213,10 @@ func TestNewConnectionMatchedSourceNeedsNoPrompt(t *testing.T) {
 	e.write(t, ".pgpass", "db1:5432:orders:app_ro:pgsecret\n", 0o600)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if m.modal != modalSave {
@@ -1231,7 +1246,10 @@ func TestNewConnectionSkipSave(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	m = typeString(t, m, "hunter2")
@@ -1251,14 +1269,16 @@ func TestNewConnectionSkipSave(t *testing.T) {
 	}
 }
 
-func TestNewConnectionPasteIntoURI(t *testing.T) {
+func TestNewConnectionPasteIntoFocusedField(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	next, _ := m.Update(tea.PasteMsg{Content: "postgres://app_ro@db1:5432/orders"})
+	m, _ = press(t, m, "down") // label
+	m, _ = press(t, m, "down") // host
+	next, _ := m.Update(tea.PasteMsg{Content: "db1.internal"})
 	m = next.(Model)
-	if m.newURI.Value() != "postgres://app_ro@db1:5432/orders" {
-		t.Fatalf("pasted value = %q", m.newURI.Value())
+	if m.newHost.Value() != "db1.internal" {
+		t.Fatalf("pasted value = %q", m.newHost.Value())
 	}
 }
 
@@ -1372,7 +1392,10 @@ func TestNewConnectionCancelClosesSession(t *testing.T) {
 	e.write(t, ".pgpass", "db1:5432:orders:app_ro:pgsecret\n", 0o600)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	if !m.newBusy || cmd == nil {
 		t.Fatalf("new connection did not start: busy=%v cmd=%v", m.newBusy, cmd)
@@ -1493,7 +1516,10 @@ func TestNewConnectionAuthFailureAllowsPasswordOverride(t *testing.T) {
 	e.connector.err = &domain.Error{Kind: domain.KindAuth, Message: "authentication failed"}
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if !m.newNeedsPassword || !m.newIgnoreSource {
@@ -1512,22 +1538,28 @@ func TestNewConnectionAuthFailureAllowsPasswordOverride(t *testing.T) {
 	}
 }
 
-func TestNewConnectionURIEditClearsPassword(t *testing.T) {
+func TestNewConnectionFieldEditClearsPassword(t *testing.T) {
 	e := newTestEnv(t)
 	m := e.model(t)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	if !m.newNeedsPassword {
 		t.Fatalf("password field missing: %v %q", m.modal, m.newErr)
 	}
 	m = typeString(t, m, "secret")
-	m, _ = press(t, m, "shift+tab")
-	m, _ = press(t, m, "shift+tab")
+	m, _ = press(t, m, "up") // TLS
+	m, _ = press(t, m, "up") // user
+	if m.newFocus != fieldUser {
+		t.Fatalf("focus = %v, want user", m.newFocus)
+	}
 	m = typeString(t, m, "x")
 	if m.newNeedsPassword || m.newIgnoreSource || m.newPassword.Value() != "" {
-		t.Fatalf("URI edit kept the password: needs=%v ignore=%v value=%q", m.newNeedsPassword, m.newIgnoreSource, m.newPassword.Value())
+		t.Fatalf("field edit kept the password: needs=%v ignore=%v value=%q", m.newNeedsPassword, m.newIgnoreSource, m.newPassword.Value())
 	}
 }
 
@@ -1548,7 +1580,10 @@ func TestSaveFailureKeepsWorkspaceOpen(t *testing.T) {
 	svc := app.NewService(failingSaveStore{inner: e.store}, e.resolver, e.connector)
 	m := New(svc)
 	m, _ = press(t, m, "n")
-	m = typeString(t, m, "postgres://app_ro@db1:5432/orders")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro",
+	})
 	m, cmd := press(t, m, "enter")
 	m = runCmd(t, m, cmd)
 	m = typeString(t, m, "hunter2")
@@ -2305,5 +2340,134 @@ func TestReconnectResetsTabAndRestoresLastObject(t *testing.T) {
 	node, ok := m.tree.selectedNode()
 	if m.details.tab != 0 || !ok || node.Name != "invoices" || m.screen != ScreenWorkspace {
 		t.Fatalf("workspace not restored: tab=%d node=%+v ok=%v screen=%v", m.details.tab, node, ok, m.screen)
+	}
+}
+
+func TestNewConnectionFormArrowNavigationAndEngineCycle(t *testing.T) {
+	e := newTestEnv(t)
+	m := e.model(t)
+	m, _ = press(t, m, "n")
+	if m.newFocus != fieldEngine {
+		t.Fatalf("initial focus = %v, want engine", m.newFocus)
+	}
+	m, _ = press(t, m, "space")
+	if m.newEngine != domain.EngineMySQL || m.newPort.Value() != "3306" {
+		t.Fatalf("engine cycle = %s port=%q, want MySQL/3306", m.newEngine, m.newPort.Value())
+	}
+	m, _ = press(t, m, "space")
+	if m.newEngine != domain.EngineMongoDB || m.newPort.Value() != "27017" {
+		t.Fatalf("engine cycle = %s port=%q, want MongoDB/27017", m.newEngine, m.newPort.Value())
+	}
+	m, _ = press(t, m, "space")
+	if m.newEngine != domain.EnginePostgreSQL || m.newPort.Value() != "5432" {
+		t.Fatalf("engine cycle = %s port=%q, want PostgreSQL/5432", m.newEngine, m.newPort.Value())
+	}
+	want := []newField{
+		fieldLabel, fieldHost, fieldPort, fieldDatabase, fieldUser, fieldTLS,
+		fieldEngine,
+	}
+	for i, field := range want {
+		m, _ = press(t, m, "down")
+		if m.newFocus != field {
+			t.Fatalf("down %d focused %v, want %v", i+1, m.newFocus, field)
+		}
+	}
+	m, _ = press(t, m, "up")
+	if m.newFocus != fieldTLS {
+		t.Fatalf("up from engine focused %v, want TLS", m.newFocus)
+	}
+	m, _ = press(t, m, "space")
+	if !m.newAllowNoTLS {
+		t.Fatal("Space did not enable the no-TLS fallback")
+	}
+}
+
+func TestNewConnectionSavesNoTLS(t *testing.T) {
+	e := newTestEnv(t)
+	e.write(t, ".pgpass", "db1:5432:orders:app_ro:pgsecret\n", 0o600)
+	m := e.model(t)
+	m, _ = press(t, m, "n")
+	m = fillNewForm(t, m, domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro", AllowNoTLS: true,
+	})
+	m, cmd := press(t, m, "enter")
+	m = runCmd(t, m, cmd)
+	if m.modal != modalSave {
+		t.Fatalf("modal = %v err=%q", m.modal, m.newErr)
+	}
+	m, cmd = press(t, m, "enter")
+	m = settle(t, m, cmd)
+	views, err := e.svc.Profiles(context.Background())
+	if err != nil || len(views) != 1 {
+		t.Fatalf("profiles = %+v err=%v", views, err)
+	}
+	if !views[0].Profile.AllowNoTLS {
+		t.Fatalf("new profile did not save allow_no_tls: %+v", views[0].Profile)
+	}
+}
+
+func TestImportModalTLSAppliesToPostgres(t *testing.T) {
+	e := newTestEnv(t)
+	e.write(t, ".pgpass", "db1:5432:orders:app_ro:pgsecret\n", 0o600)
+	m := e.model(t)
+	m, _ = press(t, m, "i")
+	if m.modal != modalImport {
+		t.Fatalf("modal = %v", m.modal)
+	}
+	m, _ = press(t, m, "t")
+	if !m.importAllowNoTLS {
+		t.Fatal("t did not enable no TLS for import")
+	}
+	if view := StripANSI(m.View().Content); !strings.Contains(view, "no TLS [x]") {
+		t.Fatalf("import TLS state missing:\n%s", view)
+	}
+	m, _ = press(t, m, "enter")
+	views, err := e.svc.Profiles(context.Background())
+	if err != nil || len(views) != 1 {
+		t.Fatalf("profiles = %+v err=%v", views, err)
+	}
+	if !views[0].Profile.AllowNoTLS {
+		t.Fatalf("imported profile did not save allow_no_tls: %+v", views[0].Profile)
+	}
+}
+
+func TestEditProfileArrowNavigation(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m, _ = press(t, m, "e")
+	if m.modal != modalEdit || m.editFocus != editLabel {
+		t.Fatalf("modal=%v focus=%v", m.modal, m.editFocus)
+	}
+	want := []editField{
+		editHost, editPort, editDatabase, editUser, editTLS, editLabel,
+	}
+	for i, field := range want {
+		m, _ = press(t, m, "down")
+		if m.editFocus != field {
+			t.Fatalf("down %d focused %v, want %v", i+1, m.editFocus, field)
+		}
+	}
+	m, _ = press(t, m, "up")
+	if m.editFocus != editTLS {
+		t.Fatalf("up from label focused %v, want TLS", m.editFocus)
+	}
+}
+
+func TestNewConnectionMongoFieldsAndTLSConditional(t *testing.T) {
+	e := newTestEnv(t)
+	m := e.model(t)
+	m, _ = press(t, m, "n")
+	m, _ = press(t, m, "space") // MySQL
+	m, _ = press(t, m, "space") // MongoDB
+	view := StripANSI(m.View().Content)
+	for _, want := range []string{"engine    MongoDB", "home.db", "auth.db"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("MongoDB form missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "no TLS") {
+		t.Fatalf("MongoDB form shows a PostgreSQL TLS toggle:\n%s", view)
 	}
 }

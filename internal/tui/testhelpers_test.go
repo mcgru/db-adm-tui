@@ -1018,3 +1018,22 @@ func assertNoSecrets(t *testing.T, text string, secrets ...string) {
 		}
 	}
 }
+
+func fillNewForm(t *testing.T, m Model, p domain.Profile) Model {
+	t.Helper()
+	m.newEngine = p.Engine
+	m.newHost.SetValue(p.Host)
+	port := p.Port
+	if port == 0 {
+		port = p.Engine.DefaultPort()
+	}
+	m.newPort.SetValue(strconv.Itoa(port))
+	m.newDatabase.SetValue(p.Database)
+	m.newUser.SetValue(p.User)
+	m.newAuth.SetValue(p.AuthDatabase)
+	m.newLabel.SetValue(p.Label)
+	m.newAllowNoTLS = p.AllowNoTLS
+	m.newFocus = fieldLabel
+	m.focusNewField()
+	return m
+}

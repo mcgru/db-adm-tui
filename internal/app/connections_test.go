@@ -883,3 +883,48 @@ func TestConnectionErrorChainDoesNotRetainRawSecret(t *testing.T) {
 		t.Fatal("wrapped cause leaked secret")
 	}
 }
+
+func TestPrepareNewProfileMatchesSourceAndKeepsTLS(t *testing.T) {
+	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
+	p, err := f.svc.PrepareNewProfile(context.Background(), domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "db1", Port: 5432,
+		Database: "orders", User: "app_ro", AllowNoTLS: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.AllowNoTLS {
+		t.Fatal("PrepareNewProfile dropped allow_no_tls")
+	}
+	if p.Source == nil || p.Source.Kind != domain.SourcePgpass || p.Source.Path != "~/.pgpass" {
+		t.Fatalf("source = %+v", p.Source)
+	}
+	if _, err := f.svc.PrepareNewProfile(context.Background(), domain.Profile{
+		Engine: domain.EnginePostgreSQL, Host: "", Port: 5432,
+		Database: "orders", User: "app_ro",
+	}); err == nil {
+		t.Fatal("empty host was accepted")
+	}
+}
+
+func TestImportEntryAllowNoTLS(t *testing.T) {
+	f := newFixture(t)
+	f.write(t, ".pgpass", "db1:5432:orders:app_ro:secret\n", 0o600)
+	discovery := f.svc.Discover()
+	if len(discovery.Entries) != 1 {
+		t.Fatalf("entries = %+v", discovery.Entries)
+	}
+	entry := discovery.Entries[0]
+	entry.AllowNoTLS = true
+	if _, err := f.svc.Import(context.Background(), []ImportEntry{entry}); err != nil {
+		t.Fatal(err)
+	}
+	views, err := f.svc.Profiles(context.Background())
+	if err != nil || len(views) != 1 {
+		t.Fatalf("views = %+v err=%v", views, err)
+	}
+	if !views[0].Profile.AllowNoTLS {
+		t.Fatalf("imported profile = %+v", views[0].Profile)
+	}
+}

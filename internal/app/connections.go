@@ -60,6 +60,7 @@ type ImportEntry struct {
 	User       string
 	Selector   string
 	Label      string
+	AllowNoTLS bool
 	Warning    string
 	Error      string
 	Selectable bool
@@ -537,16 +538,26 @@ func (s *Service) SaveLastObject(ctx context.Context, p domain.Profile, ref *dom
 	return nil
 }
 
-// PrepareNewConnection parses a no-password URI and attaches a matching source
-// file when one exists. It does not connect.
-func (s *Service) PrepareNewConnection(ctx context.Context, raw, label string) (domain.Profile, error) {
+// PrepareNewProfile validates a hand-built connection profile and attaches a
+// matching credential source when one exists. It does not connect or save.
+func (s *Service) PrepareNewProfile(ctx context.Context, p domain.Profile) (domain.Profile, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.Profile{}, err
 	}
-	p, err := ParseURI(raw, label)
-	if err != nil {
-		return domain.Profile{}, err
+	p = p.Normalize()
+	if strings.TrimSpace(p.Host) == "" {
+		return domain.Profile{}, domain.NewError(domain.KindConfig, "new-profile", "the host is empty")
 	}
+	if strings.TrimSpace(p.Database) == "" {
+		return domain.Profile{}, domain.NewError(domain.KindConfig, "new-profile", "the database is empty")
+	}
+	if strings.TrimSpace(p.User) == "" {
+		return domain.Profile{}, domain.NewError(domain.KindConfig, "new-profile", "the user is empty")
+	}
+	if err := p.Validate(); err != nil {
+		return domain.Profile{}, domain.NewError(domain.KindConfig, "new-profile", err.Error())
+	}
+	p.Source = nil
 	switch p.Engine {
 	case domain.EnginePostgreSQL:
 		if source, _, ok := s.resolver.MatchPostgres(p.Host, p.Port, p.Database, p.User); ok {
@@ -562,6 +573,19 @@ func (s *Service) PrepareNewConnection(ctx context.Context, raw, label string) (
 		}
 	}
 	return p, nil
+}
+
+// PrepareNewConnection parses a no-password URI and attaches a matching source
+// file when one exists. It does not connect.
+func (s *Service) PrepareNewConnection(ctx context.Context, raw, label string) (domain.Profile, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Profile{}, err
+	}
+	p, err := ParseURI(raw, label)
+	if err != nil {
+		return domain.Profile{}, err
+	}
+	return s.PrepareNewProfile(ctx, p)
 }
 
 // Connect resolves the password from the profile's source (re-reading the
@@ -670,13 +694,14 @@ func (s *Service) entryProfile(entry ImportEntry) domain.Profile {
 		source = &domain.Source{Kind: domain.SourceMongoFile, Path: entry.Source, Selector: entry.Selector}
 	}
 	return domain.Profile{
-		Label:    entry.Label,
-		Engine:   entry.Engine,
-		Host:     entry.Host,
-		Port:     entry.Port,
-		Database: entry.Database,
-		User:     entry.User,
-		Source:   source,
+		Label:      entry.Label,
+		Engine:     entry.Engine,
+		Host:       entry.Host,
+		Port:       entry.Port,
+		Database:   entry.Database,
+		User:       entry.User,
+		AllowNoTLS: entry.AllowNoTLS,
+		Source:     source,
 	}.Normalize()
 }
 
