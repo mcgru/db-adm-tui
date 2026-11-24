@@ -224,13 +224,13 @@ func (m Model) viewImport() string {
 		body = append(body, m.styles.Error.Render(Truncate(m.importNotice, inner)))
 	}
 	if m.importHasPostgres() {
-		check := "[ ]"
+		check := "[x]"
 		if m.importAllowNoTLS {
-			check = "[x]"
+			check = "[ ]"
 		}
 		body = append(body, m.styles.Accent.Render("t")+" "+
-			m.styles.Muted.Render("no TLS ")+m.styles.Text.Render(check)+
-			m.styles.Muted.Render("  applies to imported PostgreSQL profiles"))
+			m.styles.Muted.Render("TLS ")+m.styles.Text.Render(check)+
+			m.styles.Muted.Render("  allow plaintext for imported PostgreSQL"))
 	}
 	footer := strings.Join([]string{
 		m.styles.Accent.Render("Space") + " select",

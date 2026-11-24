@@ -3,8 +3,7 @@ db-adm-tui · choose a connection                                      3 profile
 label          engine     host                user        source         last   
 analytics      MongoDB    mongo1:27017        analyst     ~/.mongo.anal… 01-02  
 billing        MySQL      mysql1:3306         billing_ro  prompt         —      
-prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02  
-          ┌ edit profile ────────────────────────────────────────────┐          
+prod-ro   ┌ edit profile ────────────────────────────────────────────┐   01-02  
           │   engine    PostgreSQL                                   │          
           │   source    ~/.pgpass                                    │          
           │ > label     prod-ro                                      │          
@@ -12,7 +11,8 @@ prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02
           │   port      5432                                         │          
           │   database  orders                                       │          
           │   user      app_ro                                       │          
-          │   no TLS    [ ]  TLS first, then plaintext               │          
+          │   TLS       [x]  uncheck to allow plaintext fallback     │          
+          │ Space toggles the plaintext fallback                     │          
           │                                                          │          
           │ Enter save · Esc cancel                                  │          
           └──────────────────────────────────────────────────────────┘          

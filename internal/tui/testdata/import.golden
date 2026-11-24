@@ -9,7 +9,7 @@ prod-ro        PostgreSQL db1.internal:5432   app_ro      ~/.pgpass      01-02
   ┌ import 2 ────────────────────────────────────────────────────────────────┐  
   │ ☑ ~/.pgpass          app_ro@db1.internal:5432/orders          PostgreSQL │  
   │ ☐ ~/.mongo.analyst   analyst@mongo1:27017/analytics           MongoDB    │  
-  │ t no TLS [ ]  applies to imported PostgreSQL profiles                    │  
+  │ t TLS [x]  allow plaintext for imported PostgreSQL                       │  
   │                                                                          │  
   │ Space select · Enter import · Esc cancel                                 │  
   └──────────────────────────────────────────────────────────────────────────┘  

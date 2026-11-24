@@ -537,7 +537,7 @@ func (m Model) viewNewConn() string {
 		body = append(body, m.mutedInputLine("auth.db", m.newAuth.View(), m.newFocus == fieldAuth, inner))
 	}
 	if m.newEngine == domain.EnginePostgreSQL {
-		body = append(body, m.toggleLine("no TLS", "TLS first, then plaintext", m.newAllowNoTLS, m.newFocus == fieldTLS))
+		body = append(body, m.toggleLine("TLS", tlsToggleNote(m.newAllowNoTLS), !m.newAllowNoTLS, m.newFocus == fieldTLS))
 	}
 	if m.newNeedsPassword {
 		body = append(body, m.inputLine("password", m.newPassword.View(), m.newFocus == fieldPassword, inner))
@@ -550,7 +550,7 @@ func (m Model) viewNewConn() string {
 		body = append(body, m.styles.Muted.Render("Space cycles engine · port follows the default unless edited"))
 	}
 	if m.newFocus == fieldTLS {
-		body = append(body, m.styles.Muted.Render("Space toggles the no-TLS fallback"))
+		body = append(body, m.styles.Muted.Render("Space toggles the plaintext fallback"))
 	}
 	if m.newErr != "" {
 		body = append(body, "")

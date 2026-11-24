@@ -2419,7 +2419,7 @@ func TestImportModalTLSAppliesToPostgres(t *testing.T) {
 	if !m.importAllowNoTLS {
 		t.Fatal("t did not enable no TLS for import")
 	}
-	if view := StripANSI(m.View().Content); !strings.Contains(view, "no TLS [x]") {
+	if view := StripANSI(m.View().Content); !strings.Contains(view, "TLS [ ]") {
 		t.Fatalf("import TLS state missing:\n%s", view)
 	}
 	m, _ = press(t, m, "enter")
@@ -2469,5 +2469,34 @@ func TestNewConnectionMongoFieldsAndTLSConditional(t *testing.T) {
 	}
 	if strings.Contains(view, "no TLS") {
 		t.Fatalf("MongoDB form shows a PostgreSQL TLS toggle:\n%s", view)
+	}
+}
+
+func TestEditProfileTLSHintDoesNotJumpModal(t *testing.T) {
+	e := newTestEnv(t)
+	seedStandard(t, e)
+	m := selectLabel(t, e.model(t), "prod-ro")
+	m, _ = press(t, m, "e")
+	view := StripANSI(m.View().Content)
+	if !strings.Contains(view, "Space toggles the plaintext fallback") {
+		t.Fatalf("TLS hint missing before focus:\n%s", view)
+	}
+	top := func() int {
+		for i, line := range strings.Split(StripANSI(m.View().Content), "\n") {
+			if strings.Contains(line, "┌ edit profile") {
+				return i
+			}
+		}
+		return -1
+	}
+	before := top()
+	for i := 0; i < 5; i++ {
+		m, _ = press(t, m, "down")
+	}
+	if m.editFocus != editTLS {
+		t.Fatalf("focus = %v, want TLS", m.editFocus)
+	}
+	if after := top(); after != before {
+		t.Fatalf("edit modal jumped: top %d -> %d", before, after)
 	}
 }

@@ -9,7 +9,7 @@ prod-ro   │   source    auto (file when matched, else prompt)        │   01-
           │   port      5432                                         │          
           │   database  orders                                       │          
           │   user      app_ro                                       │          
-          │   no TLS    [ ]  TLS first, then plaintext               │          
+          │   TLS       [x]  uncheck to allow plaintext fallback     │          
           │                                                          │          
           │ No password is stored. A matching ~/.pgpass, ~/.mypass,  │          
           │ or ~/.mongo.* source is used; otherwise a one-time       │          

@@ -288,15 +288,13 @@ func (m Model) viewEdit() string {
 	}
 	if m.editProfile.Engine == domain.EnginePostgreSQL {
 		body = append(body, m.editToggleLine())
+		body = append(body, m.styles.Muted.Render("Space toggles the plaintext fallback"))
 	}
 	if m.editErr != "" {
 		body = append(body, "")
 		for _, line := range wrapText(m.editErr, inner) {
 			body = append(body, m.styles.Error.Render(line))
 		}
-	}
-	if m.editFocus == editTLS {
-		body = append(body, m.styles.Muted.Render("Space toggles the no-TLS fallback"))
 	}
 	body = append(body, "", m.actionLine("Enter", "save", "Esc", "cancel"))
 	return modalBox("edit profile", body, width, m.styles)
@@ -327,7 +325,14 @@ func (m Model) editInfoLine(label, value string, width int) string {
 }
 
 func (m Model) editToggleLine() string {
-	return m.toggleLine("no TLS", "TLS first, then plaintext", m.editAllowNoTLS, m.editFocus == editTLS)
+	return m.toggleLine("TLS", tlsToggleNote(m.editAllowNoTLS), !m.editAllowNoTLS, m.editFocus == editTLS)
+}
+
+func tlsToggleNote(allowNoTLS bool) string {
+	if allowNoTLS {
+		return "TLS first, then plaintext"
+	}
+	return "uncheck to allow plaintext fallback"
 }
 
 func (m Model) toggleLine(label, note string, checked, focused bool) string {
