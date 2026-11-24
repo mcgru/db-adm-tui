@@ -75,6 +75,7 @@ Workspace chords start with `Ctrl+x`; the final chord is listed in the section w
 | `PgUp` / `PgDn` | Page the import list |
 | `Home` / `End` | Jump to the first or last import row |
 | `Space` | Select or deselect an import row |
+| `t` | Toggle the no-TLS fallback for imported PostgreSQL profiles |
 | `Enter` | Import the selected rows |
 
 #### Workspace
@@ -190,8 +191,10 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.10.3.md`](docs/release-notes-v1.10.3.md) — latest
-  README keyboard-reference restructuring;
+- [`docs/release-notes-v1.11.0.md`](docs/release-notes-v1.11.0.md) — latest
+  profile creation/import TLS notes;
+  [`v1.10.3`](docs/release-notes-v1.10.3.md) README keyboard-reference
+  restructuring,
   [`v1.10.2`](docs/release-notes-v1.10.2.md) principal-focused matrix shortcuts,
   [`v1.10.1`](docs/release-notes-v1.10.1.md) security-group matrix shortcuts,
   [`v1.10.0`](docs/release-notes-v1.10.0.md) tree matrix shortcuts, search
@@ -200,7 +203,7 @@ Latin and Cyrillic physical key positions resolve to the same actions
   [`v1.8.1`](docs/release-notes-v1.8.1.md) matrix scope,
   [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.10.3.ru.md`](docs/release-notes-v1.10.3.ru.md).
+  [`docs/release-notes-v1.11.0.ru.md`](docs/release-notes-v1.11.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -686,7 +689,9 @@ Press `e` at the picker to edit the selected profile. Label, host, port,
 database, and user are editable; the engine and credential source stay fixed.
 For MongoDB the database field is `home.db`, followed by a muted `auth.db`
 field; `home.db` is the URI/default database and `auth.db` is `authSource`.
-For PostgreSQL the form also toggles `allow_no_tls`. Changing a connection field
+For PostgreSQL the form also toggles `allow_no_tls`; the new-connection form
+exposes the same toggle, and the import window can apply it to selected
+PostgreSQL entries with `t`. Changing a connection field
 changes the profile key, but the old entry is replaced instead of orphaned, and
 `created_at` / `last_used` survive the edit. When the connection tuple changes,
 the matching `.pgpass`/`.mypass` line is moved to the new tuple with the same
@@ -730,6 +735,10 @@ The parser follows psql semantics:
   lines.
 - A missing file is an empty state, not an error.
 
+Use `t` in the import window to enable the no-TLS fallback for every selected
+PostgreSQL profile in that import. The toggle is shown as `no TLS [ ]`/`[x]`
+and is ignored for MySQL/MariaDB and MongoDB entries.
+
 ### MySQL/MariaDB (`~/.mypass`)
 
 The format is the same as `.pgpass`:
@@ -759,28 +768,40 @@ selector preserves non-secret options such as `authSource`, `replicaSet`, and
 
 ## New connection
 
-`n` opens a centered form with a no-password URI and an optional label:
+`n` opens a profile form with the same layout and field navigation as the edit
+window:
 
 ```text
-postgres://user@host[:port]/db
-mysql://user@host[:port]/db
-mongodb://user@host[:port]/db
+engine    PostgreSQL
+source    auto (file when matched, else prompt)
+label     prod-ro
+host      db1.internal
+port      5432
+database  orders
+user      app_ro
+no TLS    [ ]  TLS first, then plaintext
 ```
 
-The database path is required, the engine's default port is used when omitted,
-and an empty label defaults to `database@host`. A URI containing
-`user:pass@` or `password=`/`pwd=` is rejected inline with
-`Could not connect: the URI must not contain a password.` Query options are not
-accepted by the new-connection form in this story; put TLS/auth options in the
-selected `~/.mongo.*` source file instead.
+- `engine` is selected with `Space`; it cycles PostgreSQL, MySQL/MariaDB, and
+  MongoDB. The port follows the engine default unless it was edited.
+- `host`, `database`, and `user` are required. An empty label defaults to
+  `database@host`.
+- For MongoDB, `database` becomes `home.db` and the muted `auth.db` field sets
+  `authSource`; an empty `auth.db` uses `home.db`.
+- For PostgreSQL, `Space` on `no TLS` enables the plaintext fallback after a
+  failed TLS attempt.
+- `Tab`/`Shift+Tab` and `Up`/`Down` move between fields; `Enter` connects.
 
 On submit, the tool looks for a matching `~/.pgpass`, `~/.mypass`, or
 `~/.mongo.*` source. If one exists, its password is used; otherwise the form
-reveals a masked one-time password field. If a matched source password is rejected, the form
-offers a one-time password instead and the saved profile becomes prompt-based.
-On success the picker offers
+reveals a masked one-time password field. If a matched source password is
+rejected, the form offers a one-time password instead and the saved profile
+becomes prompt-based. On success the picker offers
 `Save <label> as a profile? Enter save · Esc skip`. Saving stores the
 non-secret fields and any matched source pointer, never the password.
+
+New-connection fields do not accept URI query options. Put TLS/auth choices in
+the form fields or in the selected `~/.mongo.*` source file instead.
 
 ## Password behavior
 

@@ -105,8 +105,8 @@ ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
 #### PostgreSQL
 
 Стенд PostgreSQL работает без TLS. Новое подключение TUI по умолчанию пытается
-TLS, поэтому профили PostgreSQL удобнее импортировать из `PGPASSFILE`, а затем
-включить в каждом профиле `no TLS`.
+TLS, поэтому при импорте включите `no TLS` прямо в окне импорта: профили
+PostgreSQL создадутся с `allow_no_tls: true`.
 
 Создайте локальный файл `$HOME/.config/db-adm-tui/live-test.pgpass`:
 
@@ -129,16 +129,12 @@ PGPASSFILE="$HOME/.config/db-adm-tui/live-test.pgpass" ./bin/db-adm-tui
 ```text
 i                 импорт из PGPASSFILE
 Space             выбрать нужные строки
+t                 включить [x] no TLS для импортируемых PostgreSQL
 Enter             импортировать
-e                 открыть профиль
-Tab x5            дойти до переключателя "no TLS"
-Space             включить [x] no TLS
-Enter             сохранить
 ```
 
-Повторите `e` → `no TLS` для всех четырёх PostgreSQL-профилей. После этого
-подключение к `127.0.0.1:5432` будет проходить в plaintext. Если auto-label
-отличается от таблицы ниже, переименуйте профиль через `e`.
+После импорта подключение к `127.0.0.1:5432` будет проходить в plaintext. Если
+auto-label отличается от таблицы ниже, переименуйте профиль через `e`.
 
 `PGPASSFILE` указывает на постоянный файл в конфиге, поэтому профили смогут
 переподключаться без повторного экспорта. Если файл удалён, подключение
@@ -198,8 +194,8 @@ mongodb://analyst@127.0.0.1:57017/analytics
 | `live-mongo-analyst` | MongoDB | `n` | `analytics` | `analyst` | `mongo_analyst_test_password` |
 
 Если профили PostgreSQL созданы вручную через `n` и подключение падает с
-`tls error: server refused TLS connection`, удалите такой профиль и
-используйте импорт + `no TLS`, как описано выше.
+`tls error: server refused TLS connection`, удалите такой профиль и создайте
+заново с включённым `no TLS` или импортируйте с `t no TLS`.
 
 ## 2. Сводка тестов
 
