@@ -105,7 +105,7 @@ ssh jojo@uuu 'cd ~/live-test && ./install-home.sh'
 #### PostgreSQL
 
 Стенд PostgreSQL работает без TLS. Новое подключение TUI по умолчанию пытается
-TLS, поэтому при импорте включите `no TLS` прямо в окне импорта: профили
+TLS, поэтому при импорте снимите `[x] TLS` прямо в окне импорта: профили
 PostgreSQL создадутся с `allow_no_tls: true`.
 
 Создайте локальный файл `$HOME/.config/db-adm-tui/live-test.pgpass`:
@@ -129,7 +129,7 @@ PGPASSFILE="$HOME/.config/db-adm-tui/live-test.pgpass" ./bin/db-adm-tui
 ```text
 i                 импорт из PGPASSFILE
 Space             выбрать нужные строки
-t                 включить [x] no TLS для импортируемых PostgreSQL
+t                 снять [x] TLS для импортируемых PostgreSQL
 Enter             импортировать
 ```
 
@@ -195,7 +195,7 @@ mongodb://analyst@127.0.0.1:57017/analytics
 
 Если профили PostgreSQL созданы вручную через `n` и подключение падает с
 `tls error: server refused TLS connection`, удалите такой профиль и создайте
-заново с включённым `no TLS` или импортируйте с `t no TLS`.
+заново со снятым `[x] TLS` или импортируйте с `t TLS [ ]`.
 
 ## 2. Сводка тестов
 

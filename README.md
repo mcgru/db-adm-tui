@@ -75,7 +75,7 @@ Workspace chords start with `Ctrl+x`; the final chord is listed in the section w
 | `PgUp` / `PgDn` | Page the import list |
 | `Home` / `End` | Jump to the first or last import row |
 | `Space` | Select or deselect an import row |
-| `t` | Toggle the no-TLS fallback for imported PostgreSQL profiles |
+| `t` | Toggle the plaintext fallback for imported PostgreSQL profiles |
 | `Enter` | Import the selected rows |
 
 #### Workspace
@@ -191,8 +191,9 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.11.0.md`](docs/release-notes-v1.11.0.md) — latest
-  profile creation/import TLS notes;
+- [`docs/release-notes-v1.11.1.md`](docs/release-notes-v1.11.1.md) — latest
+  profile editor height fix;
+  [`v1.11.0`](docs/release-notes-v1.11.0.md) profile creation/import TLS notes,
   [`v1.10.3`](docs/release-notes-v1.10.3.md) README keyboard-reference
   restructuring,
   [`v1.10.2`](docs/release-notes-v1.10.2.md) principal-focused matrix shortcuts,
@@ -203,7 +204,7 @@ Latin and Cyrillic physical key positions resolve to the same actions
   [`v1.8.1`](docs/release-notes-v1.8.1.md) matrix scope,
   [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.11.0.ru.md`](docs/release-notes-v1.11.0.ru.md).
+  [`docs/release-notes-v1.11.1.ru.md`](docs/release-notes-v1.11.1.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -735,9 +736,10 @@ The parser follows psql semantics:
   lines.
 - A missing file is an empty state, not an error.
 
-Use `t` in the import window to enable the no-TLS fallback for every selected
-PostgreSQL profile in that import. The toggle is shown as `no TLS [ ]`/`[x]`
-and is ignored for MySQL/MariaDB and MongoDB entries.
+Use `t` in the import window to toggle the TLS checkbox for every selected
+PostgreSQL profile in that import. The default `TLS [x]` means TLS-only; `t`
+unchecks it to allow the plaintext fallback. The toggle is shown as
+`TLS [x]`/`[ ]` and is ignored for MySQL/MariaDB and MongoDB entries.
 
 ### MySQL/MariaDB (`~/.mypass`)
 
@@ -779,7 +781,7 @@ host      db1.internal
 port      5432
 database  orders
 user      app_ro
-no TLS    [ ]  TLS first, then plaintext
+TLS       [x]  uncheck to allow plaintext fallback
 ```
 
 - `engine` is selected with `Space`; it cycles PostgreSQL, MySQL/MariaDB, and
@@ -788,8 +790,8 @@ no TLS    [ ]  TLS first, then plaintext
   `database@host`.
 - For MongoDB, `database` becomes `home.db` and the muted `auth.db` field sets
   `authSource`; an empty `auth.db` uses `home.db`.
-- For PostgreSQL, `Space` on `no TLS` enables the plaintext fallback after a
-  failed TLS attempt.
+- For PostgreSQL, `TLS [x]` is the default. `Space` unchecks it to allow the
+  plaintext fallback after a failed TLS attempt.
 - `Tab`/`Shift+Tab` and `Up`/`Down` move between fields; `Enter` connects.
 
 On submit, the tool looks for a matching `~/.pgpass`, `~/.mypass`, or
