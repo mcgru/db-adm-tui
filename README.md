@@ -191,8 +191,9 @@ Latin and Cyrillic physical key positions resolve to the same actions
 - [`docs/roadmap-and-releases.md`](docs/roadmap-and-releases.md) — next
   implementation steps and the release/tagging checklist. Русская версия:
   [`docs/roadmap-and-releases.ru.md`](docs/roadmap-and-releases.ru.md).
-- [`docs/release-notes-v1.11.1.md`](docs/release-notes-v1.11.1.md) — latest
-  profile editor height fix;
+- [`docs/release-notes-v1.12.0.md`](docs/release-notes-v1.12.0.md) — latest
+  profile account defaults;
+  [`v1.11.1`](docs/release-notes-v1.11.1.md) profile editor height fix,
   [`v1.11.0`](docs/release-notes-v1.11.0.md) profile creation/import TLS notes,
   [`v1.10.3`](docs/release-notes-v1.10.3.md) README keyboard-reference
   restructuring,
@@ -204,7 +205,7 @@ Latin and Cyrillic physical key positions resolve to the same actions
   [`v1.8.1`](docs/release-notes-v1.8.1.md) matrix scope,
   [`v1.7.0`](docs/release-notes-v1.7.0.md) MongoDB replica hosts, and
   [`v1.4.0`](docs/release-notes-v1.4.0.md) the feature scope. Русская версия:
-  [`docs/release-notes-v1.11.1.ru.md`](docs/release-notes-v1.11.1.ru.md).
+  [`docs/release-notes-v1.12.0.ru.md`](docs/release-notes-v1.12.0.ru.md).
 - [`live-test/README.md`](live-test/README.md) — disposable PostgreSQL,
   MariaDB, and MongoDB fixtures, including a ready profile bundle in
   `live-test/home/` and `install-home.sh`. The manual TUI checklist is
@@ -786,12 +787,17 @@ TLS       [x]  uncheck to allow plaintext fallback
 
 - `engine` is selected with `Space`; it cycles PostgreSQL, MySQL/MariaDB, and
   MongoDB. The port follows the engine default unless it was edited.
-- `host`, `database`, and `user` are required. An empty label defaults to
-  `database@host`.
+- `host`, `database`, and `user` are required, except that an empty PostgreSQL
+  database becomes `postgres`. An empty label defaults to `database@host`.
+- An empty user becomes `postgres` for PostgreSQL and `root` for MySQL/MariaDB.
+  MongoDB has no default login user, so it must be entered.
 - For MongoDB, `database` becomes `home.db` and the muted `auth.db` field sets
-  `authSource`; an empty `auth.db` uses `home.db`.
+  `authSource`; an empty `auth.db` becomes `admin`.
 - For PostgreSQL, `TLS [x]` is the default. `Space` unchecks it to allow the
   plaintext fallback after a failed TLS attempt.
+- Empty defaultable fields are used for the connection without being written
+  into the form; after a successful connect, the saved profile stores the
+  resolved defaults.
 - `Tab`/`Shift+Tab` and `Up`/`Down` move between fields; `Enter` connects.
 
 On submit, the tool looks for a matching `~/.pgpass`, `~/.mypass`, or
